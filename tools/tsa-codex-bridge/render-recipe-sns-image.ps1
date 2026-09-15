@@ -39,7 +39,12 @@ function New-FittingFont {
     $font.Dispose()
     $size -= 2
   }
-  return [System.Drawing.Font]::new("Meiryo", $MinimumSize, $Style, [System.Drawing.GraphicsUnit]::Pixel)
+  $font = [System.Drawing.Font]::new("Meiryo", $MinimumSize, $Style, [System.Drawing.GraphicsUnit]::Pixel)
+  if ($Graphics.MeasureString($Text, $font, [int]$Bounds.Width).Height -gt $Bounds.Height) {
+    $font.Dispose()
+    throw "Creative text is too long for a readable layout; shorten the overlay copy."
+  }
+  return $font
 }
 
 function Add-EdgeScrim {
@@ -157,18 +162,41 @@ try {
     Add-EdgeScrim -Graphics $graphics -CanvasWidth $Width -CanvasHeight $Height -Anchor $Placement
     $isPortrait = $Height -gt ($Width * 1.15)
     $margin = [float]([Math]::Round([Math]::Min($Width, $Height) * 0.062))
-    $contentWidth = if ($isPortrait) { [float]($Width - ($margin * 2)) } else { [float]($Width * 0.44) }
-    $contentHeight = if ($isPortrait) { [float]($Height * 0.29) } else { [float]($Height * 0.56) }
+    $contentWidth = if ($isPortrait) { [float]($Width - ($margin * 2)) } else { [float]($Width * 0.60) }
+    $safeY = if ($isPortrait) { [float]($Height * 0.14) } else { $margin }
+    $contentHeight = [float]($Height - 2 * $safeY)
     $contentX = if ($Placement.EndsWith("right")) { [float]($Width - $contentWidth - $margin) } else { $margin }
-    $contentY = if ($Placement.StartsWith("bottom")) { [float]($Height - $contentHeight - $margin) } else { $margin }
+    $contentY = $safeY
     $brandBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(230, 255, 250, 244))
     $textBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 255, 253, 249))
     $sublineBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(232, 255, 253, 249))
     $accentPen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(255, 226, 74, 51), [float]([Math]::Max(4, $Width * 0.004)))
-    $brandFont = [System.Drawing.Font]::new("Meiryo", [float]([Math]::Max(16, [Math]::Min($Width, $Height) * 0.021)), [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+    $brandFont = [System.Drawing.Font]::new("Meiryo", [float]($Width / 30), [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
     $brandText = -join ([char[]](0x4F1A, 0x6D25, 0x30D6, 0x30E9, 0x30F3, 0x30C9, 0x9928))
     try {
-      $brandHeight = [float]([Math]::Max(24, $contentHeight * 0.1))
+      # Sizes are tied to display width: at 360px the headline stays >=20px,
+      # supporting copy >=14px. Wrap text rather than shrinking into one line.
+      $brandHeight = [float]($graphics.MeasureString($brandText, $brandFont, [int]$contentWidth).Height)
+      $sublineFont = [System.Drawing.Font]::new("Meiryo", [float]($Width * 14 / 360), [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
+      $sublineHeight = if ([string]::IsNullOrWhiteSpace($Subline)) { [float]0 } else { [float]($graphics.MeasureString($Subline, $sublineFont, [int]$contentWidth).Height) }
+      $gap = [float]($margin * 0.4)
+      $minimumHeadlineFont = [System.Drawing.Font]::new("Meiryo", [float]($Width * 20 / 360), [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+      try {
+        $minimumHeadlineHeight = $graphics.MeasureString($Headline, $minimumHeadlineFont, [int]$contentWidth).Height
+        # Older saved overlays allowed longer copy. Give those more width,
+        # preserving their full wording instead of making their text tiny.
+        if ($brandHeight + $minimumHeadlineHeight + $sublineHeight + 3 * $gap -gt $contentHeight) {
+          $contentWidth = [float]($Width - 2 * $margin)
+          $contentX = $margin
+          $sublineHeight = if ([string]::IsNullOrWhiteSpace($Subline)) { [float]0 } else { [float]($graphics.MeasureString($Subline, $sublineFont, [int]$contentWidth).Height) }
+        }
+      } finally { $minimumHeadlineFont.Dispose() }
+      $headlineBounds = [System.Drawing.RectangleF]::new(0, 0, $contentWidth, $contentHeight - $brandHeight - $sublineHeight - 3 * $gap)
+      $headlineFont = New-FittingFont -Graphics $graphics -Text $Headline -Bounds $headlineBounds -MaximumSize ([float]($Width * 24 / 360)) -MinimumSize ([float]($Width * 20 / 360)) -Style ([System.Drawing.FontStyle]::Bold)
+      $headlineMeasuredHeight = [float]($graphics.MeasureString($Headline, $headlineFont, [int]$contentWidth).Height)
+      $blockHeight = [float]($brandHeight + $headlineMeasuredHeight + $sublineHeight + 3 * $gap)
+      if ($Placement.StartsWith("bottom")) { $contentY = [float]($Height - $safeY - $blockHeight) }
+      $layout = @{ headlinePixelsAt360 = $headlineFont.Size * 360 / $Width; sublinePixelsAt360 = $sublineFont.Size * 360 / $Width; top = $contentY; bottom = $contentY + $blockHeight; safeY = $safeY }
       $brandBounds = [System.Drawing.RectangleF]::new($contentX, $contentY, $contentWidth, $brandHeight)
       Draw-StringWithShadow -Graphics $graphics -Text $brandText -Font $brandFont -Brush $brandBrush -Bounds $brandBounds -Offset 2
       $ruleY = [float]($contentY + $brandHeight + ($margin * 0.13))
@@ -176,16 +204,8 @@ try {
       $graphics.DrawLine($accentPen, $contentX, $ruleY, $contentX + $ruleLength, $ruleY)
 
       $headlineY = [float]($ruleY + ($margin * 0.26))
-      $headlineHeightRatio = if ([string]::IsNullOrWhiteSpace($Subline)) { 0.72 } else { 0.54 }
-      $headlineHeight = [float]($contentHeight * $headlineHeightRatio)
+      $headlineHeight = $headlineMeasuredHeight
       $headlineBounds = [System.Drawing.RectangleF]::new($contentX, $headlineY, $contentWidth, $headlineHeight)
-      $headlineMaximum = if ($isPortrait) { [float]($Width * 0.064) } else { [float]([Math]::Min($Width, $Height) * 0.057) }
-      if ($Headline.Length -le 18) {
-        $singleLineMaximum = [float](($contentWidth / [Math]::Max(1, $Headline.Length)) * 0.9)
-        $headlineMaximum = [float]([Math]::Min($headlineMaximum, $singleLineMaximum))
-      }
-      $headlineFont = New-FittingFont -Graphics $graphics -Text $Headline -Bounds $headlineBounds -MaximumSize $headlineMaximum -MinimumSize 26 -Style ([System.Drawing.FontStyle]::Bold)
-      $headlineMeasuredHeight = [float]($graphics.MeasureString($Headline, $headlineFont, [int]$contentWidth).Height)
       try {
         Draw-StringWithShadow -Graphics $graphics -Text $Headline -Font $headlineFont -Brush $textBrush -Bounds $headlineBounds -Offset 3
       } finally {
@@ -194,16 +214,12 @@ try {
 
       if (-not [string]::IsNullOrWhiteSpace($Subline)) {
         $sublineY = [float]($headlineY + [Math]::Min($headlineHeight, $headlineMeasuredHeight) + ($margin * 0.32))
-        $sublineBounds = [System.Drawing.RectangleF]::new($contentX, $sublineY, $contentWidth, $contentHeight * 0.24)
-        $sublineFont = New-FittingFont -Graphics $graphics -Text $Subline -Bounds $sublineBounds -MaximumSize ([float]([Math]::Max(20, [Math]::Min($Width, $Height) * 0.029))) -MinimumSize 17 -Style ([System.Drawing.FontStyle]::Regular)
-        try {
-          Draw-StringWithShadow -Graphics $graphics -Text $Subline -Font $sublineFont -Brush $sublineBrush -Bounds $sublineBounds -Offset 2
-        } finally {
-          $sublineFont.Dispose()
-        }
+        $sublineBounds = [System.Drawing.RectangleF]::new($contentX, $sublineY, $contentWidth, $sublineHeight)
+        Draw-StringWithShadow -Graphics $graphics -Text $Subline -Font $sublineFont -Brush $sublineBrush -Bounds $sublineBounds -Offset 2
       }
     } finally {
       $brandFont.Dispose()
+      if ($sublineFont) { $sublineFont.Dispose() }
       $brandBrush.Dispose()
       $textBrush.Dispose()
       $sublineBrush.Dispose()
@@ -218,7 +234,7 @@ try {
   $encoderParameters = [System.Drawing.Imaging.EncoderParameters]::new(1)
   $encoderParameters.Param[0] = [System.Drawing.Imaging.EncoderParameter]::new([System.Drawing.Imaging.Encoder]::Quality, [long]91)
   $canvas.Save($OutputPath, $jpegEncoder, $encoderParameters)
-  Write-Output (ConvertTo-Json @{ ok = $true; path = $OutputPath; width = $Width; height = $Height; mode = $Mode } -Compress)
+  Write-Output (ConvertTo-Json @{ ok = $true; path = $OutputPath; width = $Width; height = $Height; mode = $Mode; layout = $layout } -Compress)
 } finally {
   if ($encoderParameters) { $encoderParameters.Dispose() }
   if ($graphics) { $graphics.Dispose() }
