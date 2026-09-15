@@ -99,7 +99,7 @@ export default function BrandStoreInventoryPage() {
   const [importingMaster, setImportingMaster] = useState(false);
 
   useEffect(() => {
-    loadInventory();
+    loadInventory(new URLSearchParams(window.location.search).get("id") || undefined);
     loadMasterStatus();
   }, []);
 

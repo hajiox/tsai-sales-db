@@ -417,6 +417,7 @@ export default function FinanceDashboardPage() {
         <QuickLink icon={<FileSpreadsheet className="w-5 h-5" />} title="決算仕訳インポート" description="決算整理仕訳の取り込み" href="/finance/general-ledger/closing-import" color="violet" />
         <QuickLink icon={<Factory className="w-5 h-5" />} title="チャーシュー製造原価" description="製造実績と商品別原価" href="/finance/char-siu-production" color="emerald" />
         <QuickLink icon={<Files className="w-5 h-5" />} title="決算書PDF" description="年次決算の取込と借入・在庫比較" href="/finance/annual-statements" color="indigo" />
+        <QuickLink icon={<FileSpreadsheet className="w-5 h-5" />} title="決算棚卸し一覧" description="各システムの年度別棚卸し・Excel作成" href="/finance/closing-inventory" color="emerald" />
       </div>
 
       {/* 月次取込 */}

@@ -87,7 +87,8 @@ export default function WholesaleOtherStoresInventoryPage() {
   );
 
   useEffect(() => {
-    loadInventory(currentInventoryFiscalYear());
+    const year = Number(new URLSearchParams(window.location.search).get("fiscalYear"));
+    loadInventory(Number.isInteger(year) && year >= 2000 && year <= 2100 ? year : currentInventoryFiscalYear());
     return () => {
       Object.values(noteSaveTimers.current).forEach((timer) => clearTimeout(timer));
     };

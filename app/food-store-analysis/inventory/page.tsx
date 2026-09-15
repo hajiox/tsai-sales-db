@@ -41,7 +41,7 @@ export default function FoodStoreInventoryPage() {
     } catch (err) { setError(err instanceof Error ? err.message : "取得できませんでした"); }
     finally { setLoading(false); }
   }, []);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(new URLSearchParams(window.location.search).get("id") || undefined); }, [load]);
   useEffect(() => {
     const guard = (event: BeforeUnloadEvent) => { if (dirty) { event.preventDefault(); event.returnValue = ""; } };
     window.addEventListener("beforeunload", guard);

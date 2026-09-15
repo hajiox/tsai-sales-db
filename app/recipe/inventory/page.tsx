@@ -85,7 +85,7 @@ export default function ManufacturingInventoryPage() {
   const [addingManual, setAddingManual] = useState(false);
 
   useEffect(() => {
-    loadInventory();
+    loadInventory(new URLSearchParams(window.location.search).get("id") || undefined);
   }, []);
 
   useEffect(() => {
