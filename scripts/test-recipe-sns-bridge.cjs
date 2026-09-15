@@ -168,7 +168,7 @@ for (const tone of ["一人称を使う場合は必ず「私」", "です・ま�
   assert.match(postSkill, new RegExp(tone));
 }
 assert.doesNotMatch(postSkill, /一人称は「俺」/);
-for (const mode of ["normal", "creative", "arrange"]) assert.match(skill, new RegExp(`### ${mode}`));
+for (const mode of ["normal", "creative", "arrange", "handwritten"]) assert.match(skill, new RegExp(`### ${mode}`));
 assert.match(skill, /`file_path`は空文字/);
 assert.match(skill, /`Get-ChildItem`、`Copy-Item`を含むファイル操作を行わない/);
 assert.match(skill, /`num_last_images_to_include: 1`/);

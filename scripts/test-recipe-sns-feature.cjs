@@ -74,7 +74,7 @@ assert.match(snsServer, /redirect: "manual"/);
 assert.match(snsServer, /isAllowedLpHostname/);
 assert.doesNotMatch(snsServer, /source_image_url/);
 assert.match(snsImage, /imageMode === "normal" \? "normal-resize" : imageMode/);
-assert.match(snsImage, /fit: "cover"/);
+assert.match(snsImage, /fit: imageMode === "handwritten" \? "contain" : "cover"/);
 assert.doesNotMatch(snsImage, /blur|feather|subject-preserve/);
 
 assert.match(snsRoute, /getServerSession\(authOptions\)/);
@@ -119,7 +119,7 @@ for (const tone of ["### official", "### staff", "### developer", "必ず「私�
   assert.match(skill, new RegExp(tone));
 }
 assert.doesNotMatch(skill, /一人称に「俺」/);
-for (const mode of ["normal", "creative", "arrange"]) assert.match(skill, new RegExp(`### ${mode}`));
+for (const mode of ["normal", "creative", "arrange", "handwritten"]) assert.match(skill, new RegExp(`### ${mode}`));
 assert.match(skill, /productLpUrl/);
 assert.match(skill, /リンクスタンプ用/);
 assert.match(skill, /IGストーリーはURLを `post\.text` に入れない/);

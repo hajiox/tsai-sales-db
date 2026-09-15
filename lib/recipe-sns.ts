@@ -26,6 +26,7 @@ export const RECIPE_SNS_IMAGE_MODES = [
   { id: "normal", label: "通常リサイズ" },
   { id: "creative", label: "クリエイティブ" },
   { id: "arrange", label: "アレンジ" },
+  { id: "handwritten", label: "手書き文字" },
 ] as const;
 
 export type RecipeSnsImageMode = typeof RECIPE_SNS_IMAGE_MODES[number]["id"];
@@ -139,7 +140,7 @@ export type RecipeSnsImageVariant = {
   width: number;
   height: number;
   aspectLabel: string;
-  layoutMode: "smart-crop" | "subject-preserve" | "normal-resize" | "creative" | "arrange";
+  layoutMode: "smart-crop" | "subject-preserve" | "normal-resize" | "creative" | "arrange" | "handwritten";
 };
 
 export type RecipeSnsGenerationView = {

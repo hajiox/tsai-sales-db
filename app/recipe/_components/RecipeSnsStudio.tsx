@@ -11,6 +11,7 @@ import {
   Link2,
   Loader2,
   Megaphone,
+  PencilLine,
   RefreshCw,
   Sparkles,
 } from "lucide-react";
@@ -300,7 +301,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
               ))}
             </div>
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
             <button
               type="button"
               onClick={() => void generate("normal")}
@@ -330,6 +331,16 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
             >
               {generatingMode === "arrange" && !generatingPlatform ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
               アレンジ
+            </button>
+            <button
+              type="button"
+              onClick={() => void generate("handwritten")}
+              disabled={generating || hasUnsavedChanges}
+              className="inline-flex min-h-10 items-center rounded-md border border-amber-300 bg-amber-50 px-4 text-sm font-bold text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title={hasUnsavedChanges ? "EC情報を保存してから生成してください" : "商品紹介から特徴を選び、手書き風の文字と矢印で紹介"}
+            >
+              {generatingMode === "handwritten" && !generatingPlatform ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PencilLine className="mr-2 h-4 w-4" />}
+              手書き文字
             </button>
           </div>
         </div>
@@ -365,7 +376,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
         <div className="mt-6 flex min-h-64 flex-col items-center justify-center border border-dashed border-gray-300 bg-gray-50 px-4 text-center">
           <ImageIcon className="h-9 w-9 text-gray-300" />
           <p className="mt-3 text-sm font-bold text-gray-700">まだSNS投稿はありません</p>
-          <p className="mt-1 max-w-lg text-xs text-gray-500">上の3モードから、最初のSNS素材を作成してください。</p>
+          <p className="mt-1 max-w-lg text-xs text-gray-500">上の4モードから、最初のSNS素材を作成してください。</p>
         </div>
       ) : (
         <>
@@ -534,7 +545,7 @@ export default function RecipeSnsStudio({ recipeId, hasUnsavedChanges }: Props) 
                         </>
                       ) : selectedGeneration.status === "failed" ? (
                         <div className="flex min-h-36 items-center justify-center text-center text-xs text-amber-700">
-                          <AlertTriangle className="mr-2 h-4 w-4" />素材を生成できませんでした。上の3モードから再実行できます。
+                          <AlertTriangle className="mr-2 h-4 w-4" />素材を生成できませんでした。上の4モードから再実行できます。
                         </div>
                       ) : (
                         <div className="flex min-h-36 items-center justify-center text-center text-xs text-gray-400">

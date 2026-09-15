@@ -1,6 +1,6 @@
 ---
 name: generate-aizu-sns-assets
-description: TSAが渡す保存済み商品情報と1枚の参照画像だけを使い、SNS投稿文、IGストーリーのリンク先、通常・広告クリエイティブ・生活シーン画像を生成するCodex Bridge専用Skill。外部閲覧や投稿は行わない。
+description: TSAが渡す保存済み商品情報と1枚の参照画像だけを使い、SNS投稿文、IGストーリーのリンク先、通常・広告クリエイティブ・生活シーン・手書き文字と矢印の画像を生成するCodex Bridge専用Skill。外部閲覧や投稿は行わない。
 ---
 
 # 会津ブランド館 SNS素材生成
@@ -8,7 +8,7 @@ description: TSAが渡す保存済み商品情報と1枚の参照画像だけを
 ## Bridge Input Contract
 
 - Run only from a fresh, non-resumed `codex exec`. Never open, read, search, or reuse app Chats, prior tasks or threads, transcripts, rollouts, or saved sessions.
-- Treat the compact Bridge job input as complete. For `creative` and `arrange`, use only that input and the single attached reference image. `normal` intentionally has no attached image because TSA performs the deterministic resize after this run.
+- Treat the compact Bridge job input as complete. For `creative`, `arrange` and `handwritten`, use only that input and the single attached reference image. `normal` intentionally has no attached image because TSA performs the deterministic resize after this run.
 
 ## 目的
 
@@ -82,13 +82,23 @@ description: TSAが渡す保存済み商品情報と1枚の参照画像だけを
 - 対応する `creative_overlays` または `creative_overlay` は見出し・補足を空文字、配置を `none` にする。
 - `generated_images.*.file_path` は空文字にする。保存先の列挙やコピーは行わない。Bridgeが新規セッション専用ImageGenフォルダを読み、`targetPlatforms`の順番で媒体へ対応付ける。
 
-## 媒体別画像
+### handwritten（手書き文字）
+
+- 組み込み画像生成ツールを `targetPlatforms` 順に使い、媒体ごとに手書き文字と矢印を含む完成画像を1枚作る。添付された商品参照画像を `num_last_images_to_include: 1` で使い、`referenced_image_paths` やローカルパスは渡さない。技術エラー・画像なしの場合のみ同媒体で1回再試行し、成功画像を重複生成しない。
+- `sourceSnapshot` の商品ポイント・商品紹介文・仕様から、目で追える特徴を2〜4個選ぶ。横長のXは原則2個、Instagram・Threadsは2〜3個、ストーリーは最大4個。根拠が少ない場合は注釈を減らす。見本にある重量、具材や文言を流用せず、入力で確認できる値・単位だけを記載する。盛付例とセット内容を混同しない。
+- 商品の色・形・具材・包装を忠実に保ち、商品写真を主役にする。周囲の自然な背景余白に太い手書きマーカー風の日本語を配置し、曲線の矢印を対応する具材・麺・スープ・包装などへ向ける。見えない対象への矢印や、人物・装飾への矢印を作らない。抽象的な特徴は商品全体へ向ける。
+- 黒い太文字に十分な白縁、または白い太文字に黒縁を付けて背景から分離する。矢印も縁取りして見やすくする。赤などの強調色は一部だけ。矩形の説明パネルや小さな脚注で埋めない。
+- 注釈は原則1か所12文字以内、最大2行。幅360px表示で文字高20〜24px相当を目標とし、矢印同士・文字・商品の主要部分を重ねない。横長では注釈の数を減らして大きさを保つ。左右8%、ストーリー上下14%に重要文字を置かない。
+- このモードではImageGenに日本語の文字と矢印を一体で描かせる。生成プロンプトに注釈の正確な文言と矢印の対象を明記し、漢字・数字・単位を勝手に追加・変更させない。`writingTone` に合った短い言い回しを使う。
+- `creative_overlays` または `creative_overlay` は見出し・補足を空文字、配置を `none` にする。`generated_images` または `generated_image` は `source=generated`、`file_path` は空文字。`prompt_summary` に採用した注釈と対応箇所を短く記録する。Bridgeが専用ImageGenフォルダの画像を取得する。
+
+## 媒体別画像サイズ
 
 - X: 横長16:9。主役の上下を切らず、横方向の環境を広げる。
 - Instagram: 正方形1:1。中央付近に主役を置き、一覧で一目で分かる構図にする。
 - IGストーリー: 縦長9:16。主役を中央の安全領域へ置き、上下端へ重要部分を寄せない。
 - Threads: 横長4:3。会話のきっかけになる自然な生活感を優先する。
-- 生成ツールの実寸が指定比率と完全一致しなくてもよい。TSAが最終的に正確な媒体サイズへ変換するため、重要被写体を中央安全領域へ収める。
+- 指定比率で構図を作る。生成ツールの実寸が指定比率と完全一致しなくても、TSAが正確な媒体サイズへ変換する。手書き文字は文字と矢印を切らない全体保持リサイズ、それ以外は中央クロップのため、重要部分を中央安全領域へ収める。
 
 ## 投稿文
 

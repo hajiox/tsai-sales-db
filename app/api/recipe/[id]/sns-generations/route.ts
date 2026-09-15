@@ -80,7 +80,7 @@ function parseImageVariants(value: unknown) {
     const variant = asObject(source[platform.id]);
     const url = String(variant.url || "").trim();
     if (!url) continue;
-    const layoutMode = new Set(["smart-crop", "subject-preserve", "normal-resize", "creative", "arrange"])
+    const layoutMode = new Set(["smart-crop", "subject-preserve", "normal-resize", "creative", "arrange", "handwritten"])
       .has(String(variant.layoutMode || ""))
       ? variant.layoutMode as RecipeSnsImageVariant["layoutMode"]
       : "normal-resize";
@@ -386,7 +386,7 @@ export async function POST(
         progress: 0,
         current_step: targetPlatform
           ? `${RECIPE_SNS_PLATFORMS.find((platform) => platform.id === targetPlatform)?.label}だけ再生成待ち`
-          : `${imageMode === "creative" ? "クリエイティブ" : imageMode === "arrange" ? "アレンジ" : "通常リサイズ"}の生成待ち`,
+          : `${imageMode === "handwritten" ? "手書き文字" : imageMode === "creative" ? "クリエイティブ" : imageMode === "arrange" ? "アレンジ" : "通常リサイズ"}の生成待ち`,
         requested_by: session.user?.email || ADMIN_EMAIL,
         parameters,
         priority: 35,

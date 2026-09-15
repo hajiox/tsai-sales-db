@@ -12,7 +12,7 @@
       "items": { "type": "string", "maxLength": 240 }
     },
     "writing_tone": { "type": "string", "enum": ["official", "staff", "developer"] },
-    "image_mode": { "type": "string", "enum": ["normal", "creative", "arrange"] },
+    "image_mode": { "type": "string", "enum": ["normal", "creative", "arrange", "handwritten"] },
     "posts": {
       "type": "object",
       "additionalProperties": false,

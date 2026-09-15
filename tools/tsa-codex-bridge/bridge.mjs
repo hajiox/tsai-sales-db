@@ -38,7 +38,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.91";
+const VERSION = "1.9.92";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -101,7 +101,7 @@ const RECIPE_SNS_PLATFORM_RULES = {
   instagram_story: { label: "IGストーリー", aspectLabel: "9:16", width: 1080, height: 1920, maxLength: 50, minHashtags: 0, maxHashtags: 0 },
   threads: { label: "Threads", aspectLabel: "4:3", width: 1200, height: 900, maxLength: 500, minHashtags: 0, maxHashtags: 5 },
 };
-const RECIPE_SNS_IMAGE_MODES = new Set(["normal", "creative", "arrange"]);
+const RECIPE_SNS_IMAGE_MODES = new Set(["normal", "creative", "arrange", "handwritten"]);
 const RECIPE_SNS_WRITING_TONES = new Set(["official", "staff", "developer"]);
 const RECIPE_SNS_PUBLISH_EXPECTED_ACCOUNTS = Object.freeze({
   x: "@Aizu_Brand_Kan",
@@ -4525,7 +4525,7 @@ function validateRecipeSnsGenerateJobParameters(input) {
 }
 
 function recipeSnsImageModeLabel(mode) {
-  return mode === "creative" ? "クリエイティブ" : mode === "arrange" ? "アレンジ" : "通常リサイズ";
+  return mode === "handwritten" ? "手書き文字" : mode === "creative" ? "クリエイティブ" : mode === "arrange" ? "アレンジ" : "通常リサイズ";
 }
 
 function recipeSnsWritingToneLabel(tone) {
@@ -4708,7 +4708,8 @@ async function executeRecipeSnsGenerateJob(job) {
     parameters.targetPlatform
       ? `Regenerate only ${parameters.targetPlatform}. Do not create output for any other platform.`
       : "Create one distinct Japanese post for each platform and follow TASK_JSON.imageMode exactly.",
-    "For creative or arrange mode, the single image attached to this task is the exact product reference. For every image generation call, use that conversation image with num_last_images_to_include: 1; never pass referenced_image_paths or a local filesystem path.",
+    "For creative, arrange or handwritten mode, the single image attached to this task is the exact product reference. For every image generation call, use that conversation image with num_last_images_to_include: 1; never pass referenced_image_paths or a local filesystem path.",
+    "For handwritten mode, ImageGen must draw large legible Japanese handwritten callouts and arrows pointing to the corresponding product features, using only sourceSnapshot facts. Return empty creative overlays; do not add the creative headline overlay to this mode.",
     "Create one successful image per platform in TASK_JSON.targetPlatforms order. If and only if image generation returns a technical error or no image, retry that same platform once immediately. Never retry a successful platform, and never exceed two attempts for one platform.",
     "For normal mode, do not call image generation and return source=original with an empty file_path for each requested platform.",
     "Return only JSON matching the required schema.",
