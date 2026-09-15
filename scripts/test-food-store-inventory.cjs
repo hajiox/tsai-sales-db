@@ -21,7 +21,7 @@ assert.equal(recalculateInventory(input).sheets[0].cells.D5.value, '#NAME?');
 assert.throws(() => validateInventoryWorkbook({ sheets: [{ name: 'bad', rows: 2000, cols: 1, cells: {} }] }));
 if (process.argv[2]) {
   const book = parseInventoryExcel(fs.readFileSync(process.argv[2]));
-  assert.equal(book.sheets.length, 8);
+  assert.equal(book.sheets.length, Number(process.argv[3] || 8));
   const calculated = recalculateInventory(book);
   let count = 0, formulas = 0;
   for (let s = 0; s < book.sheets.length; s++) for (const [address, cell] of Object.entries(book.sheets[s].cells)) {

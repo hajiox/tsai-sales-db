@@ -8,6 +8,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env.local'), quiet
 async function main() {
   const base = process.argv[2] || 'http://localhost:3033';
   const production = base.startsWith('https:');
+  const expectedSheets = Number(process.argv[3] || 5);
   const cookieName = '__Secure-next-auth.session-token';
   const token = await encode({ secret: process.env.NEXTAUTH_SECRET, token: { email: 'aizubrandhall@gmail.com' }, maxAge: 600 });
   const cookie = `${cookieName}=${token}`;
@@ -18,7 +19,7 @@ async function main() {
   assert.equal((await fetch(base + '/api/food-store/inventory')).status, 401);
   const actual = await request('GET');
   assert.equal(actual.status, 200);
-  assert.equal(actual.data.inventory.workbook.sheets.length, 8);
+  assert.equal(actual.data.inventory.workbook.sheets.length, expectedSheets);
   assert.equal(actual.data.inventory.fiscal_year, 2026);
   if (!production) {
     const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
@@ -58,7 +59,7 @@ async function main() {
     await page.setViewport({ width: 1440, height: 1000 });
     await page.goto(base + '/food-store-analysis/inventory', { waitUntil: 'networkidle0', timeout: 120000 });
     await page.waitForSelector('[role="tab"]', { timeout: 60000 });
-    assert.equal(await page.$$eval('[role="tab"]', tabs => tabs.length), 8);
+    assert.equal(await page.$$eval('[role="tab"]', tabs => tabs.length), expectedSheets);
     await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].find(e => e.textContent === '道の駅食材在庫').click());
     await page.waitForFunction(() => document.querySelector('h2')?.textContent === '道の駅食材在庫');
     assert.ok((await page.$eval('main', e => e.innerText)).includes('793,960'));
@@ -68,7 +69,7 @@ async function main() {
     await page.screenshot({ path: path.join(os.tmpdir(), 'tsa-food-inventory-mobile.png') });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2), false, 'page must fit mobile viewport');
     assert.deepEqual(errors, []);
-    console.log(`UI: eight sheets, source subtotal, desktop/mobile, no page errors passed. Screenshot: ${file}`);
+    console.log(`UI: ${expectedSheets} sheets, source subtotal, desktop/mobile, no page errors passed. Screenshot: ${file}`);
   } finally { await browser.close(); }
 }
 main().catch(error => { console.error(error.message); process.exitCode = 1; });
