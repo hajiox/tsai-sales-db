@@ -31,7 +31,7 @@ const [thirdParty, toolModule, definitionModule, daemonClient, daemonUtils] = aw
 const { McpServer, StdioServerTransport, zod } = thirdParty;
 const { createTools } = toolModule;
 const { pageIdSchema } = definitionModule;
-const { sendCommand, startDaemon } = daemonClient;
+const { sendCommand } = daemonClient;
 const { isDaemonRunning } = daemonUtils;
 
 const allowedToolNames = new Set([
@@ -89,17 +89,9 @@ function validateFileScope(toolName, params) {
 }
 
 async function ensureDaemon() {
-  if (isDaemonRunning(sessionId)) return;
-  await startDaemon([
-    "--viaCli",
-    "--autoConnect",
-    "--no-usage-statistics",
-    "--no-performance-crux",
-    "--no-category-emulation",
-    "--no-category-performance",
-    "--no-category-network",
-    `--workspace=${realpathSync.native(daemonWorkspace)}`,
-  ], sessionId);
+  if (!isDaemonRunning(sessionId)) {
+    throw new Error("BridgeのChrome接続プロセスが停止しました。投稿操作を再試行せず、Bridgeの接続確認から再開してください。");
+  }
 }
 
 async function forwardTool(toolName, params) {

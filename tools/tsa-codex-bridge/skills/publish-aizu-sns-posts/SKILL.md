@@ -38,6 +38,8 @@ description: TSAが固定した投稿文・画像・リンクを、ログイン�
 
 ## Chrome
 
+- Chrome接続プロセスは媒体別CodexではなくBridge本体が起動し、事前にページ一覧取得まで確認する。接続確認が失敗したジョブでは媒体別の投稿操作を開始しない。媒体セッションから接続プロセスを起動・再起動しない。Chrome自体の「リモートデバッグを許可しますか？」はWebページのダイアログではなく、MCPの `handle_dialog` では回答できない。実際に許可が必要な場合は利用者の操作を待つ。
+
 - BridgeはこのSkillと媒体別資料をUTF-8でプロンプトへ埋め込み、明示的に登録した `chrome_devtools` MCPだけをブラウザ操作用に許可する。媒体別セッションはBridgeの常駐Chrome DevTools接続を共有し、媒体ごとにChromeへ再接続しない。`cua_repl`、Browser Use、Shell、Web検索、Playwrightの直接import、raw CDP、別MCPへ切り替えない。
 - 最初に `list_pages` を1回実行し、Chrome DevTools MCPが既存のログイン済みChromeへ接続していることを確認する。ChromeのRemote Debugging接続許可が新たに必要、接続できない、またはページ一覧を取得できない場合は `blocked` とし、別ブラウザへ迂回しない。
 - `list_pages` が返した既存SNSページは取得・変更しない。`TASK_JSON.platforms.*.browser_start_url` を `new_page` で1枚だけ開き、その戻り値のpageIdを以後の全ページ操作へ明示する。別プロファイル、シークレット、Edge、別ブラウザ、アプリ内ブラウザを使わない。

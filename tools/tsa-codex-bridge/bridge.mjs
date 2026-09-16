@@ -5,6 +5,7 @@ import { basename, dirname, extname, isAbsolute, join, resolve, sep } from "node
 import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { prepareChromeConnection, CHROME_CONNECTION_WAIT } from "./chrome-devtools-connection.mjs";
 import { CARRIER_TASK_KEY, CARRIER_SKILL_CONTRACT, validateCarrierJob, loadCarrierAdapter, carrierMonitorPayload, carrierConfirmationDetails, waitForCarrierChildClose } from "./carrier-local-job.mjs";
 import monitorStateFile from "./monitor-state-file.cjs";
 import { acquireDocScannerFaxImages, deleteDocScannerFaxImages } from "./docscanner-fax-artifact.mjs";
@@ -38,7 +39,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.93";
+const VERSION = "1.9.94";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -5475,11 +5476,37 @@ async function executeRecipeSnsPublishJob(job) {
     },
   });
 
+  let connectionFailure = null;
+  await updateJob(job.id, {
+    status: "running", progress: 7,
+    currentStep: "投稿前にChromeへの接続を確認しています",
+    message: "Bridge本体が常駐接続を準備します。Chromeに許可画面が出た場合は事務所PCで回答してください。",
+    eventType: "recipe_sns_chrome_preflight_started",
+  });
+  const connectionHeartbeat = setInterval(() => heartbeat().catch(() => undefined), 20_000);
+  try {
+    const server = resolveChromeDevtoolsMcpServer(config.codexHome);
+    const packageRoot = server.args.find((value) => value.startsWith("--packageRoot=")).slice("--packageRoot=".length);
+    const connection = await prepareChromeConnection({ packageRoot, workspace: config.workspace });
+    writeFileSync(join(workDir, "chrome-connection.json"), JSON.stringify(connection), "utf8");
+    await updateJob(job.id, { status: "running", progress: 8, currentStep: "Chrome接続確認済み・媒体別処理を開始します", message: "媒体別Codexの終了後も同じChrome接続を保持します", eventType: "recipe_sns_chrome_preflight_ready", payload: connection });
+  } catch {
+    connectionFailure = CHROME_CONNECTION_WAIT;
+    writeFileSync(join(workDir, "chrome-connection.json"), JSON.stringify({ ready: false, message: connectionFailure }), "utf8");
+  } finally {
+    clearInterval(connectionHeartbeat);
+  }
+
   for (const [index, platform] of parameters.targets.entries()) {
     const targetDir = join(workDir, platform);
     mkdirSync(targetDir, { recursive: true });
     let outcome;
     try {
+      if (connectionFailure) {
+        const fallback = recipeSnsPublishFallbackResult({ ...parameters, targets: [platform] }, "waiting_for_user", connectionFailure);
+        outcomes.push({ row: fallback.platforms[0], summary: connectionFailure, safetyIssue: false, transientCapacity: false });
+        continue;
+      }
       const target = parameters.platforms[platform];
       const imagePath = await downloadRecipeSnsSourceImage(String(target.imageUrl || ""), targetDir);
       const packetPlatform = {
@@ -5571,14 +5598,14 @@ async function executeRecipeSnsPublishJob(job) {
   const result = normalizeRecipeSnsPublishResult({
     publication_id: parameters.publicationId,
     platforms: outcomes.map((outcome) => outcome.row),
-    summary: outcomes.map((outcome) => outcome.summary).join(" / ").slice(0, 2_000),
+    summary: [...new Set(outcomes.map((outcome) => outcome.summary))].join(" / ").slice(0, 2_000),
   }, parameters);
   if (outcomes.some((outcome) => outcome.safetyIssue)) result.status = "needs_review";
   const successCount = result.platforms.filter((row) => row.status === "published" || row.status === "already_published").length;
   await updateJob(job.id, {
     status: result.status,
     progress: 100,
-    currentStep: result.status === "completed"
+    currentStep: connectionFailure ? "Chrome接続確認待ち・投稿操作は開始していません" : result.status === "completed"
       ? `${successCount}媒体への投稿を確認しました`
       : result.status === "waiting_for_user"
         ? `${successCount}/${parameters.targets.length}媒体完了・ブラウザー確認が未完了です`
