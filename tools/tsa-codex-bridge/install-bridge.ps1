@@ -31,6 +31,7 @@ $requiredSourceFiles = @(
   "bridge.mjs",
   "chrome-devtools-daemon-relay.mjs",
   "chrome-devtools-connection.mjs",
+  "chrome-devtools-story-drag.mjs",
   "carrier-local-job.mjs",
   "codex-run-guard.mjs",
   "codex-event-log.mjs",
@@ -487,6 +488,7 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "carrier-local-job.mjs") -Destinati
 Copy-Item -LiteralPath (Join-Path $sourceDir "bridge.mjs") -Destination (Join-Path $installDir "bridge.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "chrome-devtools-daemon-relay.mjs") -Destination (Join-Path $installDir "chrome-devtools-daemon-relay.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "chrome-devtools-connection.mjs") -Destination (Join-Path $installDir "chrome-devtools-connection.mjs") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "chrome-devtools-story-drag.mjs") -Destination (Join-Path $installDir "chrome-devtools-story-drag.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "codex-run-guard.mjs") -Destination (Join-Path $installDir "codex-run-guard.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "codex-event-log.mjs") -Destination (Join-Path $installDir "codex-event-log.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "download-artifact-recovery.mjs") -Destination (Join-Path $installDir "download-artifact-recovery.mjs") -Force

@@ -1,6 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import { installStoryDrag } from "./chrome-devtools-story-drag.mjs";
 
 const options = Object.fromEntries(process.argv.slice(2).map((entry) => {
   const match = String(entry).match(/^--([^=]+)=(.*)$/s);
@@ -122,6 +123,9 @@ async function forwardTool(toolName, params) {
 
 const server = new McpServer({ name: "tsa-chrome-devtools-daemon-relay", version: "1.0.0" });
 const definitions = createTools({ pageIdRouting: true });
+// Match the schema loaded by the long-lived daemon; execution still forwards
+// through the existing scope checks and official MCP connection.
+installStoryDrag(definitions.find(tool => tool.name === "drag"), zod);
 for (const tool of definitions) {
   if (!allowedToolNames.has(tool.name)) continue;
   const schema = tool.pageScoped === true ? { ...pageIdSchema, ...tool.schema } : tool.schema;

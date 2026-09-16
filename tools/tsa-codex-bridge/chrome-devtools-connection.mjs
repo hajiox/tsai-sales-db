@@ -12,11 +12,20 @@ export async function prepareChromeConnection({ packageRoot, workspace, client, 
   utils ??= await load("utils.js");
   const started = !utils.isDaemonRunning();
   if (started) {
-    await client.startDaemon([
+    const previousOptions = process.env.NODE_OPTIONS;
+    const previousRoot = process.env.TSA_STORY_DRAG_PACKAGE_ROOT;
+    try {
+      process.env.NODE_OPTIONS = `${previousOptions || ""} --import=${new URL("./chrome-devtools-story-drag.mjs", import.meta.url).href}`.trim();
+      process.env.TSA_STORY_DRAG_PACKAGE_ROOT = packageRoot;
+      await client.startDaemon([
       "--viaCli", "--autoConnect", "--no-usage-statistics", "--no-performance-crux",
       "--no-category-emulation", "--no-category-performance", "--no-category-network",
       `--workspace=${realpathSync.native(workspace)}`,
-    ]);
+      ]);
+    } finally {
+      if (previousOptions === undefined) delete process.env.NODE_OPTIONS; else process.env.NODE_OPTIONS = previousOptions;
+      if (previousRoot === undefined) delete process.env.TSA_STORY_DRAG_PACKAGE_ROOT; else process.env.TSA_STORY_DRAG_PACKAGE_ROOT = previousRoot;
+    }
   }
   const status = await client.sendCommand({ method: "status" }, undefined, 5_000);
   if (!status?.success) throw new Error(CHROME_CONNECTION_WAIT);
