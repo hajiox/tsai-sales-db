@@ -1,2 +1,2 @@
-import AbcdPage from "@/components/web-sales-abcd";
-export default function Page() { return <AbcdPage />; }
+import AbcdOverview from "@/components/web-sales-abcd-overview";
+export default function Page() { return <AbcdOverview />; }

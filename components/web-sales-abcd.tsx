@@ -24,8 +24,8 @@ const initialSettings = (): Omit<ImportInput, "items"> => {
   return { channel: "amazon", start: end.slice(0, 7) + "-01", end, metric: "units_sessions", source: "", scope: "商品別・全流入", coverage: "all", minimumAccess: 100, accessThreshold: null, cvrThreshold: null };
 };
 
-export default function AbcdPage() {
-  const [channel, setChannel] = useState<ImportInput["channel"]>("amazon");
+export default function AbcdPage({ initialChannel = "amazon" }: { initialChannel?: ImportInput["channel"] }) {
+  const [channel, setChannel] = useState<ImportInput["channel"]>(initialChannel);
   const [history, setHistory] = useState<SnapshotSummary[]>([]);
   const [selected, setSelected] = useState("");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);

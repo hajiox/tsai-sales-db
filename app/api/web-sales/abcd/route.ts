@@ -6,6 +6,7 @@ import { analyze, channelSchema, importSchema } from "@/lib/web-sales-abcd/model
 import { guessMapping, mapRows, readCsv, type Mapping } from "@/lib/web-sales-abcd/csv";
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { ACTIVE_EC_CHANNELS } from "@/lib/web-sales-abcd/monthly";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +25,19 @@ export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
     const db = getWebSalesAutomationServiceClient();
+    if (params.get("view") === "overview") {
+      const channels = await Promise.all(ACTIVE_EC_CHANNELS.map(async channel => {
+        const result = await db.from("web_sales_abcd_snapshots").select(`${summaryColumns},payload`).eq("channel", channel).order("period_end", { ascending: false }).order("created_at", { ascending: false }).limit(1).maybeSingle();
+        if (result.error) throw new Error("総合ダッシュボードを取得できません");
+        const snapshot = result.data;
+        return { channel, snapshot: snapshot ? {
+          id: snapshot.id, period_start: snapshot.period_start, period_end: snapshot.period_end,
+          created_at: snapshot.created_at, item_count: snapshot.item_count, metric: snapshot.metric,
+          counts: Object.fromEntries(["A", "B", "C", "D", "保留"].map(rank => [rank, snapshot.payload.analysis.items.filter((item: { rank: string }) => item.rank === rank).length])),
+        } : null };
+      }));
+      return NextResponse.json({ channels });
+    }
     if (params.get("id")) {
       const id = z.string().uuid().parse(params.get("id"));
       const result = await db.from("web_sales_abcd_snapshots").select(`${summaryColumns},payload`).eq("id", id).single();
