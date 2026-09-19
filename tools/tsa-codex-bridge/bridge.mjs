@@ -6958,6 +6958,8 @@ async function tryReuseSalesArtifacts(job, archiveDir) {
       imported_count: imported.importedCount ?? null,
       report_month: job.report_month,
       execution_route: "archived_file",
+      abcd: imported.abcd ?? null,
+      abcd_error: imported.abcdError ?? null,
       zero_result_verified: verifiedZero,
     };
     if (Number(imported.importedCount) > 0) {
