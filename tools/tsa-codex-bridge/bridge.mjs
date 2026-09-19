@@ -39,7 +39,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.95";
+const VERSION = "1.9.96";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -611,7 +611,7 @@ async function executeJob(job) {
             ? verifiedZero
               ? "注文日・対象期間・会津ブランド館を確認し、入金待ち・配送要請・配送中・配送完了の全4状態が0件である公式画面証跡を保存しました。TSA登録数量は0個です。"
               : `CSV数量${imported.quantityTotal}個、TSA登録数量${imported.importedCount}個。ブラウザ取込画面は使用していません。`
-            : `${imported.unmatchedCount || 0}商品が未マッチです。TSAの未紐付け一覧で確認してください。`,
+            : imported.summary || `${imported.unmatchedCount || 0}商品が未マッチです。TSAの未紐付け一覧で確認してください。`,
           source_files: uniquePaths([...(result.source_files || []), archivedFiles.original, archivedFiles.prepared, ...archivedEvidenceFiles, preparedFile]),
           imported_count: imported.importedCount,
           report_month: job.report_month,
@@ -6899,6 +6899,12 @@ async function executeQoo10OfficialSalesJob(job, archiveDir, workDir) {
   }
 }
 
+function monthlyAbcdRequired(job) {
+  return ["amazon", "rakuten", "yahoo"].includes(job.channel)
+    && /^\d{4}-\d{2}-01$/.test(job.period_start || "")
+    && job.period_end === new Date(Date.UTC(Number(job.period_start.slice(0, 4)), Number(job.period_start.slice(5, 7)), 0)).toISOString().slice(0, 10);
+}
+
 async function tryReuseSalesArtifacts(job, archiveDir) {
   await updateJob(job.id, {
     status: "running",
@@ -6928,6 +6934,7 @@ async function tryReuseSalesArtifacts(job, archiveDir) {
     const originalFile = preparedFile.replace(/\.prepared\.csv$/i, ".original.csv");
     if (!existsSync(originalFile) || !statSync(originalFile).isFile()) continue;
 
+    if (monthlyAbcdRequired(job) && job.channel === "rakuten" && !existsSync(join(archiveDir, `rakuten-${job.period_start}_${job.period_end}.traffic.original.csv`))) continue;
     const imported = await directImportCsv(job, preparedFile, validation.total_quantity);
     const status = normalizeResultStatus(imported.status, 0);
     const verifiedZero = validation.total_quantity === 0 && validation.zero_evidence_valid === true;
@@ -7241,6 +7248,7 @@ TASK
 - Download folder: ${downloadsDir}
 - Job work folder: ${workDir}
 - TSA production: ${config.baseUrl}/web-sales/dashboard
+${monthlyAbcdRequired(job) ? `- Monthly ABCD traffic is required. Read references/monthly-abcd.md. Preserve zero-sale rows and original access columns. ${job.channel === "rakuten" ? "Additionally download the same-period product traffic report with product management number, product name, access people, sales count and sales amount. Save as rakuten-" + job.period_start + "_" + job.period_end + ".traffic.original.csv in the job work folder and include it in source_files. Do not fabricate or calculate access from conversion rates." : "The original product report must retain all traffic columns; do not discard zero-sale rows."}` : ""}
 
 SAFETY AND SCOPE
 - Use only the existing signed-in Chrome session and the official ${channel.label} seller/admin site.
@@ -7750,6 +7758,16 @@ function archiveSalesFiles(job, originalFile, preparedFile, archiveDir) {
     }
     copyFileSync(source, target);
   }
+  if (monthlyAbcdRequired(job) && job.channel === "rakuten") {
+    const name = `${prefix}.traffic.original.csv`;
+    const source = join(dirname(originalFile), name);
+    const target = join(archiveDir, name);
+    if (!existsSync(source)) throw new Error("楽天ABCDアクセス帳票がありません");
+    if (resolve(source) !== resolve(target)) {
+      if (existsSync(target) && !readFileSync(target).equals(readFileSync(source))) copyFileSync(target, target.replace(/\.csv$/i, `.superseded-${Date.now()}.csv`));
+      copyFileSync(source, target);
+    }
+  }
   if (job.channel === "yahoo") {
     const name = `${prefix}.daily.original.csv`;
     const source = join(dirname(originalFile), name);
@@ -7814,6 +7832,12 @@ async function directImportCsv(job, preparedFile, expectedQuantity) {
   form.set("workerId", config.workerId);
   form.set("expectedQuantity", String(expectedQuantity));
   form.set("file", file);
+  if (monthlyAbcdRequired(job)) {
+    const name = `${job.channel}-${job.period_start}_${job.period_end}${job.channel === "rakuten" ? ".traffic" : ""}.original.csv`;
+    const report = join(dirname(preparedFile), name);
+    if (!existsSync(report)) throw new Error("ABCD元帳票がありません");
+    form.set("abcdReport", new File([readFileSync(report)], name, { type: "text/csv" }));
+  }
   if (job.channel === "yahoo") {
     const daily = join(dirname(preparedFile), `yahoo-${job.period_start}_${job.period_end}.daily.original.csv`);
     if (!existsSync(daily)) throw new Error("Yahoo日別照合CSVがありません");

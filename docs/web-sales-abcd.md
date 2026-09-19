@@ -27,3 +27,9 @@ WEB販売ダッシュボードの「商品ABCD分析」から開く。
 `npm run test:web-sales-abcd` / `npm run test:web-sales-abcd-migration` / `npm run predeploy`
 DB適用: `npm run apply:web-sales-abcd-migration`。環境変数DATABASE_URLが必要。
 ローカルbuildでは正しいNEXTAUTH_URLを設定する。既存の全体TypeScript検査には今回対象外のエラーがあり、新規ファイルの診断がないことを別途確認。
+
+## 月初連携（2026-09-19）
+
+全月のAmazon・楽天・Yahoo売上BridgeはABCD元帳票も送信する。Amazonは数量/セッション、Yahoo・楽天は件数/訪問者。楽天は追加のtraffic.original.csvが必要。Yahooは全日CSVの照合を先に行う。商品・数量・金額を照合してスナップショットを保存し、失敗時は売上が登録済みでも確認待ちを返す。退店済み3店は定期売上・精算・再試行から除外（履歴は保持）。BASEは従来通り。
+
+8月Amazon126商品は再利用確認済み。楽天アクセス帳票とYahoo全月CSVはログイン済み管理画面待ちで未検証。

@@ -1,3 +1,6 @@
+import { readCsv } from "@/lib/web-sales-abcd/csv";
+import { monthlyAbcdInput, needsMonthlyAbcd } from "@/lib/web-sales-abcd/monthly";
+import { saveAbcdSnapshot } from "@/lib/web-sales-abcd/save";
 import { NextResponse } from "next/server";
 import { validatePeriod } from "@/lib/web-sales-automation/date";
 import { parsePreparedWebSalesCsv } from "@/lib/web-sales-automation/csv-import";
@@ -42,14 +45,14 @@ export async function POST(
     const supabase = getWebSalesAutomationServiceClient();
     const { data: job, error: jobError } = await supabase
       .from("web_sales_codex_jobs")
-      .select("id,worker_id,channel,period_start,period_end,report_month,status")
+      .select("id,worker_id,channel,period_start,period_end,report_month,status,task_key")
       .eq("id", id)
       .eq("worker_id", workerId)
       .single();
     if (jobError || !job) {
       return NextResponse.json({ error: "Job not found for worker" }, { status: 404 });
     }
-    if (job.status !== "running") {
+    if (job.status !== "running" || job.task_key !== "web_sales_import") {
       return NextResponse.json({ error: "実行中のジョブではありません" }, { status: 409 });
     }
 
@@ -80,6 +83,33 @@ export async function POST(
       }, { status: 422 });
     }
 
+    let abcd = null;
+    let abcdError: string | null = null;
+    if (needsMonthlyAbcd(channel, period.startDate, period.endDate)) {
+      try {
+        const report = formData.get("abcdReport");
+        if (!(report instanceof File) || report.size > MAX_SIZE) throw new Error("ABCD用の元帳票がありません。最新Bridgeで再取得してください");
+        const bytes = Buffer.from(await report.arrayBuffer());
+        const utf8 = bytes.toString("utf8");
+        const reportText = utf8.includes("\uFFFD") ? iconv.decode(bytes, "cp932") : utf8;
+        const input = monthlyAbcdInput(channel, period.startDate, period.endDate, reportText, report.name);
+        const quantityColumn = channel === "amazon" ? "注文された商品点数" : channel === "yahoo" ? "注文点数合計" : "売上個数";
+        const reportQuantity = readCsv(reportText).rows.reduce((sum, row) => {
+          const value = String(row[quantityColumn] ?? "").replace(/,/g, "").trim();
+          if (!/^\d+(\.\d+)?$/.test(value)) throw new Error("ABCD帳票の数量を照合できません");
+          return sum + Number(value);
+        }, 0);
+        if (Math.abs(reportQuantity - parsed.quantityTotal) > 0.01) throw new Error("ABCD帳票と売上CSVの数量が一致しません");
+        const sold = new Map(parsed.items.map(i => [i.externalProductKey, i]));
+        const abcdItems = new Map(input.items.map(i => [i.key, i]));
+        for (const [key, sale] of sold) {
+          const item = abcdItems.get(key);
+          if (!item || item.sales == null || Math.abs(item.sales - sale.amount) > 1) throw new Error("ABCD帳票と売上CSVの商品・金額が一致しません");
+        }
+        if (Math.abs(input.items.reduce((sum, i) => sum + (i.sales ?? 0), 0) - parsed.items.reduce((sum, i) => sum + i.amount, 0)) > 1) throw new Error("ABCD帳票と売上CSVの合計金額が一致しません");
+        abcd = await saveAbcdSnapshot(supabase, input, `bridge:${workerId}:${id}`);
+      } catch (error) { abcdError = error instanceof Error ? error.message : "ABCD取込失敗"; }
+    }
     const result = await runImportedCsvSync(channel, period, parsed.items, {
       source: "codex_bridge_csv",
       codex_job_id: id,
@@ -87,9 +117,10 @@ export async function POST(
       parsed_row_count: parsed.rowCount,
       daily_verification: dailyVerification,
     });
-    const status = result.status === "success" ? "completed" : result.status;
-    const summary = status === "completed"
-      ? `${parsed.quantityTotal}個をTSAへ登録しました`
+    const salesStatus = result.status === "success" ? "completed" : result.status;
+    const status = salesStatus === "completed" && abcdError ? "needs_review" : salesStatus;
+    const summary = abcdError ? `売上処理: ${salesStatus} / ABCD未完了: ${abcdError}` : status === "completed"
+      ? `${parsed.quantityTotal}個をTSAへ登録しました${abcd ? "。ABCD分析も保存しました" : ""}`
       : status === "needs_review"
         ? `${result.unmatchedCount}商品が未マッチのため、月次集計は更新していません`
         : result.error || "CSV取込に失敗しました";
@@ -97,12 +128,14 @@ export async function POST(
     return NextResponse.json({
       status,
       summary,
+      abcd,
+      abcdError,
       runId: result.runId,
       itemCount: result.itemCount,
       quantityTotal: result.quantityTotal,
       matchedCount: result.matchedCount,
       unmatchedCount: result.unmatchedCount,
-      importedCount: status === "completed" ? result.quantityTotal : null,
+      importedCount: salesStatus === "completed" ? result.quantityTotal : null,
       error: result.error || null,
     }, { status: status === "failed" ? 500 : 200 });
   } catch (error) {

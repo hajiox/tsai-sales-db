@@ -1,3 +1,4 @@
+import { needsMonthlyAbcd } from "@/lib/web-sales-abcd/monthly";
 import { timingSafeEqual } from "node:crypto";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import { validatePeriod } from "@/lib/web-sales-automation/date";
@@ -47,6 +48,7 @@ export async function enqueueCodexJobs(input: EnqueueCodexJobsInput) {
       taskKey,
       channel,
       ...period,
+      abcdRequired: taskKey === "web_sales_import" && needsMonthlyAbcd(channel, period.startDate, period.endDate),
       executionPolicy: taskKey === "ad_cost_import" && channel === "google"
         ? "api_first"
         : taskKey === "ec_profit_import"

@@ -45,6 +45,8 @@ const downloadOutcome = await downloadOutcomePromise;
 
 ## Procedure
 
+For a full calendar month on Amazon, Rakuten or Yahoo, also read [monthly ABCD reports](references/monthly-abcd.md). This is required even when the sales file already exists.
+
 1. Confirm the job's EC channel, period, report month, work folder, and archive folder.
 2. Read only the target EC section in [references/channels.md](references/channels.md).
 3. Read [references/tsa-import.md](references/tsa-import.md).
