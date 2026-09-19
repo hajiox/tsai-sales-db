@@ -127,7 +127,7 @@ export async function POST(
     const summary = abcdError ? `売上処理: ${salesStatus} / ABCD未完了: ${abcdError}` : status === "completed"
       ? `${parsed.quantityTotal}個をTSAへ登録しました${abcd ? "。ABCD分析も保存しました" : ""}`
       : status === "needs_review"
-        ? `${result.unmatchedCount}商品が未マッチのため、月次集計は更新していません`
+        ? `${result.unmatchedCount}商品が未マッチのため、月次集計は更新していません${abcd ? "。ABCD分析は保存済みです" : ""}`
         : result.error || "CSV取込に失敗しました";
 
     return NextResponse.json({

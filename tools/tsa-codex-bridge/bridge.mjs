@@ -39,7 +39,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.97";
+const VERSION = "1.9.98";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -614,6 +614,8 @@ async function executeJob(job) {
             : imported.summary || `${imported.unmatchedCount || 0}商品が未マッチです。TSAの未紐付け一覧で確認してください。`,
           source_files: uniquePaths([...(result.source_files || []), archivedFiles.original, archivedFiles.prepared, ...(archivedFiles.traffic ? [archivedFiles.traffic] : []), ...archivedEvidenceFiles, preparedFile]),
           imported_count: imported.importedCount,
+          abcd: imported.abcd ?? null,
+          abcd_error: imported.abcdError ?? null,
           report_month: job.report_month,
           zero_result_verified: verifiedZero,
         };
@@ -6844,6 +6846,8 @@ async function executeQoo10OfficialSalesJob(job, archiveDir, workDir) {
         : `${imported.unmatchedCount || 0}商品が未マッチです。公式API結果は保存済みで、月次集計は未更新です。`,
       source_files: uniquePaths([originalFile, preparedFile, evidenceFile, archivedFiles.original, archivedFiles.prepared, archivedEvidence]),
       imported_count: imported.importedCount ?? null,
+      abcd: imported.abcd ?? null,
+      abcd_error: imported.abcdError ?? null,
       report_month: job.report_month,
       execution_route: "qoo10_official_api_via_docscanner",
       zero_result_verified: official.totalQuantity === 0,
