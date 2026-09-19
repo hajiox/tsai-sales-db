@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import { analyze, importSchema, comparable } from '../lib/web-sales-abcd/model.ts';
+import { readCsv, mapRows, guessMapping } from '../lib/web-sales-abcd/csv.ts';
+
+const item = (key, access, conversions, state = 'normal') => ({ key, name: key, access, conversions, sales: 0, profit: null, state });
+const base = { channel: 'amazon', start: '2026-08-01', end: '2026-08-31', metric: 'orders_sessions', source: 'test', scope: '商品別・全流入', coverage: 'all', minimumAccess: 100, accessThreshold: 500, cvrThreshold: 2 };
+const input = importSchema.parse({ ...base, items: [item('A', 1000, 40), item('B', 1000, 0), item('C', 200, 8), item('D', 200, 0), item('few', 10, 1), item('missing', null, null), item('new', 1000, 80, 'new'), item('stock', 1000, 0, 'out_of_stock'), item('zero', 0, 0)] });
+assert.deepEqual(analyze(input).items.map(i => i.rank), ['A', 'B', 'C', 'D', '保留', '保留', '保留', '保留', '保留']);
+assert.equal(analyze(input).items[1].sales, 0);
+assert.equal(analyze(input).items[8].cvr, null);
+assert.throws(() => importSchema.parse({ ...input, items: [item('x', 100, 2), item('x', 200, 3)] }), /重複/);
+assert.throws(() => importSchema.parse({ ...input, start: '2026-02-30' }));
+assert.throws(() => importSchema.parse({ ...input, items: [item('x', 0, 1)] }));
+assert.throws(() => importSchema.parse({ ...input, items: [item('x', -1, 0)] }));
+assert.throws(() => importSchema.parse({ ...input, metric: 'buyers_visitors', items: [item('x', 100, 101)] }));
+assert.equal(importSchema.parse({ ...input, metric: 'units_sessions', items: [item('x', 100, 101)] }).items.length, 1);
+const automatic = analyze({ ...input, accessThreshold: null, cvrThreshold: null, items: [item('x', 100, 10), item('y', 900, 0)] });
+assert.equal(automatic.accessThreshold, 500);
+assert.equal(automatic.cvrThreshold, 1); // weighted, not arithmetic mean of 10% and 0%
+assert.equal(analyze({ ...input, accessThreshold: null, cvrThreshold: null, items: [item('x', 100, 0), item('y', 900, 0)] }).items[0].rank, '保留');
+assert.equal(analyze({ ...input, accessThreshold: null, cvrThreshold: null, items: [item('x', 100, 10)] }).items[0].rank, '保留');
+const parsed = readCsv('表示期間,2026/08/01 ～ 2026/08/31\n商品ID,商品名,アクセス数,注文件数,売上金額\na,売上ゼロ,1000,0,0\nb,未取得,,,\n');
+const mapping = guessMapping(parsed.headers);
+const mapped = mapRows(parsed.rows, mapping);
+assert.equal(mapped.length, 2);
+assert.equal(mapped[0].conversions, 0);
+assert.equal(mapped[1].conversions, null);
+assert.throws(() => mapRows([{ ...parsed.rows[0], 注文件数: '2%' }], mapping), /件数/);
+assert.throws(() => mapRows(parsed.rows, { ...mapping, conversions: mapping.access }), /同じ列/);
+assert.throws(() => readCsv('商品名,商品名\na,b'), /重複/);
+const snap = { channel: 'amazon', metric: base.metric, scope: base.scope, period_start: base.start, period_end: base.end, payload: { input, analysis: analyze(input) } };
+assert.equal(comparable(snap, { ...snap, period_start: '2026-09-01', period_end: '2026-09-30' }), true);
+assert.equal(comparable(snap, { ...snap, metric: 'units_sessions' }), false);
+assert.equal(comparable(snap, { ...snap, period_start: '2026-09-01', period_end: '2026-09-15' }), false);
+console.log('ABCD tests passed: quadrants, zero/missing, state exclusions, weighted benchmark, validation, CSV, comparison.');

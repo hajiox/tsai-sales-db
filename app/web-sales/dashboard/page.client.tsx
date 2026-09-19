@@ -378,6 +378,7 @@ function WebSalesDashboardContent() {
             })()}
 
           <div className="grid grid-cols-3 gap-2">
+            <button type="button" onClick={() => router.push("/web-sales/abcd")} className="rounded-lg border px-4 py-2 bg-white text-blue-700">商品ABCD分析</button>
             <button
               type="button"
               onClick={() => router.push("/web-sales/automation")}
@@ -587,6 +588,7 @@ function WebSalesDashboardContent() {
 
             {/* 月選択ボタンと広告費管理ボタン */}
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <button type="button" onClick={() => router.push("/web-sales/abcd")} className="rounded-lg border px-4 py-2 bg-white text-blue-700">商品ABCD分析</button>
               <button
                 onClick={() => router.push("/web-sales/automation")}
                 style={{
