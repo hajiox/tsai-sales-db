@@ -12,7 +12,7 @@ description: Download, validate, archive, and import TSA product-sales CSV files
 
 ## Browser Session Reuse
 
-- Use only the Bridge-supplied `cua_repl` tool. Its first invocation must be exactly `await cua.getState()`; then follow the current API documentation returned by that call. Do not import `browser-client.mjs` or use the retired `agent.browsers` API.
+- Use only the Bridge-supplied `cua_repl` tool. Its first invocation must be exactly `await cua.getState()`; then follow the current API documentation returned by that call. Do not import `browser-client.mjs`; use only APIs documented by the supplied cua_repl runtime.
 - Use that single state snapshot to find Chrome tabs on the requested EC seller site's official host. Acquire a candidate with `cua.getTab(tabId, { browser: browserId })` and reuse it when possible.
 - If several tabs match, prefer a signed-in non-login page for the requested store.
 - If all matching tabs are unavailable or none exists, create at most one temporary same-profile tab directly at the confirmed report URL with `cua.createBrowserTab("chrome", targetUrl, { sessionName: "TSA Sales" })`. Continue only after verifying the expected signed-in account.
@@ -45,7 +45,7 @@ const downloadOutcome = await downloadOutcomePromise;
 
 ## Procedure
 
-For a full calendar month on Amazon, Rakuten or Yahoo, also read [monthly ABCD reports](references/monthly-abcd.md). This is required even when the sales file already exists.
+For a full calendar month on BASE, also read [BASE monthly ABCD](references/base-abcd.md). For Amazon, Rakuten or Yahoo, also read [monthly ABCD reports](references/monthly-abcd.md). This is required even when the sales file already exists.
 
 1. Confirm the job's EC channel, period, report month, work folder, and archive folder.
 2. Read only the target EC section in [references/channels.md](references/channels.md).

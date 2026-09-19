@@ -93,6 +93,10 @@ export async function POST(
         const utf8 = bytes.toString("utf8");
         const reportText = utf8.includes("\uFFFD") ? iconv.decode(bytes, "cp932") : utf8;
         const input = monthlyAbcdInput(channel, period.startDate, period.endDate, reportText, report.name);
+        // BASE's screen supplies item-level units/PV, no amounts; sales CSV uses variant
+        // codes and may include different cancellation states. Validate each source on
+        // its own contract instead of fabricating a cross-report money/product mapping.
+        if (channel !== "base") {
         const quantityColumn = channel === "amazon" ? "注文された商品点数" : channel === "yahoo" ? "注文点数合計" : "売上個数";
         const reportQuantity = readCsv(reportText).rows.reduce((sum, row) => {
           const value = String(row[quantityColumn] ?? "").replace(/,/g, "").trim();
@@ -107,6 +111,7 @@ export async function POST(
           if (!item || item.sales == null || Math.abs(item.sales - sale.amount) > 1) throw new Error("ABCD帳票と売上CSVの商品・金額が一致しません");
         }
         if (Math.abs(input.items.reduce((sum, i) => sum + (i.sales ?? 0), 0) - parsed.items.reduce((sum, i) => sum + i.amount, 0)) > 1) throw new Error("ABCD帳票と売上CSVの合計金額が一致しません");
+        }
         abcd = await saveAbcdSnapshot(supabase, input, `bridge:${workerId}:${id}`);
       } catch (error) { abcdError = error instanceof Error ? error.message : "ABCD取込失敗"; }
     }

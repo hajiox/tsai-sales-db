@@ -1,8 +1,9 @@
 import { readCsv, mapRows, type Mapping } from "./csv";
 import { importSchema } from "./model";
+import { baseMonthlyAbcdInput } from "./base";
 
 export const ACTIVE_EC_CHANNELS = ["amazon", "rakuten", "yahoo", "base"] as const;
-export const ABCD_MONTHLY_CHANNELS = ["amazon", "rakuten", "yahoo"] as const;
+export const ABCD_MONTHLY_CHANNELS = ["amazon", "rakuten", "yahoo", "base"] as const;
 export function needsMonthlyAbcd(channel: string, start: string, end: string) {
   return (ABCD_MONTHLY_CHANNELS as readonly string[]).includes(channel)
     && /^\d{4}-\d{2}-01$/.test(start)
@@ -11,6 +12,7 @@ export function needsMonthlyAbcd(channel: string, start: string, end: string) {
 
 export function monthlyAbcdInput(channel: string, start: string, end: string, csv: string, source: string) {
   if (!needsMonthlyAbcd(channel, start, end)) throw new Error("ABCD月次対象ではありません");
+  if (channel === "base") return baseMonthlyAbcdInput(csv, start, end, source);
   const parsed = readCsv(csv);
   const dates = parsed.metadata.match(/\d{4}[-/]\d{1,2}[-/]\d{1,2}/g)?.map(v => v.split(/[-/]/).map((p, i) => i ? p.padStart(2, "0") : p).join("-"));
   if (dates?.length === 2 && (dates[0] !== start || dates[1] !== end)) throw new Error("ABCD帳票の期間が一致しません");

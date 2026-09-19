@@ -28,3 +28,24 @@ assert.throws(() => input('rakuten', '期間,2026/08/01,2026/08/30\n商品管理
 assert.throws(() => input('yahoo', '商品コード,商品名,訪問者数,注文数合計,売上合計値（税込）\ny,商品,,8,1600'), /欠落/);
 assert.throws(() => input('yahoo', '商品コード,商品名,訪問者数,注文数合計,売上合計値（税込）\ny,商品,100,8,1600\ny,商品,100,8,1600'), /重複/);
 console.log('Monthly ABCD tests passed: dates, retired channels, zero sales, exact metrics, missing columns/data, duplicate products.');
+assert.equal(needsMonthlyAbcd('base', '2026-08-01', '2026-08-31'), true);
+assert.equal(needsMonthlyAbcd('base', '2026-08-01', '2026-08-15'), false);
+const baseReport = { schemaVersion: 1, channel: 'base', shop: '会津ブランド館', source: 'https://admin.thebase.com/shop_admin/data/items', start: '2026-08-01', end: '2026-08-31', lastPageVerified: true, pages: [2], rows: [
+  { key: '123', name: '商品', values: ['120', '0', '12', '5%'] },
+  { key: 'unlinked:削除済み商品', name: '削除済み商品', values: ['1', '0', '0', '0%'] },
+] };
+const baseInput = input('base', JSON.stringify(baseReport));
+assert.equal(baseInput.metric, 'units_views');
+assert.equal(baseInput.items[0].conversions, 12); // Displayed rate is never inverted.
+assert.equal(baseInput.items[0].sales, null);
+assert.equal(baseInput.items[1].access, 1);
+for (const invalid of [
+  { ...baseReport, end: '2026-08-30' },
+  { ...baseReport, pages: [1] },
+  { ...baseReport, pages: [1, 1] },
+  { ...baseReport, lastPageVerified: false },
+  { ...baseReport, shop: '別店舗' },
+  { ...baseReport, rows: [baseReport.rows[0], baseReport.rows[0]] },
+  { ...baseReport, rows: [{ ...baseReport.rows[0], values: ['', '0', '12', '5%'] }, baseReport.rows[1]] },
+]) assert.throws(() => input('base', JSON.stringify(invalid)));
+console.log('BASE monthly tests passed: full month, complete pages, identity, duplicate rejection, real units/PV.');
