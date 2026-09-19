@@ -95,7 +95,10 @@ if (definition.metadataPeriod) {
   const metadata = parsed.slice(0, definition.headerRow).flat().map(clean).join(" ");
   const expectedStart = japaneseDate(args.start);
   const expectedEnd = japaneseDate(args.end);
-  if (!metadata.includes(expectedStart) || !metadata.includes(expectedEnd)) {
+  const fullMonth = args.start.endsWith("-01") && args.end === new Date(Date.UTC(Number(args.start.slice(0, 4)), Number(args.start.slice(5, 7)), 0)).toISOString().slice(0, 10);
+  const monthLabel = expectedStart.replace(/\d{2}日$/, "");
+  const monthlyMatch = fullMonth && metadata.includes(`${monthLabel}から${monthLabel}`);
+  if (!monthlyMatch && (!metadata.includes(expectedStart) || !metadata.includes(expectedEnd))) {
     issues.add(`表示期間が一致しません（期待: ${expectedStart}から${expectedEnd}）`);
   }
 }

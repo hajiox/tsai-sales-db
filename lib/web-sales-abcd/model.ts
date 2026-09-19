@@ -15,6 +15,7 @@ const numberOrNull = z.number().finite().min(0).max(1e12).nullable();
 export const itemSchema = z.object({
   key: z.string().trim().min(1).max(200), name: z.string().trim().min(1).max(500),
   access: numberOrNull, conversions: numberOrNull,
+  accessNote: z.string().max(100).optional(),
   sales: numberOrNull, profit: z.number().finite().min(-1e12).max(1e12).nullable(),
   state: z.enum(["normal", "new", "out_of_stock"]).default("normal"),
 });
@@ -70,7 +71,7 @@ export function analyze(input: ImportInput) {
     let reason = "";
     if (i.state === "new") reason = "新商品・検証中";
     else if (i.state === "out_of_stock") reason = "欠品の影響あり";
-    else if (i.access == null || i.conversions == null) reason = "アクセスまたは購入データ未取得";
+    else if (i.access == null || i.conversions == null) reason = i.accessNote || "アクセスまたは購入データ未取得";
     else if (i.access < input.minimumAccess) reason = `アクセス不足（最低${input.minimumAccess}）`;
     else if (accessThreshold == null || cvrThreshold == null) reason = "比較基準不足。基準値を指定するか実績を蓄積してください";
     const rank: Rank = reason ? "保留" : i.access! >= accessThreshold! ? (cvr! >= cvrThreshold! ? "A" : "B") : (cvr! >= cvrThreshold! ? "C" : "D");
