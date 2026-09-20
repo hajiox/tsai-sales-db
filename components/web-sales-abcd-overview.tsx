@@ -3,14 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import AbcdPage from "./web-sales-abcd";
-import AbcdPriorities from "./web-sales-abcd-priorities";
-import type { Priority } from "@/lib/web-sales-abcd/priorities";
 import { CHANNELS, METRICS, type ImportInput, type Rank } from "@/lib/web-sales-abcd/model";
 
 import { FINANCE_LABELS, type FinanceRank } from "@/lib/web-sales-abcd/finance";
 
 type Overview = { channel: ImportInput["channel"]; snapshot: null | {
-  priorities: Priority[];
   id: string; period_start: string; period_end: string; created_at: string;
   finance?: { counts: Record<FinanceRank, number>; calculatedAt: string }; financeError?: string;
   item_count: number; metric: ImportInput["metric"]; counts: Record<Rank, number>;
@@ -55,13 +52,12 @@ export default function AbcdOverview() {
         <div className="flex items-center justify-between gap-3"><h2 className="font-bold text-xl">{CHANNELS[row.channel]}</h2><span className={`text-sm rounded-full px-3 py-1 ${row.snapshot ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{row.snapshot ? "分析データあり" : "未取得"}</span></div>
         {row.snapshot ? <>
           <p className="font-medium">{row.snapshot.period_start} 〜 {row.snapshot.period_end}<span className="text-slate-500 ml-3">{row.snapshot.item_count.toLocaleString("ja-JP")}商品</span></p>
-          <section aria-label={`${CHANNELS[row.channel]}で今やるべきこと`} className="space-y-3"><h3 className="text-2xl font-extrabold text-slate-950">今やるべきこと</h3><AbcdPriorities priorities={row.snapshot.priorities} compact /><p className="text-sm text-slate-600">優先度の高い2件を表示。詳細画面で残りの対応と商品例を確認できます。</p></section>
           <p className="text-sm font-semibold">アクセス・購入率のABCD</p>
           <div className="grid grid-cols-5 gap-2">{ranks.map((rank, index) => <div key={rank} className={`rounded-lg p-3 text-center ${rankColors[index]}`}><div className="text-sm">{rank}</div><div className="text-xl font-bold mt-1">{row.snapshot!.counts[rank].toLocaleString("ja-JP")}</div></div>)}</div>
           <div className="border-t pt-3 space-y-2"><p className="text-sm font-semibold">収益を含めた総合評価（推計）</p>{row.snapshot.finance ? <><div className="grid grid-cols-3 sm:grid-cols-6 gap-2">{Object.entries(FINANCE_LABELS).map(([rank, label]) => <div key={rank} className={`rounded p-2 text-center ${rank === "赤字" ? "bg-red-50 text-red-800" : "bg-slate-50"}`}><p className="text-xs">{rank.length === 1 ? `収益${rank}` : rank}</p><p className="text-lg font-bold">{row.snapshot!.finance!.counts[rank as FinanceRank]}</p><p className="text-xs">{label}</p></div>)}</div><p className="text-xs text-slate-500">売上・広告費控除後の利益率で評価。費用一部・未取得は保留。詳細で金額と理由を確認できます。</p></> : <p role="alert" className="text-sm text-amber-800">{row.snapshot.financeError || "収益未取得"}</p>}</div>
           <p className="text-sm text-slate-600">{METRICS[row.snapshot.metric]}</p>
           <p className="text-xs text-slate-500">保存日時：{new Date(row.snapshot.created_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}</p>
-        </> : <div className="rounded-lg bg-slate-50 p-5 text-slate-600"><strong className="block text-xl mb-2">まず商品別アクセスデータを取り込む</strong>当月の分析CSVを取得し、店舗・期間・商品IDを確認して取り込んでください。</div>}
+        </> : <div className="rounded-lg bg-slate-50 p-5 text-slate-600">商品別アクセスデータがまだありません。データを取得・取り込むと、ここに分類状況が表示されます。</div>}
         <button className="w-full rounded-lg bg-slate-900 text-white py-3 hover:bg-slate-800" onClick={() => setChannel(row.channel)}>{CHANNELS[row.channel]}の{row.snapshot ? "詳細分析を見る" : "データ取込へ"} →</button>
       </article>)}</section>
     </>}

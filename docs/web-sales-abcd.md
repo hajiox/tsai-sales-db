@@ -45,7 +45,3 @@ DB適用: `npm run apply:web-sales-abcd-migration`。環境変数DATABASE_URLが
 - 全て商品別配分の推計。会社全体の営業利益/純利益ではない。画面の円表示は四捨五入、判定とExcelは丸め前。収益の更新日時・ルール・全配分条件をExcelに含む。
 - 実装: `lib/web-sales-abcd/finance.ts`, `finance-server.ts`, `components/web-sales-abcd-finance.tsx`。管理者認証は既存APIを継承。収益取得エラー時も保存済みアクセス分析は表示可能。
 - 検証: `npm run test:web-sales-abcd-finance`（配分保存、広告重複防止、欠損、一部費用、期間、ID重複、赤字/境界、従来判定不変）、既存ABCD/月次テスト、対象型検査・lint、predeploy。
-
-## 今やるべきこと（2026-09-20）
-総合画面は各ECの優先2件、詳細画面は全対応を大きな太字と色付きカードで表示。赤字（推計損失順）、費用・原価・紐付け不足、収益B、アクセスB、利益のあるA/Cの小規模集客、Dの改善余地、アクセス保留を現在の分析から判定する。対象件数と商品例を表示し、対応間の重複を明示。費用未取得・一部取得・赤字には集客拡大を勧めない。価格や広告の自動変更は行わない。
-検証: node scripts/test-web-sales-abcd-priorities.cjs、既存ABCD/収益/月次テスト、対象lint・型検査、predeploy。
