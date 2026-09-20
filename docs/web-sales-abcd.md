@@ -45,3 +45,6 @@ DB適用: `npm run apply:web-sales-abcd-migration`。環境変数DATABASE_URLが
 - 全て商品別配分の推計。会社全体の営業利益/純利益ではない。画面の円表示は四捨五入、判定とExcelは丸め前。収益の更新日時・ルール・全配分条件をExcelに含む。
 - 実装: `lib/web-sales-abcd/finance.ts`, `finance-server.ts`, `components/web-sales-abcd-finance.tsx`。管理者認証は既存APIを継承。収益取得エラー時も保存済みアクセス分析は表示可能。
 - 検証: `npm run test:web-sales-abcd-finance`（配分保存、広告重複防止、欠損、一部費用、期間、ID重複、赤字/境界、従来判定不変）、既存ABCD/月次テスト、対象型検査・lint、predeploy。
+
+## 分類別の対応補足（2026-09-20 訂正）
+優先事項の独立カードを撤去し、総合ダッシュボードとEC詳細のA/B/C/D・赤字・保留カード内に、その分類で何をすべきかを太字で常時表示。アクセス分類と収益分類で対応文を分離。判定・DB・取込ロジックは変更しない。
