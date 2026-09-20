@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ACTIVE_EC_CHANNELS } from "@/lib/web-sales-abcd/monthly";
 import { createFinanceLoader } from "@/lib/web-sales-abcd/finance-server";
+import { buildPriorities } from "@/lib/web-sales-abcd/priorities";
 import type { Snapshot } from "@/lib/web-sales-abcd/model";
 
 export const runtime = "nodejs";
@@ -44,6 +45,7 @@ export async function GET(request: Request) {
           counts: Object.fromEntries(["A", "B", "C", "D", "保留"].map(rank => [rank, snapshot.payload.analysis.items.filter((item: { rank: string }) => item.rank === rank).length])),
           finance: finance.finance ? { counts: finance.finance.counts, calculatedAt: finance.finance.calculatedAt } : undefined,
           financeError: finance.financeError,
+          priorities: buildPriorities(snapshot.payload.analysis.items, finance.finance),
         } : null };
       }));
       return NextResponse.json({ channels });

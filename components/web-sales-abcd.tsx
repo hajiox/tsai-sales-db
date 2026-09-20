@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AbcdFinance from "./web-sales-abcd-finance";
+import AbcdPriorities from "./web-sales-abcd-priorities";
+import { buildPriorities } from "@/lib/web-sales-abcd/priorities";
 import { FINANCE_LABELS } from "@/lib/web-sales-abcd/finance";
 import { ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, Cell } from "recharts";
 import { ACTIONS, CHANNELS, METRICS, comparable, type Snapshot, type SnapshotSummary, type ImportInput, type Analysis, type Rank } from "@/lib/web-sales-abcd/model";
@@ -160,6 +162,7 @@ export default function AbcdPage({ initialChannel = "amazon" }: { initialChannel
     {loading && <p role="status">分析を読み込んでいます…</p>}
     {!loading && !snapshot && <div className="border rounded-xl p-8 bg-white"><h2 className="font-bold">商品別アクセスデータがまだありません</h2><p className="mt-2 text-slate-600">売上だけではABCD分類できません。「分析CSVを取り込む」から商品別データを保存してください。既存の売上集計はそのまま利用できます。</p></div>}
     {snapshot && analysis && <>
+      <section aria-label="このECで今やるべきこと" className="rounded-xl border-2 border-slate-900 bg-white p-4 md:p-6 space-y-4"><h2 className="text-2xl md:text-3xl font-extrabold text-slate-950">今やるべきこと</h2><p className="text-base text-slate-700">{CHANNELS[channel]} · {snapshot.period_start}〜{snapshot.period_end}の結果から、上から順に確認してください。対象商品は対応間で重複する場合があります。</p><AbcdPriorities priorities={buildPriorities(analysis.items, snapshot.finance)} /></section>
       <section className="rounded-xl border bg-white p-4 space-y-2"><p className="font-semibold">{snapshot.period_start}〜{snapshot.period_end} / {snapshot.item_count}商品 / {METRICS[snapshot.metric]}</p><p className="text-sm">{snapshot.scope} ・ {snapshot.source} ・ {snapshot.payload.input.coverage === "all" ? "全商品" : "一部商品の分析"}</p><p className="text-sm">基準：アクセス {format(analysis.accessThreshold, 2)} / 購入率 {format(analysis.cvrThreshold, 3)}% ・ 最低アクセス {snapshot.payload.input.minimumAccess} ・ {analysis.ruleVersion}</p><p className="text-xs text-slate-500">各EC内の分類です。広告クリック率とは異なります。利益は取り込んだCSVの金額で、空欄は未取得です。</p></section>
       <AbcdFinance key={snapshot.id} finance={snapshot.finance} error={snapshot.financeError} items={analysis.items} />
       <h2 className="text-xl font-bold">アクセス・購入率のABCD分析</h2>
