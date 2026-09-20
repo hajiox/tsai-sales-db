@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import AbcdPage from "./web-sales-abcd";
-import { TRAFFIC_GUIDANCE, FINANCE_GUIDANCE } from "@/lib/web-sales-abcd/guidance";
+import { TRAFFIC_GUIDANCE, FINANCE_GUIDANCE, TRAFFIC_REASONS, FINANCE_REASONS } from "@/lib/web-sales-abcd/guidance";
 import { CHANNELS, METRICS, type ImportInput, type Rank } from "@/lib/web-sales-abcd/model";
 
 import { FINANCE_LABELS, type FinanceRank } from "@/lib/web-sales-abcd/finance";
@@ -54,8 +54,8 @@ export default function AbcdOverview() {
         {row.snapshot ? <>
           <p className="font-medium">{row.snapshot.period_start} 〜 {row.snapshot.period_end}<span className="text-slate-500 ml-3">{row.snapshot.item_count.toLocaleString("ja-JP")}商品</span></p>
           <p className="text-sm font-semibold">アクセス・購入率のABCD</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{ranks.map((rank, index) => <div key={rank} className={`rounded-lg p-3 text-center ${rankColors[index]}`}><div className="text-sm">{rank}</div><div className="text-xl font-bold mt-1">{row.snapshot!.counts[rank].toLocaleString("ja-JP")}</div><p className="mt-2 text-base font-bold leading-snug">{TRAFFIC_GUIDANCE[rank]}</p></div>)}</div>
-          <div className="border-t pt-3 space-y-2"><p className="text-sm font-semibold">収益を含めた総合評価（推計）</p>{row.snapshot.finance ? <><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{Object.entries(FINANCE_LABELS).map(([rank, label]) => <div key={rank} className={`rounded p-2 text-center ${rank === "赤字" ? "bg-red-50 text-red-800" : "bg-slate-50"}`}><p className="text-xs">{rank.length === 1 ? `収益${rank}` : rank}</p><p className="text-lg font-bold">{row.snapshot!.finance!.counts[rank as FinanceRank]}</p><p className="text-xs">{label}</p><p className="mt-2 text-base font-bold leading-snug">{FINANCE_GUIDANCE[rank as FinanceRank]}</p></div>)}</div><p className="text-xs text-slate-500">売上・広告費控除後の利益率で評価。費用一部・未取得は保留。詳細で金額と理由を確認できます。</p></> : <p role="alert" className="text-sm text-amber-800">{row.snapshot.financeError || "収益未取得"}</p>}</div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{ranks.map((rank, index) => <div key={rank} className={`rounded-lg p-3 text-center ${rankColors[index]}`}><div className="text-sm">{rank}</div><div className="text-xl font-bold mt-1">{row.snapshot!.counts[rank].toLocaleString("ja-JP")}</div><p className="mt-2 text-sm leading-relaxed">{TRAFFIC_REASONS[rank]}</p><p className="mt-2 text-base font-bold leading-snug">だから：{TRAFFIC_GUIDANCE[rank]}</p></div>)}</div>
+          <div className="border-t pt-3 space-y-2"><p className="text-sm font-semibold">収益を含めた総合評価（推計）</p>{row.snapshot.finance ? <><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{Object.entries(FINANCE_LABELS).map(([rank, label]) => <div key={rank} className={`rounded p-2 text-center ${rank === "赤字" ? "bg-red-50 text-red-800" : "bg-slate-50"}`}><p className="text-xs">{rank.length === 1 ? `収益${rank}` : rank}</p><p className="text-lg font-bold">{row.snapshot!.finance!.counts[rank as FinanceRank]}</p><p className="text-xs">{label}</p><p className="mt-2 text-sm leading-relaxed">{FINANCE_REASONS[rank as FinanceRank]}</p><p className="mt-2 text-base font-bold leading-snug">だから：{FINANCE_GUIDANCE[rank as FinanceRank]}</p></div>)}</div><p className="text-xs text-slate-500">売上・広告費控除後の利益率で評価。費用一部・未取得は保留。詳細で金額と理由を確認できます。</p></> : <p role="alert" className="text-sm text-amber-800">{row.snapshot.financeError || "収益未取得"}</p>}</div>
           <p className="text-sm text-slate-600">{METRICS[row.snapshot.metric]}</p>
           <p className="text-xs text-slate-500">保存日時：{new Date(row.snapshot.created_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}</p>
         </> : <div className="rounded-lg bg-slate-50 p-5 text-slate-600">商品別アクセスデータがまだありません。データを取得・取り込むと、ここに分類状況が表示されます。</div>}
