@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Snapshot } from "./model";
-import { analyzeFinance, type FinanceSources, type Row } from "./finance";
-import { hasPersistedFinanceImport } from "../web-sales-codex/finance-job-state";
+import { analyzeFinance, completedAdChannels, type FinanceSources, type Row } from "./finance";
 
 // One request-scoped loader is shared by the overview's four ECs. No cache
 // survives a request, so monthly imports/corrections appear on the next refresh.
@@ -28,10 +27,10 @@ export function createFinanceLoader(db: SupabaseClient) {
       all("web_sales_external_mappings", "channel,external_product_key,product_id", undefined, "external_product_key"),
       all("advertising_costs", "id,series_code,google_cost,meta_cost,other_cost,amazon_cost,rakuten_cost,yahoo_cost", month),
       all("ec_profit_monthly", "id,channel,period_start,period_end,coverage_level,refunds,platform_fees,payment_fees,seller_discounts,seller_coupons,seller_points,shipping_costs,other_costs,other_credits,raw_summary", month),
-      all("web_sales_codex_jobs", "id,task_key,channel,status,result", month),
+      all("web_sales_codex_jobs", "id,task_key,channel,status,period_start,period_end", month),
     ]);
-    return { sales, products, mappings, ads, settlements,
-      completedAds: [...new Set(jobs.filter(j => j.task_key === "ad_cost_import" && j.status === "completed" && hasPersistedFinanceImport(j)).map(j => String(j.channel)))] };
+    const end = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
+    return { sales, products, mappings, ads, settlements, completedAds: completedAdChannels(jobs, month, end) };
   }
   return async (snapshot: Snapshot) => {
     const month = snapshot.period_start.slice(0, 7) + "-01";

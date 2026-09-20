@@ -4,7 +4,7 @@ const ts = require("typescript");
 require.extensions[".ts"] = (module, file) => module._compile(ts.transpileModule(fs.readFileSync(file, "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText, file);
-const { analyzeFinance, classifyFinance, financeAction } = require("../lib/web-sales-abcd/finance.ts");
+const { analyzeFinance, classifyFinance, financeAction, completedAdChannels } = require("../lib/web-sales-abcd/finance.ts");
 const { analyze } = require("../lib/web-sales-abcd/model.ts");
 const input = { channel: "amazon", start: "2026-08-01", end: "2026-08-31", metric: "units_sessions", minimumAccess: 100, accessThreshold: null, cvrThreshold: null,
   items: ["one", "two"].map((key, n) => ({ key, name: key, state: "normal", sales: 99999, profit: 99999, access: 1000, conversions: 10 + n })) };
@@ -20,6 +20,10 @@ function fixture() { return {
 let passed = 0;
 function test(name, work) { work(); passed++; console.log("PASS", name); }
 const near = (a, b) => assert.ok(Math.abs(a-b) < 1e-7, `${a} != ${b}`);
+test("mid-month ad import is not evidence of full-month coverage", () => {
+  const job = {task_key:"ad_cost_import", status:"completed", period_start:input.start, period_end:input.end, channel:"amazon"};
+  assert.deepEqual(completedAdChannels([job, {...job,channel:"meta",period_end:"2026-08-15"}, {...job,channel:"google",status:"needs_review"}], input.start, input.end), ["amazon"]);
+});
 test("same EC fees conserved; series ads shared across EC; no doubled settlement ads", () => {
   const f = analyzeFinance(input, fixture());
   near(f.items.reduce((s, i) => s+i.ecCosts, 0), 100);

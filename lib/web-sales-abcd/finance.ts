@@ -10,6 +10,10 @@ export type FinanceSources = {
   sales: Row[]; products: Row[]; mappings: Row[]; legacy: Row[];
   ads: Row[]; settlements: Row[]; completedAds: string[];
 };
+export function completedAdChannels(jobs: Row[], start: string, end: string) {
+  return [...new Set(jobs.filter(j => j.task_key === "ad_cost_import" && j.status === "completed"
+    && j.period_start === start && j.period_end === end).map(j => String(j.channel)))];
+}
 export type FinanceItem = {
   key: string; productId: string | null; sales: number | null; productCost: number | null;
   ecCosts: number | null; adCost: number | null; profit: number | null; margin: number | null;
