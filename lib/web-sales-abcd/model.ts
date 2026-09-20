@@ -80,7 +80,7 @@ export function analyze(input: ImportInput) {
   return { ruleVersion: RULE_VERSION, accessThreshold, cvrThreshold, eligibleCount: eligible.length, items };
 }
 export type Analysis = ReturnType<typeof analyze>;
-export type Snapshot = { id: string; channel: ImportInput["channel"]; period_start: string; period_end: string; created_at: string; source: string; metric: ImportInput["metric"]; scope: string; item_count: number; payload: { input: ImportInput; analysis: Analysis } };
+export type Snapshot = { id: string; channel: ImportInput["channel"]; period_start: string; period_end: string; created_at: string; source: string; metric: ImportInput["metric"]; scope: string; item_count: number; payload: { input: ImportInput; analysis: Analysis }; finance?: import("./finance").FinanceAnalysis; financeError?: string };
 export type SnapshotSummary = Omit<Snapshot, "payload">;
 function fullMonth(start: string, end: string) {
   const last = new Date(Date.UTC(Number(start.slice(0, 4)), Number(start.slice(5, 7)), 0)).toISOString().slice(0, 10);

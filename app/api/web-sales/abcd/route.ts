@@ -7,6 +7,8 @@ import { guessMapping, mapRows, readCsv, type Mapping } from "@/lib/web-sales-ab
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ACTIVE_EC_CHANNELS } from "@/lib/web-sales-abcd/monthly";
+import { createFinanceLoader } from "@/lib/web-sales-abcd/finance-server";
+import type { Snapshot } from "@/lib/web-sales-abcd/model";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,15 +27,23 @@ export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
     const db = getWebSalesAutomationServiceClient();
+    const loadFinance = createFinanceLoader(db);
+    async function financeFor(snapshot: Snapshot) {
+      try { return { finance: await loadFinance(snapshot) }; }
+      catch (error) { return { financeError: error instanceof Error ? error.message : "収益データを取得できません" }; }
+    }
     if (params.get("view") === "overview") {
       const channels = await Promise.all(ACTIVE_EC_CHANNELS.map(async channel => {
         const result = await db.from("web_sales_abcd_snapshots").select(`${summaryColumns},payload`).eq("channel", channel).order("period_end", { ascending: false }).order("created_at", { ascending: false }).limit(1).maybeSingle();
         if (result.error) throw new Error("総合ダッシュボードを取得できません");
         const snapshot = result.data;
+        const finance = snapshot ? await financeFor(snapshot as Snapshot) : { finance: undefined, financeError: undefined };
         return { channel, snapshot: snapshot ? {
           id: snapshot.id, period_start: snapshot.period_start, period_end: snapshot.period_end,
           created_at: snapshot.created_at, item_count: snapshot.item_count, metric: snapshot.metric,
           counts: Object.fromEntries(["A", "B", "C", "D", "保留"].map(rank => [rank, snapshot.payload.analysis.items.filter((item: { rank: string }) => item.rank === rank).length])),
+          finance: finance.finance ? { counts: finance.finance.counts, calculatedAt: finance.finance.calculatedAt } : undefined,
+          financeError: finance.financeError,
         } : null };
       }));
       return NextResponse.json({ channels });
@@ -44,7 +54,7 @@ export async function GET(request: Request) {
       if (result.error) throw new Error("分析結果が見つかりません");
       const actions = await db.from("web_sales_abcd_actions").select("id,product_key,action_date,description,web_sales_abcd_snapshots!inner(channel)").eq("web_sales_abcd_snapshots.channel", result.data.channel).order("action_date", { ascending: false }).limit(1000);
       if (actions.error) throw new Error("改善履歴を取得できません");
-      return NextResponse.json({ snapshot: result.data, actions: actions.data });
+      return NextResponse.json({ snapshot: { ...result.data, ...await financeFor(result.data as Snapshot) }, actions: actions.data });
     }
     const channel = channelSchema.parse(params.get("channel"));
     const result = await db.from("web_sales_abcd_snapshots").select(summaryColumns).eq("channel", channel).order("period_end", { ascending: false }).order("created_at", { ascending: false }).limit(100);

@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import AbcdFinance from "./web-sales-abcd-finance";
+import { FINANCE_LABELS } from "@/lib/web-sales-abcd/finance";
 import { ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, Cell } from "recharts";
 import { ACTIONS, CHANNELS, METRICS, comparable, type Snapshot, type SnapshotSummary, type ImportInput, type Analysis, type Rank } from "@/lib/web-sales-abcd/model";
 
@@ -26,6 +28,7 @@ const initialSettings = (): Omit<ImportInput, "items"> => {
 
 export default function AbcdPage({ initialChannel = "amazon" }: { initialChannel?: ImportInput["channel"] }) {
   const [channel, setChannel] = useState<ImportInput["channel"]>(initialChannel);
+  const [revision, setRevision] = useState(0);
   const [history, setHistory] = useState<SnapshotSummary[]>([]);
   const [selected, setSelected] = useState("");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -59,7 +62,7 @@ export default function AbcdPage({ initialChannel = "amazon" }: { initialChannel
       if (!cancelled) { setHistory(data.snapshots); setSelected(data.snapshots[0]?.id || ""); }
     }).catch(e => { if (!cancelled) setError(e.message); }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [channel]);
+  }, [channel, revision]);
   useEffect(() => {
     let cancelled = false;
     setSnapshot(null); setActions([]); setPreviousId(""); setPrevious(null); setProductKey("");
@@ -103,12 +106,29 @@ export default function AbcdPage({ initialChannel = "amazon" }: { initialChannel
     XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([
       ["EC", CHANNELS[s.channel]], ["対象期間", s.start, s.end], ["取得元", s.source], ["集計範囲", s.scope], ["取得範囲", s.coverage === "all" ? "全商品" : "一部商品のみ"], ["指標", METRICS[s.metric]], ["最低アクセス", s.minimumAccess], ["アクセス基準", a.accessThreshold], ["購入率基準(%)", a.cvrThreshold], ["ルール", a.ruleVersion], ["保存日時", snapshot.created_at], ["比較対象", comparisonOk ? `${previous!.period_start}〜${previous!.period_end}` : "なし"], ["注意", "率は元の分子・分母から計算。未取得は空欄。利益はCSVで指定した定義。分類は因果関係を示すものではありません。"],
     ]), "条件・定義");
+    if (snapshot.finance) {
+      const f = snapshot.finance;
+      const names = new Map(a.items.map(i => [i.key, i]));
+      XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(f.items.map(i => ({
+        商品ID: i.key, 商品名: names.get(i.key)?.name, 収益評価: i.rank, 評価内容: FINANCE_LABELS[i.rank],
+        アクセスABCD: names.get(i.key)?.rank, 月次売上: i.sales, 保存原価: i.productCost,
+        配分EC費用: i.ecCosts, 配分広告費: i.adCost, 控除後利益: i.profit, "控除後利益率(%)": i.margin,
+        計算状態: i.quality, 保留理由: i.reason, 対応候補: i.action,
+      }))), "収益総合評価");
+      XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([
+        ["ルール", f.rule], ["再計算日時", f.calculatedAt], ["売上基準", f.salesThreshold], ["利益率基準(%)", f.marginThreshold],
+        ["算式", "月次売上－保存原価－配分EC費用－配分広告費"],
+        ["分類", "A：売上高・利益率高、B：売上高・利益率低、C：売上低・利益率高、D：売上低・利益率低。赤字は別表示。"],
+        ["費用一部", "取得済み費用だけを控除した参考額。総合評価は保留。会社全体の営業利益・純利益ではありません。"],
+        ...f.notes.map(note => ["計算・配分", note]),
+      ]), "収益計算条件");
+    }
     XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(actions.map(a => ({ 商品ID: a.product_key, 実施日: a.action_date, 改善内容: a.description }))), "改善履歴");
     XLSX.writeFile(book, `ABCD_${channel}_${s.start}_${s.end}.xlsx`);
   }
 
   return <div className="p-4 md:p-8 space-y-6 max-w-[1600px] mx-auto text-slate-900">
-    <div className="flex flex-wrap justify-between gap-3 items-start"><div><Link className="text-sm text-blue-700" href="/web-sales/dashboard">← WEB販売管理</Link><h1 className="text-2xl font-bold mt-2">商品ABCD分析</h1><p className="text-slate-600 mt-1">アクセスと購入率から、商品ごとの改善優先度を確認します。</p></div><button className={buttonClass} onClick={() => setShowImport(v => !v)}>{showImport ? "取込を閉じる" : "分析CSVを取り込む"}</button></div>
+    <div className="flex flex-wrap justify-between gap-3 items-start"><div><Link className="text-sm text-blue-700" href="/web-sales/dashboard">← WEB販売管理</Link><h1 className="text-2xl font-bold mt-2">商品ABCD分析</h1><p className="text-slate-600 mt-1">売上・利益・広告費と、アクセス・購入率から改善優先度を確認します。</p></div><button className={buttonClass} disabled={busy || loading} onClick={() => setRevision(v => v + 1)}>最新データで再計算</button><button className={buttonClass} onClick={() => setShowImport(v => !v)}>{showImport ? "取込を閉じる" : "分析CSVを取り込む"}</button></div>
     {error && <div role="alert" className="bg-red-50 border border-red-200 p-4 rounded text-red-800">{error}</div>}
     {notice && <div role="status" className="bg-blue-50 p-3 rounded">{notice}</div>}
     <div className="flex flex-wrap gap-4 items-end"><label>EC<select aria-label="EC" className={inputClass} value={channel} disabled={busy} onChange={e => setChannel(e.target.value as typeof channel)}>{Object.entries(CHANNELS).filter(([v]) => !["qoo10", "tiktok", "mercari"].includes(v)).map(([v, label]) => <option key={v} value={v}>{label}</option>)}</select></label><label className="flex-1 min-w-64">保存済み分析（新しい対象期間順・最大100件）<select className={inputClass} value={selected} disabled={busy || loading} onChange={e => setSelected(e.target.value)}><option value="">分析を選択</option>{history.map(h => <option key={h.id} value={h.id}>{h.period_start}〜{h.period_end} / {h.item_count}商品 / 保存 {new Date(h.created_at).toLocaleString("ja-JP")}</option>)}</select></label></div>
@@ -141,6 +161,8 @@ export default function AbcdPage({ initialChannel = "amazon" }: { initialChannel
     {!loading && !snapshot && <div className="border rounded-xl p-8 bg-white"><h2 className="font-bold">商品別アクセスデータがまだありません</h2><p className="mt-2 text-slate-600">売上だけではABCD分類できません。「分析CSVを取り込む」から商品別データを保存してください。既存の売上集計はそのまま利用できます。</p></div>}
     {snapshot && analysis && <>
       <section className="rounded-xl border bg-white p-4 space-y-2"><p className="font-semibold">{snapshot.period_start}〜{snapshot.period_end} / {snapshot.item_count}商品 / {METRICS[snapshot.metric]}</p><p className="text-sm">{snapshot.scope} ・ {snapshot.source} ・ {snapshot.payload.input.coverage === "all" ? "全商品" : "一部商品の分析"}</p><p className="text-sm">基準：アクセス {format(analysis.accessThreshold, 2)} / 購入率 {format(analysis.cvrThreshold, 3)}% ・ 最低アクセス {snapshot.payload.input.minimumAccess} ・ {analysis.ruleVersion}</p><p className="text-xs text-slate-500">各EC内の分類です。広告クリック率とは異なります。利益は取り込んだCSVの金額で、空欄は未取得です。</p></section>
+      <AbcdFinance key={snapshot.id} finance={snapshot.finance} error={snapshot.financeError} items={analysis.items} />
+      <h2 className="text-xl font-bold">アクセス・購入率のABCD分析</h2>
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">{(["A", "B", "C", "D", "保留"] as Rank[]).map(r => <button key={r} onClick={() => setRankFilter(r)} className="text-left rounded-xl border p-4 bg-white" style={{ borderTop: `4px solid ${colors[r]}` }}><span className="text-xl font-bold">{r}：{analysis.items.filter(i => i.rank === r).length}商品</span><p className="text-xs mt-2">{ACTIONS[r]}</p></button>)}</div>
       <div className="flex flex-wrap items-end gap-3"><label>分類<select className={inputClass} value={rankFilter} onChange={e => setRankFilter(e.target.value)}>{["全て", "A", "B", "C", "D", "保留"].map(v => <option key={v}>{v}</option>)}</select></label><label>商品検索<input className={inputClass} value={search} onChange={e => setSearch(e.target.value)} placeholder="商品名・ID" /></label><label className="flex-1">比較対象<select className={inputClass} value={previousId} onChange={e => setPreviousId(e.target.value)}><option value="">比較しない</option>{history.filter(h => h.id !== snapshot.id && h.period_end < snapshot.period_start).map(h => <option value={h.id} key={h.id}>{h.period_start}〜{h.period_end} / {h.source}</option>)}</select></label><button className={buttonClass} disabled={busy} onClick={() => void run(exportExcel)}>全商品のExcelを作成</button></div>
       {previous && !comparisonOk && <p className="p-3 bg-amber-50">期間の日数・集計範囲・指標・最低アクセス・ルールが異なるため、分類の比較を表示していません。</p>}

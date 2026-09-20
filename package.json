@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test:web-sales-abcd-finance": "node scripts/test-web-sales-abcd-finance.cjs",
     "test:web-sales-abcd-monthly": "node scripts/test-web-sales-abcd-monthly.cjs",
     "test:web-sales-abcd": "node --experimental-strip-types scripts/test-web-sales-abcd.mjs",
     "test:web-sales-abcd-migration": "node scripts/apply-web-sales-abcd-migration.cjs",
