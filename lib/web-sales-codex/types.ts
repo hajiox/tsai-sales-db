@@ -18,6 +18,8 @@ export type CodexTaskKey =
   | "recipe_sns_generate"
   | "recipe_sns_publish"
   | "docscanner_fax_summary"
+  | "recipe_reviews_collect"
+  | "recipe_reviews_analyze"
   | "web_sales_analysis";
 
 export type CodexJobStatus =
@@ -38,7 +40,7 @@ export type CodexJobTrigger =
   | "test";
 
 export type CodexTaskDefinition = {
-  key: Exclude<CodexTaskKey, "web_sales_analysis" | "ec_price_update" | "ec_product_register" | "ec_product_name_update" | "ec_product_name_generate" | "ec_catchcopy_update" | "ec_catchcopy_generate" | "ec_product_content_update" | "ec_product_content_generate" | "ingredient_label_generate" | "recipe_sns_generate" | "recipe_sns_publish" | "docscanner_fax_summary">;
+  key: Exclude<CodexTaskKey, "recipe_reviews_collect" | "recipe_reviews_analyze" | "web_sales_analysis" | "ec_price_update" | "ec_product_register" | "ec_product_name_update" | "ec_product_name_generate" | "ec_catchcopy_update" | "ec_catchcopy_generate" | "ec_product_content_update" | "ec_product_content_generate" | "ingredient_label_generate" | "recipe_sns_generate" | "recipe_sns_publish" | "docscanner_fax_summary">;
   channel: CodexChannel;
   label: string;
   shortLabel: string;
@@ -48,7 +50,7 @@ export type CodexTaskDefinition = {
 };
 
 export type EnqueueCodexJobsInput = {
-  taskKey?: Exclude<CodexTaskKey, "web_sales_analysis" | "ec_price_update" | "ec_product_register" | "ec_product_name_update" | "ec_product_name_generate" | "ec_catchcopy_update" | "ec_catchcopy_generate" | "ec_product_content_update" | "ec_product_content_generate" | "ingredient_label_generate" | "recipe_sns_generate" | "recipe_sns_publish" | "docscanner_fax_summary">;
+  taskKey?: Exclude<CodexTaskKey, "recipe_reviews_collect" | "recipe_reviews_analyze" | "web_sales_analysis" | "ec_price_update" | "ec_product_register" | "ec_product_name_update" | "ec_product_name_generate" | "ec_catchcopy_update" | "ec_catchcopy_generate" | "ec_product_content_update" | "ec_product_content_generate" | "ingredient_label_generate" | "recipe_sns_generate" | "recipe_sns_publish" | "docscanner_fax_summary">;
   channels: CodexChannel[];
   startDate: string;
   endDate: string;

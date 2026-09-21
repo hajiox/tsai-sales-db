@@ -1,0 +1,103 @@
+{
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "partial",
+        "blocked"
+      ]
+    },
+    "message": {
+      "type": "string"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "string",
+            "enum": [
+              "amazon",
+              "rakuten",
+              "yahoo",
+              "base"
+            ]
+          },
+          "productKey": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "partial",
+              "blocked",
+              "no_reviews"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "reviews": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "externalId": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                },
+                "rating": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "postedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "externalId",
+                "url",
+                "rating",
+                "title",
+                "body",
+                "postedAt"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "channel",
+          "productKey",
+          "status",
+          "message",
+          "reviews"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "status",
+    "message",
+    "sources"
+  ],
+  "additionalProperties": false
+}

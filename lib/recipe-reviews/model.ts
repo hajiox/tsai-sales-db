@@ -1,0 +1,27 @@
+import { z } from "zod";
+export const REVIEW_CHANNELS = { amazon: "Amazon", rakuten: "楽天", yahoo: "Yahoo", base: "BASE" } as const;
+export const channelSchema = z.enum(["amazon", "rakuten", "yahoo", "base"]);
+export type ReviewChannel = z.infer<typeof channelSchema>;
+export const sourceSchema = z.object({channel: channelSchema, productKey: z.string().trim().min(1).max(200), name: z.string().max(500), url: z.string().url().max(2000)});
+export type ReviewSource = z.infer<typeof sourceSchema>;
+export function validReviewUrl(value: string, channel: ReviewChannel) {
+  try { const u = new URL(value); const domains = {amazon:["amazon.co.jp"],rakuten:["rakuten.co.jp"],yahoo:["shopping.yahoo.co.jp"],base:["thebase.in","base.shop","buyshop.jp","base.ec"]}[channel];
+    return u.protocol === "https:" && !u.username && !u.password && !u.port && domains.some(d => u.hostname === d || u.hostname.endsWith("."+d));
+  } catch { return false; }
+}
+const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(s => { const d = new Date(s); return !isNaN(d.getTime()) && d.toISOString().slice(0,10) === s; });
+export const collectedReviewSchema = z.object({ externalId:z.string().min(1).max(300), url:z.string().url().max(2000), rating:z.number().int().min(1).max(5).nullable(), title:z.string().max(1000), body:z.string().max(12000), postedAt:date.nullable() }).refine(r => !!(r.title.trim() || r.body.trim()), "空のレビューは保存できません");
+export const collectionSchema = z.object({status:z.enum(["completed","partial","blocked"]), message:z.string().max(1500), sources:z.array(z.object({channel:channelSchema,productKey:z.string().max(200),status:z.enum(["complete","partial","blocked","no_reviews"]),message:z.string().max(1500),reviews:z.array(collectedReviewSchema).max(200)})).max(40)});
+export type ReviewRow = {id:string;channel:ReviewChannel;product_key:string;external_id:string;url:string;rating:number|null;title:string;body:string;posted_at:string|null;collected_at:string};
+const topicSchema = z.object({title:z.string().min(1).max(120),description:z.string().min(1).max(1200),reviewIds:z.array(z.string().uuid()).min(1).max(15)});
+export const analysisSchema = z.object({scopes:z.array(z.object({channel:z.enum(["all","amazon","rakuten","yahoo","base"]),summary:z.string().max(3000),strengths:z.array(topicSchema).max(8),issues:z.array(topicSchema).max(8),actions:z.array(topicSchema).max(8),limitations:z.string().max(1500)})).min(1).max(5)});
+export function validateAnalysis(value:unknown, reviews: ReviewRow[]) {
+  const parsed = analysisSchema.parse(value); const byId = new Map(reviews.map(r=>[r.id,r]));
+  const expected = new Set(["all",...reviews.map(r=>r.channel)]);
+  if (parsed.scopes.length !== expected.size || new Set(parsed.scopes.map(s=>s.channel)).size !== expected.size || parsed.scopes.some(s=>!expected.has(s.channel))) throw new Error("分析対象ECが一致しません");
+  for(const scope of parsed.scopes) for(const topic of [...scope.strengths,...scope.issues,...scope.actions]) for(const id of topic.reviewIds) {
+    const review=byId.get(id); if(!review || (scope.channel!=="all" && review.channel!==scope.channel)) throw new Error("分析根拠のレビューが対象外です");
+  }
+  return parsed;
+}
+export function reviewStats(rows:ReviewRow[]) { const rated=rows.filter(r=>r.rating!=null); return {count:rows.length,ratedCount:rated.length,average:rated.length?rated.reduce((s,r)=>s+r.rating!,0)/rated.length:null,distribution:[5,4,3,2,1].map(star=>({star,count:rated.filter(r=>r.rating===star).length}))}; }

@@ -1,5 +1,5 @@
 {
-  "version": "2026-09-11.2",
+  "version": "2026-09-21.1",
   "tasks": {
     "connection_test": {
       "mode": "deterministic",
@@ -68,6 +68,14 @@
     "web_sales_analysis": {
       "mode": "codex",
       "skill": "tsa-web-sales-analysis"
+    },
+    "recipe_reviews_collect": {
+      "mode": "preflight_then_codex",
+      "skill": "collect-aizu-reviews"
+    },
+    "recipe_reviews_analyze": {
+      "mode": "codex",
+      "skill": "analyze-aizu-reviews"
     }
   }
 }

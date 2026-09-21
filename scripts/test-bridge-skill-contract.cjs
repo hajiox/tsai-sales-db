@@ -33,6 +33,8 @@ const expectedTasks = {
   recipe_sns_publish: "publish-aizu-sns-posts",
   docscanner_fax_summary: "summarize-docscanner-fax",
   web_sales_analysis: "tsa-web-sales-analysis",
+  recipe_reviews_collect: "collect-aizu-reviews",
+  recipe_reviews_analyze: "analyze-aizu-reviews",
 };
 
 assert.match(contract.version, /^\d{4}-\d{2}-\d{2}\.\d+$/);

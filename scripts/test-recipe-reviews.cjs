@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,f);
+const{validReviewUrl,collectionSchema,validateAnalysis,reviewStats}=require('../lib/recipe-reviews/model.ts');
+assert(validReviewUrl('https://www.amazon.co.jp/gp/customer-reviews/R1','amazon'));
+for(const u of ['http://www.amazon.co.jp/x','https://amazon.co.jp.evil.test/x','https://a:b@amazon.co.jp/x','javascript:alert(1)','https://127.0.0.1/x'])assert(!validReviewUrl(u,'amazon'));
+const r={externalId:'id',url:'https://www.amazon.co.jp/x',rating:5,title:'良い',body:'おいしい',postedAt:'2026-09-01'};
+assert(collectionSchema.safeParse({status:'completed',message:'ok',sources:[{channel:'amazon',productKey:'B1',status:'complete',message:'matched',reviews:[r]}]}).success);
+assert(!collectionSchema.safeParse({status:'completed',message:'ok',sources:[{channel:'amazon',productKey:'B1',status:'complete',message:'matched',reviews:[{...r,rating:6}]}]}).success);
+const id='00000000-0000-4000-8000-000000000001';const reviews=[{id,channel:'amazon',rating:5},{id:'00000000-0000-4000-8000-000000000002',channel:'base',rating:null}];
+const scope=channel=>({channel,summary:'summary',strengths:[],issues:[],actions:[],limitations:'limited'});
+const result={scopes:[scope('all'),scope('amazon'),scope('base')]};assert(validateAnalysis(result,reviews));
+assert.throws(()=>validateAnalysis({scopes:[scope('all')]},reviews));
+assert.throws(()=>validateAnalysis({scopes:[scope('all'),scope('amazon'),{...scope('base'),issues:[{title:'t',description:'d',reviewIds:[id]}]}]},reviews));
+assert.deepEqual(reviewStats(reviews).average,5);assert.equal(reviewStats(reviews).ratedCount,1);assert.equal(reviewStats([]).average,null);
+console.log('PASS review validation: URL boundaries, rating range, scope completeness, cross-EC evidence, unrated statistics');

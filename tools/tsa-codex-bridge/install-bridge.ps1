@@ -29,6 +29,8 @@ if ($CarrierAppDir -and (-not [System.IO.Path]::IsPathRooted($CarrierAppDir) -or
 }
 $requiredSourceFiles = @(
   "bridge.mjs",
+  "review-collection.schema.json",
+  "review-analysis.schema.json",
   "chrome-devtools-daemon-relay.mjs",
   "chrome-devtools-connection.mjs",
   "chrome-devtools-story-drag.mjs",
@@ -101,6 +103,7 @@ foreach ($skillName in $bridgeSkillNames) {
 }
 
 $interactiveTaskKeys = @(
+  "recipe_reviews_collect",
   "connection_test",
   "web_sales_import",
   "ad_cost_import",
@@ -121,7 +124,7 @@ $aiTaskKeys = @(
   "recipe_sns_generate",
   "docscanner_fax_summary"
 )
-$analysisTaskKeys = @("connection_test", "web_sales_analysis")
+$analysisTaskKeys = @("connection_test", "web_sales_analysis", "recipe_reviews_analyze")
 $headlessWorkerSpecs = @(
   [pscustomobject]@{
     RuntimeName = "ai-01"
@@ -499,6 +502,8 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-publish-policy.mjs") -D
 Copy-Item -LiteralPath (Join-Path $sourceDir "sns-browser-confirmation.mjs") -Destination (Join-Path $installDir "sns-browser-confirmation.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "sns-browser-confirmation.ps1") -Destination (Join-Path $installDir "sns-browser-confirmation.ps1") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "monitor-state-file.cjs") -Destination (Join-Path $installDir "monitor-state-file.cjs") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "review-collection.schema.json") -Destination (Join-Path $installDir "review-collection.schema.json") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "review-analysis.schema.json") -Destination (Join-Path $installDir "review-analysis.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "skill-contract.json") -Destination (Join-Path $installDir "skill-contract.json") -Force
 Copy-WindowsPowerShellScript "bridge-monitor.ps1" (Join-Path $installDir "bridge-monitor.ps1")
 Copy-WindowsPowerShellScript "launch-bridge-monitor.ps1" (Join-Path $installDir "launch-bridge-monitor.ps1")

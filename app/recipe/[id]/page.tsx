@@ -190,8 +190,10 @@ interface RecipeItem {
   tax_included?: boolean;
 }
 
+import RecipeReviews from "@/components/recipe/RecipeReviews";
+
 type IngredientSortMode = "registered" | "weight";
-type RecipeDetailTab = "recipe" | "ec" | "sns";
+type RecipeDetailTab = "recipe" | "ec" | "sns" | "reviews";
 
 const RECIPE_DETAIL_TABS: Array<{
   id: RecipeDetailTab;
@@ -202,10 +204,11 @@ const RECIPE_DETAIL_TABS: Array<{
   { id: "recipe", label: "レシピ", description: "配合・原価・製造情報", icon: BookOpen },
   { id: "ec", label: "EC情報", description: "商品説明・EC名・画像", icon: ShoppingBag },
   { id: "sns", label: "SNS", description: "画像切り出し・投稿文", icon: Share2 },
+  { id: "reviews", label: "レビュー", description: "EC別・全体の声と分析", icon: BookOpen },
 ];
 
 function normalizeRecipeDetailTab(value: string | null): RecipeDetailTab {
-  return value === "ec" || value === "sns" ? value : "recipe";
+  return value === "ec" || value === "sns" || value === "reviews" ? value : "recipe";
 }
 
 type WebProductImage = {
@@ -650,18 +653,19 @@ function RecipeDetailContent() {
   }, []);
 
   const handleDetailTabKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>, tab: RecipeDetailTab) => {
-    const currentIndex = RECIPE_DETAIL_TABS.findIndex((item) => item.id === tab);
+    const availableTabs = RECIPE_DETAIL_TABS.filter(t => t.id !== "reviews" || recipe?.category === "ネット専用");
+    const currentIndex = availableTabs.findIndex((item) => item.id === tab);
     let nextIndex: number | null = null;
-    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % RECIPE_DETAIL_TABS.length;
-    if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + RECIPE_DETAIL_TABS.length) % RECIPE_DETAIL_TABS.length;
+    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % availableTabs.length;
+    if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + availableTabs.length) % availableTabs.length;
     if (event.key === "Home") nextIndex = 0;
-    if (event.key === "End") nextIndex = RECIPE_DETAIL_TABS.length - 1;
+    if (event.key === "End") nextIndex = availableTabs.length - 1;
     if (nextIndex === null) return;
     event.preventDefault();
-    const nextTab = RECIPE_DETAIL_TABS[nextIndex].id;
+    const nextTab = availableTabs[nextIndex].id;
     changeDetailTab(nextTab);
     window.requestAnimationFrame(() => document.getElementById(`recipe-detail-tab-${nextTab}`)?.focus());
-  }, [changeDetailTab]);
+  }, [changeDetailTab, recipe?.category]);
 
   useEffect(() => {
     if (params.id) {
@@ -2083,11 +2087,11 @@ function RecipeDetailContent() {
       </header>
       <nav className="border-b border-gray-200 bg-white print:hidden" aria-label="レシピ詳細の表示切り替え">
         <div
-          className="mx-auto grid max-w-[1400px] grid-cols-3 gap-1 px-3 py-2 sm:px-4 lg:px-8"
+          className={`mx-auto grid max-w-[1400px] ${recipe.category === "ネット専用" ? "grid-cols-4" : "grid-cols-3"} gap-1 px-3 py-2 sm:px-4 lg:px-8`}
           role="tablist"
           aria-label="レシピ詳細"
         >
-          {RECIPE_DETAIL_TABS.map(({ id, label, description, icon: Icon }) => {
+          {RECIPE_DETAIL_TABS.filter(t => t.id !== "reviews" || recipe.category === "ネット専用").map(({ id, label, description, icon: Icon }) => {
             const selected = activeDetailTab === id;
             return (
               <button
@@ -5311,6 +5315,7 @@ function RecipeDetailContent() {
       >
         <RecipeSnsStudio recipeId={recipe.id} hasUnsavedChanges={hasChanges} />
       </div>
+      {recipe.category === "ネット専用" && activeDetailTab === "reviews" && <div id="recipe-detail-panel-reviews" role="tabpanel" aria-labelledby="recipe-detail-tab-reviews" className="print:hidden"><RecipeReviews recipeId={recipe.id} /></div>}
       <IngredientSourceDetailDialog
         ingredient={selectedIngredientDetail}
         onClose={() => setSelectedIngredientDetail(null)}
