@@ -46,7 +46,7 @@ import vm from 'node:vm';
 test('CLI arguments preserve isolated focused execution while overriding stale model options',()=>{
  const s=readFileSync(new URL('../tools/tsa-codex-bridge/bridge.mjs',import.meta.url),'utf8');
  const builder=s.slice(s.indexOf('function buildIsolatedCodexArgs('),s.indexOf('function emptyCodexUsage('));
- const build=vm.runInNewContext(builder+';buildIsolatedCodexArgs',{config:{workspace:'C:/fixture',codexHome:'C:/fixture',reasoningEffort:'low'},RESULT_SCHEMA:'fixture.schema.json',uniquePaths:items=>items.filter(Boolean),appendUnifiedCuaMcpArgs:args=>args.push('-c','mcp_fixture=true')});
+ const build=vm.runInNewContext(builder+';buildIsolatedCodexArgs',{BROWSER_ROUTE_POLICY:'fixture policy',appendChromeDevtoolsMcpArgs:args=>args.push('-c','debug_fixture=true'),config:{workspace:'C:/fixture',codexHome:'C:/fixture',reasoningEffort:'low'},RESULT_SCHEMA:'fixture.schema.json',uniquePaths:items=>items.filter(Boolean),appendUnifiedCuaMcpArgs:args=>args.push('-c','mcp_fixture=true')});
  for(const options of [{},{model:'gpt-5.6-sol',reasoningEffort:'ultra',focusedContext:true,ephemeral:true}]){
   const args=build('result.json',[],options);assert.equal(args[args.indexOf('--model')+1],'gpt-6-astra');assert.ok(args.includes('model_reasoning_effort="medium"'));
   if(options.focusedContext){assert.ok(args.includes('--ignore-user-config'));assert.ok(args.includes('--ephemeral'));assert.ok(args.includes('mcp_fixture=true'));}

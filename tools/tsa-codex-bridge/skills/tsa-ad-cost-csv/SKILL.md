@@ -3,6 +3,11 @@ name: tsa-ad-cost-csv
 description: Download, verify, and archive TSA advertising-cost reports for Meta Ads, Rakuten RPP, Yahoo item reach, and Amazon Sponsored Products. Use for TSA Codex Bridge ad-cost jobs that must reuse the signed-in Chrome session and feed the existing TSA advertising importers.
 ---
 
+## Browser route order (2026-09-21)
+
+Chrome連係 → Chrome DevTools MCP → 最後にPC操作。同じ未完了の工程をこの順で進める。最初の接続・操作手段が失敗しただけで終了しない。以前の参照資料にある単一ツール限定・接続失敗時の即停止指示より、この順序を優先する。各段階で同じ失敗への根拠ある再試行は1回まで。投稿等の成否不明時は先に結果を確認し、完了済み操作を重複させない。実際のログイン・MFA・CAPTCHA・必須許可待ちは迂回しない。PC操作も利用不可なら、各手段の制約と残った操作を明示する。
+
+
 # TSA Advertising Cost Reports
 
 ## Bridge Input Contract

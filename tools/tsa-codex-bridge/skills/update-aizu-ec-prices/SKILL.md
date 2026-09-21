@@ -3,6 +3,11 @@ name: update-aizu-ec-prices
 description: Update 会津ブランド館 product prices across logged-in Amazon, 楽天, Yahoo!ショッピング, メルカリShops, BASE, Qoo10, and BASE-managed TikTok Shop, then find and update matching company LPs from TSAの自社リンク集, deploy them, and verify the live price. Use for requests mentioning 価格改定, EC価格変更, 商品価格変更, Amazon・楽天・Yahoo・メルカリShops・BASE・Qoo10・TikTokショップ, 自社LP, or TSAリンク集.
 ---
 
+## Browser route order (2026-09-21)
+
+Chrome連係 → Chrome DevTools MCP → 最後にPC操作。同じ未完了の工程をこの順で進める。最初の接続・操作手段が失敗しただけで終了しない。以前の参照資料にある単一ツール限定・接続失敗時の即停止指示より、この順序を優先する。各段階で同じ失敗への根拠ある再試行は1回まで。投稿等の成否不明時は先に結果を確認し、完了済み操作を重複させない。実際のログイン・MFA・CAPTCHA・必須許可待ちは迂回しない。PC操作も利用不可なら、各手段の制約と残った操作を明示する。
+
+
 # EC・自社LP価格改定
 
 ## Bridge Input Contract

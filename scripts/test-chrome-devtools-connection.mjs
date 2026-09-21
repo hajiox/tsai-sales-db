@@ -29,8 +29,8 @@ for (const response of [{ success: false, error: "Request timed out" }, { succes
 }
 const bridge = readFileSync(new URL("../tools/tsa-codex-bridge/bridge.mjs", import.meta.url), "utf8");
 const job = bridge.slice(bridge.indexOf("async function executeRecipeSnsPublishJob"), bridge.indexOf("async function executeAnalysisJob"));
-assert.ok(job.indexOf("await prepareChromeConnection") < job.indexOf("await executeRecipeSnsPublishTarget"));
-assert.match(job, /if \(connectionFailure\) \{[\s\S]*?continue;/);
+assert.doesNotMatch(job, /await prepareChromeConnection/);
+assert.doesNotMatch(job, /if \(connectionFailure\)/);
 const relay = readFileSync(new URL("../tools/tsa-codex-bridge/chrome-devtools-daemon-relay.mjs", import.meta.url), "utf8");
 assert.doesNotMatch(relay, /startDaemon|stopDaemon/);
 console.log("Chrome connection ownership, reuse, single preflight, private metadata and fail-closed contracts passed.");

@@ -30,8 +30,9 @@ const aiTasks = [
   "recipe_sns_generate",
   "docscanner_fax_summary",
 ];
-const analysisTasks = ["connection_test", "web_sales_analysis"];
+const analysisTasks = ["connection_test", "web_sales_analysis", "recipe_reviews_analyze"];
 const interactiveTasks = [
+  "recipe_reviews_collect",
   "connection_test",
   "web_sales_import",
   "ad_cost_import",

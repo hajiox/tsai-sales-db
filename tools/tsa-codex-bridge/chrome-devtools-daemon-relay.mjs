@@ -1,4 +1,6 @@
-import { existsSync, realpathSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
+import { existsSync, realpathSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { installStoryDrag } from "./chrome-devtools-story-drag.mjs";
@@ -89,10 +91,33 @@ function validateFileScope(toolName, params) {
   return checked;
 }
 
+let connectionAttempt = null;
 async function ensureDaemon() {
-  if (!isDaemonRunning(sessionId)) {
-    throw new Error("BridgeのChrome接続プロセスが停止しました。投稿操作を再試行せず、Bridgeの接続確認から再開してください。");
-  }
+  if (!connectionAttempt) connectionAttempt = (async () => {
+    const requestDir = options.connectionRequestDir;
+    if (!requestDir) {
+      if (!isDaemonRunning(sessionId)) throw new Error("Chrome DevTools connection unavailable; continue to native PC only if no real permission gate is pending.");
+      return;
+    }
+    if (realpathSync.native(requestDir) !== canonicalWorkspace) throw new Error("Invalid Bridge connection request workspace");
+    const id = randomUUID();
+    const request = join(requestDir, ".bridge-chrome-request.json");
+    const response = join(requestDir, ".bridge-chrome-response.json");
+    writeFileSync(request + ".tmp", JSON.stringify({ id, kind: "devtools_fallback" }), "utf8"); renameSync(request + ".tmp", request);
+    const deadline = Date.now() + 80000;
+    while (Date.now() < deadline) {
+      if (existsSync(response)) {
+        const value = JSON.parse(readFileSync(response, "utf8"));
+        if (value.id === id) {
+          if (!value.ready) throw new Error(value.message);
+          return;
+        }
+      }
+      await sleep(250);
+    }
+    throw new Error("Bridge connection preparation timed out; do not reconnect. Check whether a real permission gate is pending; otherwise continue to native PC.");
+  })();
+  return connectionAttempt;
 }
 
 async function forwardTool(toolName, params) {

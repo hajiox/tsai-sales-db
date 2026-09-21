@@ -3,6 +3,11 @@ name: tsa-carrier-shipment-csv
 description: Download, name, validate, archive, and import the previous month's Yamato B2 and Sagawa eHiden III shipment-history CSV files into the local TSA carrier analytics app. Use for monthly carrier CSV collection, missing shipment archive recovery, Yamato/Sagawa import preparation, or verification of files named `【抽出前】YYYY年M月A.csv` from logged-in Chrome sessions.
 ---
 
+## Browser route order (2026-09-21)
+
+Chrome連係 → Chrome DevTools MCP → 最後にPC操作。同じ未完了の工程をこの順で進める。最初の接続・操作手段が失敗しただけで終了しない。以前の参照資料にある単一ツール限定・接続失敗時の即停止指示より、この順序を優先する。各段階で同じ失敗への根拠ある再試行は1回まで。投稿等の成否不明時は先に結果を確認し、完了済み操作を重複させない。実際のログイン・MFA・CAPTCHA・必須許可待ちは迂回しない。PC操作も利用不可なら、各手段の制約と残った操作を明示する。
+
+
 # TSA Carrier Shipment CSV
 
 The fixed carrier/month acquisition is already authorized. Automatically perform ordinary navigation, period filtering, download, archiving and validation; do not hand those steps back to the operator or request redundant confirmation. Run the monthly carrier export as a lossless, local-first workflow. Keep customer data on this PC and the approved network archive.
