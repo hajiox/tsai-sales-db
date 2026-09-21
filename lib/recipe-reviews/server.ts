@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
+import { getEcPriceVerifiedIdentifiers } from "@/lib/ec-price-verified-registry";
 import { REVIEW_CHANNELS, type ReviewSource, type ReviewRow } from "./model";
 export const db = getWebSalesAutomationServiceClient;
 export const REVIEW_TASKS = ["recipe_reviews_collect", "recipe_reviews_analyze"];
@@ -19,7 +20,18 @@ export async function loadSources(recipe:Awaited<ReturnType<typeof loadRecipe>>)
  for(const m of mappings.data??[]) {if(result.some(r=>r.channel===m.channel&&r.productKey===m.external_product_key))continue;
  const url = m.channel==="amazon" ? `https://www.amazon.co.jp/product-reviews/${encodeURIComponent(m.external_product_key)}` : m.channel==="rakuten" ? "https://review.rakuten.co.jp/" : m.channel==="yahoo" ? "https://shopping.yahoo.co.jp/" : "https://admin.thebase.com/";
  result.push({channel:m.channel,productKey:m.external_product_key,name:m.external_product_name||recipe.name,url}); }
- } return result;
+
+ const normalize=(value:string)=>value.normalize("NFKC").replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim();
+ const verified=getEcPriceVerifiedIdentifiers(recipe.jan_code,Object.keys(REVIEW_CHANNELS) as (keyof typeof REVIEW_CHANNELS)[]);
+ for(const channel of Object.keys(REVIEW_CHANNELS) as (keyof typeof REVIEW_CHANNELS)[]) {
+  const legacy=await db().from(`${channel}_product_mapping`).select(`${channel}_title`).eq("product_id",recipe.linked_product_id);if(legacy.error)throw legacy.error;
+  const titles=new Set((legacy.data??[]).map(r=>normalize(String((r as unknown as Record<string,unknown>)[`${channel}_title`]||""))));
+  const snap=await db().from("web_sales_abcd_snapshots").select("payload").eq("channel",channel).order("created_at",{ascending:false}).limit(1);if(snap.error)throw snap.error;
+  const candidates: {key:string;name:string}[]=(snap.data?.[0]?.payload?.analysis?.items??[]).filter((r:{key:string;name:string})=>!r.key.startsWith("name:")&&titles.has(normalize(r.name)));
+  for(const v of verified[channel]) if(["asin","product_management_number","product_code","product_id"].includes(v.kind))candidates.push({key:v.value,name:recipe.name});
+  for(const candidate of candidates){if(result.some(r=>r.channel===channel&&r.productKey===candidate.key))continue;result.push({channel,productKey:candidate.key,name:candidate.name,url:channel==="amazon"?`https://www.amazon.co.jp/product-reviews/${encodeURIComponent(candidate.key)}`:channel==="rakuten"?"https://review.rakuten.co.jp/":channel==="yahoo"?"https://shopping.yahoo.co.jp/":"https://admin.thebase.com/"});}
+ }
+ } return result.filter(s=>!s.productKey.startsWith("name:"));
 }
 export async function allReviews(id:string) { const rows:ReviewRow[]=[]; for(let offset=0;offset<50000;offset+=1000){const q=await db().from("recipe_reviews").select("id,channel,product_key,external_id,url,rating,title,body,posted_at,collected_at").eq("recipe_id",id).order("posted_at",{ascending:false,nullsFirst:false}).order("id").range(offset,offset+999);if(q.error)throw q.error;rows.push(...q.data);if(q.data.length<1000)return rows;}throw new Error("レビュー件数の上限に達しました。取得範囲を見直してください"); }
 export function analysisPacket(rows:ReviewRow[]) { const selected=Object.keys(REVIEW_CHANNELS).flatMap(channel=>rows.filter(r=>r.channel===channel).slice(0,50).map(r=>({...r,title:r.title.slice(0,300),body:r.body.slice(0,800)})));

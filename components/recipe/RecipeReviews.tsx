@@ -10,7 +10,8 @@ export default function RecipeReviews({recipeId}:{recipeId:string}){
  const [source,setSource]=useState<ReviewSource>({channel:"amazon",productKey:"",name:"",url:""});
  const requestSeq=useRef(0);
  const load=useCallback(async()=>{const seq=++requestSeq.current;const r=await fetch(`/api/recipe/${recipeId}/reviews?channel=${channel}&page=${page}`,{cache:"no-store"});const d=await r.json();if(!r.ok)throw new Error(d.error);if(seq===requestSeq.current)setData(d);},[recipeId,channel,page]);
- useEffect(()=>{let stopped=false;const refresh=()=>load().catch(e=>{if(!stopped)setError(e.message)});void refresh();const timer=setInterval(refresh,15000);return()=>{stopped=true;clearInterval(timer)};},[load]);
+ const polling=!!data?.jobs.some(j=>["queued","running"].includes(j.status));
+ useEffect(()=>{let stopped=false;const refresh=()=>load().catch(e=>{if(!stopped)setError(e.message)});void refresh();const timer=polling?setInterval(refresh,15000):null;return()=>{stopped=true;if(timer)clearInterval(timer)};},[load,polling]);
  async function act(mode:string){setBusy(true);setError("");setNotice("");try{const r=await fetch(`/api/recipe/${recipeId}/reviews`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mode,source})});const d=await r.json();if(!r.ok)throw new Error(d.error);setNotice(mode==="source"?"収集元を保存しました":"Bridgeに依頼しました。事務所PCで順次実行します。");await load();}catch(e){setError(e instanceof Error?e.message:"処理に失敗しました")}finally{setBusy(false)}}
  const active=data?.jobs.some(j=>["queued","running"].includes(j.status));const scope=data?.analysis?.result.scopes.find(s=>s.channel===channel);
  return <section className="mx-auto max-w-[1400px] p-4 md:p-8 space-y-6" aria-label="商品レビュー">
