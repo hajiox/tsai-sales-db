@@ -5,7 +5,7 @@ export type ReviewChannel = z.infer<typeof channelSchema>;
 export const sourceSchema = z.object({channel: channelSchema, productKey: z.string().trim().min(1).max(200), name: z.string().max(500), url: z.string().url().max(2000)});
 export type ReviewSource = z.infer<typeof sourceSchema>;
 export function validReviewUrl(value: string, channel: ReviewChannel) {
-  try { const u = new URL(value); const domains = {amazon:["amazon.co.jp"],rakuten:["rakuten.co.jp"],yahoo:["shopping.yahoo.co.jp"],base:["thebase.in","base.shop","buyshop.jp","base.ec"]}[channel];
+  try { const u = new URL(value); const domains = {amazon:["amazon.co.jp"],rakuten:["rakuten.co.jp"],yahoo:["shopping.yahoo.co.jp"],base:["thebase.in","thebase.com","base.shop","buyshop.jp","base.ec"]}[channel];
     return u.protocol === "https:" && !u.username && !u.password && !u.port && domains.some(d => u.hostname === d || u.hostname.endsWith("."+d));
   } catch { return false; }
 }

@@ -17,7 +17,7 @@ export async function loadSources(recipe:Awaited<ReturnType<typeof loadRecipe>>)
  const mappings=await db().from("web_sales_external_mappings").select("channel,external_product_key,external_product_name").eq("product_id",recipe.linked_product_id).in("channel",Object.keys(REVIEW_CHANNELS)).limit(100);
  if(mappings.error) throw mappings.error;
  for(const m of mappings.data??[]) {if(result.some(r=>r.channel===m.channel&&r.productKey===m.external_product_key))continue;
- const url = m.channel==="amazon" ? `https://www.amazon.co.jp/product-reviews/${encodeURIComponent(m.external_product_key)}` : m.channel==="rakuten" ? "https://review.rakuten.co.jp/" : m.channel==="yahoo" ? "https://shopping.yahoo.co.jp/" : "https://admin.thebase.in/";
+ const url = m.channel==="amazon" ? `https://www.amazon.co.jp/product-reviews/${encodeURIComponent(m.external_product_key)}` : m.channel==="rakuten" ? "https://review.rakuten.co.jp/" : m.channel==="yahoo" ? "https://shopping.yahoo.co.jp/" : "https://admin.thebase.com/";
  result.push({channel:m.channel,productKey:m.external_product_key,name:m.external_product_name||recipe.name,url}); }
  } return result;
 }
