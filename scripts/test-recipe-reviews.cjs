@@ -1,6 +1,11 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
 require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,f);
-const{validReviewUrl,collectionSchema,validateAnalysis,reviewStats}=require('../lib/recipe-reviews/model.ts');
+const{validReviewUrl,validReviewProductKey,sourceSchema,collectionSchema,validateAnalysis,reviewStats}=require('../lib/recipe-reviews/model.ts');
+assert(!validReviewProductKey('unlinked:商品名','base'));
+assert(!validReviewProductKey('name:商品名','yahoo'));
+assert(validReviewProductKey('B08RXS3ZDL','amazon'));
+assert(validReviewProductKey('12345678','base'));
+assert(!sourceSchema.safeParse({channel:'base',productKey:'unlinked:商品名',name:'商品名',url:'https://admin.thebase.com/'}).success);
 assert(validReviewUrl('https://www.amazon.co.jp/gp/customer-reviews/R1','amazon'));
 for(const u of ['http://www.amazon.co.jp/x','https://amazon.co.jp.evil.test/x','https://a:b@amazon.co.jp/x','javascript:alert(1)','https://127.0.0.1/x'])assert(!validReviewUrl(u,'amazon'));
 const r={externalId:'id',url:'https://www.amazon.co.jp/x',rating:5,title:'良い',body:'おいしい',postedAt:'2026-09-01'};

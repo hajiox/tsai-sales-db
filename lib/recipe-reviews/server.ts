@@ -2,7 +2,7 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import { getEcPriceVerifiedIdentifiers } from "@/lib/ec-price-verified-registry";
-import { REVIEW_CHANNELS, type ReviewSource, type ReviewRow } from "./model";
+import { REVIEW_CHANNELS, validReviewProductKey, type ReviewSource, type ReviewRow } from "./model";
 export const db = getWebSalesAutomationServiceClient;
 export const REVIEW_TASKS = ["recipe_reviews_collect", "recipe_reviews_analyze"];
 export async function loadRecipe(id:string) {
@@ -31,7 +31,7 @@ export async function loadSources(recipe:Awaited<ReturnType<typeof loadRecipe>>)
   for(const v of verified[channel]) if(["asin","product_management_number","product_code","product_id"].includes(v.kind))candidates.push({key:v.value,name:recipe.name});
   for(const candidate of candidates){if(result.some(r=>r.channel===channel&&r.productKey===candidate.key))continue;result.push({channel,productKey:candidate.key,name:candidate.name,url:channel==="amazon"?`https://www.amazon.co.jp/product-reviews/${encodeURIComponent(candidate.key)}`:channel==="rakuten"?"https://review.rakuten.co.jp/":channel==="yahoo"?"https://shopping.yahoo.co.jp/":"https://admin.thebase.com/"});}
  }
- } return result.filter(s=>!s.productKey.startsWith("name:"));
+ } return result.filter(s=>validReviewProductKey(s.productKey,s.channel));
 }
 export async function allReviews(id:string) { const rows:ReviewRow[]=[]; for(let offset=0;offset<50000;offset+=1000){const q=await db().from("recipe_reviews").select("id,channel,product_key,external_id,url,rating,title,body,posted_at,collected_at").eq("recipe_id",id).order("posted_at",{ascending:false,nullsFirst:false}).order("id").range(offset,offset+999);if(q.error)throw q.error;rows.push(...q.data);if(q.data.length<1000)return rows;}throw new Error("レビュー件数の上限に達しました。取得範囲を見直してください"); }
 export function analysisPacket(rows:ReviewRow[]) { const selected=Object.keys(REVIEW_CHANNELS).flatMap(channel=>rows.filter(r=>r.channel===channel).slice(0,50).map(r=>({...r,title:r.title.slice(0,300),body:r.body.slice(0,800)})));

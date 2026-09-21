@@ -2,7 +2,13 @@ import { z } from "zod";
 export const REVIEW_CHANNELS = { amazon: "Amazon", rakuten: "楽天", yahoo: "Yahoo", base: "BASE" } as const;
 export const channelSchema = z.enum(["amazon", "rakuten", "yahoo", "base"]);
 export type ReviewChannel = z.infer<typeof channelSchema>;
-export const sourceSchema = z.object({channel: channelSchema, productKey: z.string().trim().min(1).max(200), name: z.string().max(500), url: z.string().url().max(2000)});
+export function validReviewProductKey(key: string, channel: ReviewChannel) {
+  if (!key || /^(name|unlinked):/i.test(key)) return false;
+  if (channel === "amazon") return /^[A-Z0-9]{10}$/i.test(key);
+  if (channel === "base") return /^\d+$/.test(key);
+  return !/[\s:/]/.test(key);
+}
+export const sourceSchema = z.object({channel: channelSchema, productKey: z.string().trim().min(1).max(200), name: z.string().max(500), url: z.string().url().max(2000)}).refine(s=>validReviewProductKey(s.productKey,s.channel), "集計用の仮キーではなく実際の商品番号を指定してください");
 export type ReviewSource = z.infer<typeof sourceSchema>;
 export function validReviewUrl(value: string, channel: ReviewChannel) {
   try { const u = new URL(value); const domains = {amazon:["amazon.co.jp"],rakuten:["rakuten.co.jp"],yahoo:["shopping.yahoo.co.jp"],base:["thebase.in","thebase.com","base.shop","buyshop.jp","base.ec"]}[channel];
