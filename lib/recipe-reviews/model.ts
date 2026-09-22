@@ -12,7 +12,8 @@ export const sourceSchema = z.object({channel: channelSchema, productKey: z.stri
 export type ReviewSource = z.infer<typeof sourceSchema>;
 export function validReviewUrl(value: string, channel: ReviewChannel) {
   try { const u = new URL(value); const domains = {amazon:["amazon.co.jp"],rakuten:["rakuten.co.jp"],yahoo:["shopping.yahoo.co.jp"],base:["thebase.in","thebase.com","base.shop","buyshop.jp","base.ec"]}[channel];
-    return u.protocol === "https:" && !u.username && !u.password && !u.port && domains.some(d => u.hostname === d || u.hostname.endsWith("."+d));
+    const ownedBaseShop = channel === "base" && ["aizubrandhall-ec.com", "www.aizubrandhall-ec.com"].includes(u.hostname) && /^\/items\/\d+\/?$/.test(u.pathname);
+    return u.protocol === "https:" && !u.username && !u.password && !u.port && (ownedBaseShop || domains.some(d => u.hostname === d || u.hostname.endsWith("."+d)));
   } catch { return false; }
 }
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(s => { const d = new Date(s); return !isNaN(d.getTime()) && d.toISOString().slice(0,10) === s; });
