@@ -16,8 +16,19 @@ export function validReviewUrl(value: string, channel: ReviewChannel) {
   } catch { return false; }
 }
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(s => { const d = new Date(s); return !isNaN(d.getTime()) && d.toISOString().slice(0,10) === s; });
+export function normalizeReviewExternalId(channel: ReviewChannel, externalId: string, reviewUrl: string) {
+  if (channel !== "rakuten" || !validReviewUrl(reviewUrl, channel)) return externalId;
+  const url = new URL(reviewUrl);
+  if (url.hostname !== "review.rakuten.co.jp") return externalId;
+  // Only normalize a supplied ID whose identity is proved by this exact permalink.
+  const match = url.pathname.match(/^\/item\/1\/\d+_\d+\/([a-z0-9-]+_\d+)_(\d+)\/?$/i);
+  if (!match) return externalId;
+  const canonical = `${match[1]}/${match[2]}`;
+  const raw = `${match[1]}_${match[2]}`;
+  return [reviewUrl, canonical, raw].includes(externalId) ? canonical : externalId;
+}
 export const collectedReviewSchema = z.object({ externalId:z.string().min(1).max(300), url:z.string().url().max(2000), rating:z.number().int().min(1).max(5).nullable(), title:z.string().max(1000), body:z.string().max(12000), postedAt:date.nullable() }).refine(r => !!(r.title.trim() || r.body.trim()), "空のレビューは保存できません");
-export const collectionSchema = z.object({status:z.enum(["completed","partial","blocked"]), message:z.string().max(1500), sources:z.array(z.object({channel:channelSchema,productKey:z.string().max(200),status:z.enum(["complete","partial","blocked","no_reviews"]),message:z.string().max(1500),reviews:z.array(collectedReviewSchema).max(200)})).max(40)});
+export const collectionSchema = z.object({status:z.enum(["completed","partial","blocked"]), message:z.string().max(1500), sources:z.array(z.object({channel:channelSchema,productKey:z.string().max(200),status:z.enum(["complete","partial","blocked","no_reviews"]),message:z.string().max(1500),reviews:z.array(collectedReviewSchema).max(200)})).max(40)}).transform(value=>({...value,sources:value.sources.map(source=>({...source,reviews:source.reviews.map(review=>({...review,externalId:normalizeReviewExternalId(source.channel,review.externalId,review.url)}))}))}));
 export type ReviewRow = {id:string;channel:ReviewChannel;product_key:string;external_id:string;url:string;rating:number|null;title:string;body:string;posted_at:string|null;collected_at:string};
 const topicSchema = z.object({title:z.string().min(1).max(120),description:z.string().min(1).max(1200),reviewIds:z.array(z.string().uuid()).min(1).max(15)});
 export const analysisSchema = z.object({scopes:z.array(z.object({channel:z.enum(["all","amazon","rakuten","yahoo","base"]),summary:z.string().max(3000),strengths:z.array(topicSchema).max(8),issues:z.array(topicSchema).max(8),actions:z.array(topicSchema).max(8),limitations:z.string().max(1500)})).min(1).max(5)});
