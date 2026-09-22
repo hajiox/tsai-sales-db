@@ -4,6 +4,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import ReviewBatch from "@/components/recipe/ReviewBatch";
 import { supabase } from "@/lib/supabase";
 import { taxIncludedFromExcluded, wholesalePriceFromTaxExcludedRetail, yenFloor } from "@/lib/money";
 import { Button } from "@/components/ui/button";
@@ -757,6 +758,8 @@ export default function RecipePage() {
                     <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">{diningRecipeCount}</span>
                 </button>
             </div>
+
+            {activeTab === "ネット専用" && <ReviewBatch />}
 
             {/* Filters */}
             <div className="bg-white rounded-lg shadow p-4 mb-6 border-t-0 rounded-t-none">

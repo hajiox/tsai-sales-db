@@ -13,3 +13,8 @@ DB/APIは管理者・service_role限定、RLS有効、anon/authenticated直接�
 Migration: scripts/apply-recipe-reviews-migration.cjs（既定rollback、--applyで本番反映）。
 Tests: scripts/test-recipe-reviews.cjs、scripts/test-recipe-reviews-db.cjs（migration＋RPC重複/worker検証をrollback）、Bridge skill/monitor tests、型検査、lint、predeploy。
 Bridge追加はversion 1.9.98の新capability recipeReviewsProtocol=1で分離。既存ジョブ契約は不変。インストーラーはinteractiveに収集、analysisに分析を配布。全体集約は当該レシピの全EC分であり、全レシピ横断ではない。
+
+## 全商品一括巡回（2026-09-22）
+ネット専用一覧のReviewBatchから /api/recipe/reviews/batch を実行。全ネット専用レシピの既存収集元を固定し、service_role専用RPCでバッチと収集ジョブを同一transaction登録。実行中バッチの重複クリックは同じIDを返し、個別収集ジョブも再利用する。紐付けなし/不正URLは理由付きで対象一覧へ保存。画面を閉じても既存collect/analyze専用Skillの隔離Bridgeジョブが継続する。PC停止・ログイン・許可待ちは従来どおり待機/要確認。新しいworkerタスクやSkillは追加せず既存契約を利用。
+一覧は15秒ごとに収集と後続分析（reviews-analysis:収集ID）の状態を集計。部分取得・失敗・未設定は完了と分離。同商品に分析待ち/実行中がある間は収集claimを保留し、分析予約の競合消失を防ぐ。
+Migration: scripts/apply-review-batch.cjs（既定rollback、--applyで適用。適用後は再実行しない）。Tests: scripts/test-review-batch.cjs、migration rollbackで登録/重複/未設定/RLS確認。

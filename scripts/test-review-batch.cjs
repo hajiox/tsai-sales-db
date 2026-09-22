@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,f);
+const {batchEntryStatus}=require('../lib/recipe-reviews/batch-status.ts');
+const e={recipeId:'r',name:'商品',jobId:'c',reason:null};
+const c={id:'c',status:'completed'},a={id:'a',idempotency_key:'reviews-analysis:c',status:'running'};
+assert.equal(batchEntryStatus({...e,jobId:null,reason:'未設定'},[]).state,'unmapped');
+assert.equal(batchEntryStatus(e,[]).state,'attention');
+assert.equal(batchEntryStatus(e,[{...c,status:'queued'}]).state,'active');
+assert.equal(batchEntryStatus(e,[c,a]).state,'active');
+assert.equal(batchEntryStatus(e,[{...c,status:'needs_review'},{...a,status:'completed'}]).state,'attention');
+assert.equal(batchEntryStatus(e,[c,{...a,status:'failed'}]).state,'attention');
+assert.equal(batchEntryStatus(e,[c,{...a,status:'completed'}]).state,'completed');
+assert.equal(batchEntryStatus(e,[c]).message,'収集完了（分析対象なし）');
+console.log('PASS batch progress: collection, analysis, partial, failure, unmapped');
