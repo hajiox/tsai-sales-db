@@ -31,6 +31,7 @@ $requiredSourceFiles = @(
   "bridge.mjs",
   "review-collection.schema.json",
   "review-analysis.schema.json",
+  "review-browser-recovery.mjs",
   "chrome-devtools-daemon-relay.mjs",
   "chrome-devtools-connection.mjs",
   "chrome-devtools-story-drag.mjs",
@@ -504,6 +505,7 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "sns-browser-confirmation.ps1") -De
 Copy-Item -LiteralPath (Join-Path $sourceDir "monitor-state-file.cjs") -Destination (Join-Path $installDir "monitor-state-file.cjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "review-collection.schema.json") -Destination (Join-Path $installDir "review-collection.schema.json") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "review-analysis.schema.json") -Destination (Join-Path $installDir "review-analysis.schema.json") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "review-browser-recovery.mjs") -Destination (Join-Path $installDir "review-browser-recovery.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "skill-contract.json") -Destination (Join-Path $installDir "skill-contract.json") -Force
 Copy-WindowsPowerShellScript "bridge-monitor.ps1" (Join-Path $installDir "bridge-monitor.ps1")
 Copy-WindowsPowerShellScript "launch-bridge-monitor.ps1" (Join-Path $installDir "launch-bridge-monitor.ps1")
