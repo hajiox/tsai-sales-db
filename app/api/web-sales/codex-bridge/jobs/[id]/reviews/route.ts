@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isCodexBridgeAuthorized,normalizeWorkerId } from "@/lib/web-sales-codex/server";
 import { db, allReviews, analysisPacket, REVIEW_TASKS, loadRecipe } from "@/lib/recipe-reviews/server";
-import { collectionSchema, sourceSchema, validReviewUrl, validateAnalysis, type ReviewRow } from "@/lib/recipe-reviews/model";
+import { parseCollectionImport, sourceSchema, validReviewUrl, validateAnalysis, type ReviewRow } from "@/lib/recipe-reviews/model";
 export const runtime="nodejs"; export const dynamic="force-dynamic";
 type Context={params:Promise<{id:string}>};
 async function claimed(id:string,worker:string){const q=await db().from("web_sales_codex_jobs").select("*").eq("id",id).single();if(q.error)throw q.error;const j=q.data;
@@ -17,7 +17,7 @@ export async function POST(request:Request,{params}:Context){if(!isCodexBridgeAu
  }
  if(body.mode!=="import")throw new Error("不明な処理です");
  if(job.task_key==="recipe_reviews_collect"){
- const data=collectionSchema.parse(body.data);const targets=sourceSchema.array().parse(p.sources);const seen=new Set<string>();const rows:Record<string,unknown>[]=[];
+ const data=parseCollectionImport(body.data);const targets=sourceSchema.array().parse(p.sources);const seen=new Set<string>();const rows:Record<string,unknown>[]=[];
  for(const source of data.sources){const target=targets.find(t=>t.channel===source.channel&&t.productKey===source.productKey);const key=source.channel+":"+source.productKey;if(!target||seen.has(key))throw new Error("収集元が依頼と一致しません");seen.add(key);
  if((source.status==="blocked"||source.status==="no_reviews")&&source.reviews.length)throw new Error("収集状態とレビュー数が一致しません");
  if(source.status==="complete"&&!source.reviews.length)throw new Error("0件はno_reviewsで報告してください");

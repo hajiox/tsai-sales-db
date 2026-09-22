@@ -31,6 +31,31 @@ export function normalizeReviewExternalId(channel: ReviewChannel, externalId: st
 export const collectedReviewSchema = z.object({ externalId:z.string().min(1).max(300), url:z.string().url().max(2000), rating:z.number().int().min(1).max(5).nullable(), title:z.string().max(1000), body:z.string().max(12000), postedAt:date.nullable() }).refine(r => !!(r.title.trim() || r.body.trim()), "空のレビューは保存できません");
 export const collectionSchema = z.object({status:z.enum(["completed","partial","blocked"]), message:z.string().max(1500), sources:z.array(z.object({channel:channelSchema,productKey:z.string().max(200),status:z.enum(["complete","partial","blocked","no_reviews"]),message:z.string().max(1500),reviews:z.array(collectedReviewSchema).max(200)})).max(40)}).transform(value=>({...value,sources:value.sources.map(source=>({...source,reviews:source.reviews.map(review=>({...review,externalId:normalizeReviewExternalId(source.channel,review.externalId,review.url)}))}))}));
 export type ReviewRow = {id:string;channel:ReviewChannel;product_key:string;external_id:string;url:string;rating:number|null;title:string;body:string;posted_at:string|null;collected_at:string};
+// Missing identifiers are uncollected evidence, never synthetic review identities.
+export function parseCollectionImport(input: unknown) {
+  const envelope = z.object({sources:z.array(z.object({channel:channelSchema,reviews:z.array(z.unknown()).max(200)}).passthrough()).max(40)}).passthrough().parse(input);
+  let missing = 0;
+  const sources = envelope.sources.map(source => {
+    let omitted = 0;
+    const reviews = source.reviews.filter(value => {
+      if (!value || typeof value !== "object" || !("externalId" in value) || typeof value.externalId !== "string" || value.externalId.trim()) return true;
+      // Validate all other fields even for omitted records. Do not hide malformed output.
+      const review = collectedReviewSchema.parse({...value,externalId:"validation-only"});
+      if (!validReviewUrl(review.url,source.channel)) throw new Error("レビューURLが不正です");
+      omitted++; return false;
+    });
+    missing += omitted;
+    if (!omitted) return source;
+    if (!["complete","partial"].includes(String(source.status))) throw new Error("収集状態とレビュー数が一致しません");
+    if (typeof source.message !== "string" || source.message.length > 1500) throw new Error("収集元メッセージが不正です");
+    return {...source,reviews,status:"partial",message:`識別ID未取得${omitted}件は未収録。${source.message}`.slice(0,1500)};
+  });
+  // Validate the original envelope too, substituting only the missing identifier for validation.
+  collectionSchema.parse({...envelope,sources:envelope.sources.map(s=>({...s,reviews:s.reviews.map(r=>r && typeof r === "object" && "externalId" in r && typeof r.externalId === "string" && !r.externalId.trim()?{...r,externalId:"validation-only"}:r)}))});
+  const result = collectionSchema.parse({...envelope,sources});
+  if (missing) { result.status="partial"; result.message=`識別ID未取得${missing}件は未収録。${result.message}`.slice(0,1500); }
+  return result;
+}
 const topicSchema = z.object({title:z.string().min(1).max(120),description:z.string().min(1).max(1200),reviewIds:z.array(z.string().uuid()).min(1).max(15)});
 export const analysisSchema = z.object({scopes:z.array(z.object({channel:z.enum(["all","amazon","rakuten","yahoo","base"]),summary:z.string().max(3000),strengths:z.array(topicSchema).max(8),issues:z.array(topicSchema).max(8),actions:z.array(topicSchema).max(8),limitations:z.string().max(1500)})).min(1).max(5)});
 export function validateAnalysis(value:unknown, reviews: ReviewRow[]) {

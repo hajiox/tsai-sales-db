@@ -34,3 +34,11 @@ assert.equal(normalizeReviewExternalId('amazon',permalink,permalink),permalink);
 assert.equal(normalizeReviewExternalId('rakuten','other-review',permalink),'other-review');
 for(const url of [permalink.replace('review.rakuten.co.jp','review.rakuten.co.jp.evil.test'),permalink.replace('https:','http:'),'https://review.rakuten.co.jp/item/1/408521_10000068/'])assert.equal(normalizeReviewExternalId('rakuten',url,url),url);
 console.log('PASS Rakuten ID: CSV/permalink equivalence, input boundary, unrelated IDs and domains preserved');
+const {parseCollectionImport}=require('../lib/recipe-reviews/model.ts');
+const packet={status:'completed',message:'ok',sources:[{channel:'amazon',productKey:'B1',status:'complete',message:'matched',reviews:[r,{...r,externalId:''}]}]};
+const original=JSON.stringify(packet),partial=parseCollectionImport(packet);
+assert.equal(partial.status,'partial');assert.equal(partial.sources[0].status,'partial');assert.equal(partial.sources[0].reviews.length,1);assert.equal(JSON.stringify(packet),original);assert.match(partial.message,/1件/);
+const onlyMissing=structuredClone(packet);onlyMissing.sources[0].reviews=[{...r,externalId:'  '}];assert.equal(parseCollectionImport(onlyMissing).sources[0].reviews.length,0);
+for(const change of [{rating:6},{url:'https://evil.test/x'},{body:'',title:''},{externalId:null}]){const invalid=structuredClone(onlyMissing);Object.assign(invalid.sources[0].reviews[0],change);assert.throws(()=>parseCollectionImport(invalid));}
+const oversized=structuredClone(onlyMissing);oversized.sources[0].reviews=Array(201).fill({...r,externalId:''});assert.throws(()=>parseCollectionImport(oversized));
+console.log('PASS missing identifier partial import and malformed record rejection');

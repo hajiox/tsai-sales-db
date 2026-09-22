@@ -17,3 +17,5 @@ Chrome連係 → Chrome DevTools MCP → 最後にPC操作。同じ未完了の�
 ## Bridge Input Contract
 接続障害時は、どのChrome操作が失敗したかを当該sourceのmessageに記録する。Bridgeは接続障害のsourceだけを新しい隔離セッションで1回DevToolsへ渡し、前段の取得分とIDで統合する。DevTools段階では渡されたsourcesだけを対象にする。ログイン・MFA・CAPTCHA・必須許可待ちは当該sourceをblockedにし、他ECは引き続き確認する。
 Run in a fresh, non-resumed `codex exec` session. Treat compact Bridge job input as complete. Never open, read, search, or reuse app Chats. Use only the locked recipe/product identifiers or saved review packet supplied for this job. Return the required JSON; deterministic TSA code validates identity, evidence, deduplication and persistence.
+
+識別IDを取得できないレビューを空externalIdで出力しない。その行はreviewsに含めず、sourceをpartialとして未取得件数・理由をmessageに残す。他ECの有効な取得分は保持する。
