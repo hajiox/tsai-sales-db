@@ -14,6 +14,12 @@ for(const u of ['http://www.amazon.co.jp/x','https://amazon.co.jp.evil.test/x','
 const r={externalId:'id',url:'https://www.amazon.co.jp/x',rating:5,title:'良い',body:'おいしい',postedAt:'2026-09-01'};
 assert(collectionSchema.safeParse({status:'completed',message:'ok',sources:[{channel:'amazon',productKey:'B1',status:'complete',message:'matched',reviews:[r]}]}).success);
 assert(!collectionSchema.safeParse({status:'completed',message:'ok',sources:[{channel:'amazon',productKey:'B1',status:'complete',message:'matched',reviews:[{...r,rating:6}]}]}).success);
+const dated={...r,postedAt:'2026-08-02T11:42:00+09:00'};
+const datedPacket={status:'completed',message:'ok',sources:[{channel:'amazon',productKey:'B1',status:'complete',message:'matched',reviews:[dated]}]};
+assert.equal(collectionSchema.parse(datedPacket).sources[0].reviews[0].postedAt,'2026-08-02');
+assert.equal(dated.postedAt,'2026-08-02T11:42:00+09:00');
+for(const postedAt of ['2026-08-02T11:42:00Z','2026-08-02T11:42:00+08:00','2026-02-30T11:42:00+09:00'])
+ assert(!collectionSchema.safeParse({...datedPacket,sources:[{...datedPacket.sources[0],reviews:[{...dated,postedAt}]}]}).success);
 const id='00000000-0000-4000-8000-000000000001';const reviews=[{id,channel:'amazon',rating:5},{id:'00000000-0000-4000-8000-000000000002',channel:'base',rating:null}];
 const scope=channel=>({channel,summary:'summary',strengths:[],issues:[],actions:[],limitations:'limited'});
 const result={scopes:[scope('all'),scope('amazon'),scope('base')]};assert(validateAnalysis(result,reviews));
@@ -35,6 +41,7 @@ assert.equal(normalizeReviewExternalId('rakuten','other-review',permalink),'othe
 for(const url of [permalink.replace('review.rakuten.co.jp','review.rakuten.co.jp.evil.test'),permalink.replace('https:','http:'),'https://review.rakuten.co.jp/item/1/408521_10000068/'])assert.equal(normalizeReviewExternalId('rakuten',url,url),url);
 console.log('PASS Rakuten ID: CSV/permalink equivalence, input boundary, unrelated IDs and domains preserved');
 const {parseCollectionImport}=require('../lib/recipe-reviews/model.ts');
+assert.equal(parseCollectionImport(datedPacket).sources[0].reviews[0].postedAt,'2026-08-02');
 const packet={status:'completed',message:'ok',sources:[{channel:'amazon',productKey:'B1',status:'complete',message:'matched',reviews:[r,{...r,externalId:''}]}]};
 const original=JSON.stringify(packet),partial=parseCollectionImport(packet);
 assert.equal(partial.status,'partial');assert.equal(partial.sources[0].status,'partial');assert.equal(partial.sources[0].reviews.length,1);assert.equal(JSON.stringify(packet),original);assert.match(partial.message,/1件/);

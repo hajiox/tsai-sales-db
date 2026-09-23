@@ -16,7 +16,12 @@ export function validReviewUrl(value: string, channel: ReviewChannel) {
     return u.protocol === "https:" && !u.username && !u.password && !u.port && (ownedBaseShop || domains.some(d => u.hostname === d || u.hostname.endsWith("."+d)));
   } catch { return false; }
 }
-const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(s => { const d = new Date(s); return !isNaN(d.getTime()) && d.toISOString().slice(0,10) === s; });
+const date = z.preprocess(value => {
+  // Some EC pages supply a Japan-local timestamp. Keep its displayed calendar date.
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+09:00$/.test(value)
+      && Number.isFinite(Date.parse(value))) return value.slice(0, 10);
+  return value;
+}, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(s => { const d = new Date(s); return !isNaN(d.getTime()) && d.toISOString().slice(0,10) === s; }));
 export function normalizeReviewExternalId(channel: ReviewChannel, externalId: string, reviewUrl: string) {
   if (channel !== "rakuten" || !validReviewUrl(reviewUrl, channel)) return externalId;
   const url = new URL(reviewUrl);
