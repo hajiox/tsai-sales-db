@@ -4,6 +4,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db, loadSources } from "@/lib/recipe-reviews/server";
 import { sourceSchema } from "@/lib/recipe-reviews/model";
 import { batchEntryStatus, type BatchEntry, type BatchJob } from "@/lib/recipe-reviews/batch-status";
+import { directOverrides } from "@/lib/recipe-reviews/direct-server";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export const maxDuration=300;
@@ -13,9 +14,10 @@ export async function GET(){
  try{
   const q=await db().from("recipe_review_batches").select("id,created_at,entries").order("created_at",{ascending:false}).limit(1);if(q.error)throw q.error;
   const batch=q.data?.[0];if(!batch)return NextResponse.json({batch:null});
-  const entries=batch.entries as BatchEntry[],ids=entries.flatMap(e=>e.jobId?[e.jobId]:[]);const jobs:BatchJob[]=[];
+  const original=batch.entries as BatchEntry[],overrides=await directOverrides(original.flatMap(e=>e.jobId?[e.jobId]:[]));
+  const entries=original.map(e=>({...e,jobId:e.jobId?(overrides.get(e.jobId)??e.jobId):null})),ids=entries.flatMap(e=>e.jobId?[e.jobId]:[]);const jobs:BatchJob[]=[];
   for(let i=0;i<ids.length;i+=50){const chunk=ids.slice(i,i+50);const results=await Promise.all([
-   db().from("web_sales_codex_jobs").select("id,status,task_key,idempotency_key,current_step,error_message").in("id",chunk),
+   db().from("web_sales_codex_jobs").select("id,status,task_key,idempotency_key,current_step,error_message,parameters").in("id",chunk),
    db().from("web_sales_codex_jobs").select("id,status,task_key,idempotency_key,current_step,error_message").in("idempotency_key",chunk.map(id=>`reviews-analysis:${id}`))
   ]);for(const r of results){if(r.error)throw r.error;jobs.push(...r.data);}}
   return NextResponse.json({batch:{...batch,entries:entries.map(e=>batchEntryStatus(e,jobs))}});
