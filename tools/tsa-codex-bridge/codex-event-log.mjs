@@ -1,5 +1,18 @@
 const DIAGNOSTIC_PATTERN = /browser security check|permission request|auto[- ]?review|strict auto review|review rejected|declin(?:e|ed)|dismiss(?:ed)?|unavailable|timed? out|timeout|filechooser|mcp error|tool error/i;
 
+// Only retain a fixed failure category; never persist source text, prompts or tokens.
+export function codexFailureCategory(event) {
+  if (!event || !["error", "turn.failed"].includes(event.type)) return null;
+  const error = event.error;
+  const text = String(typeof error === "string" ? error : error?.message || event.message || "").slice(0, 8000);
+  if (/usage limit|rate.?limit|quota|429/i.test(text)) return "usage_limit";
+  if (/unauthoriz|authentication|sign.?in|401/i.test(text)) return "authentication";
+  if (/permission|approval|denied|forbidden|403/i.test(text)) return "permission";
+  if (/schema|invalid.*request|400/i.test(text)) return "invalid_request";
+  if (/network|connection|timed? ?out|stream.*disconnect|502|503|504/i.test(text)) return "connection";
+  return "unclassified_codex_error";
+}
+
 export function redactSensitiveEventText(text) {
   return String(text || "")
     .replace(/https:\/\/[^"\\\s]*amazonaws\.com\/[^?"\\\s]+\?[^"\\\s]*/gi, (url) => `${url.split("?")[0]}?[REDACTED]`)

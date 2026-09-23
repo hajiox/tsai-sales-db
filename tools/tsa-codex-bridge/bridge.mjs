@@ -16,7 +16,7 @@ import {
   waitForCodexExitWithWatchdog,
 } from "./codex-run-guard.mjs";
 import { isReusableEcProfitOriginalName } from "./ec-profit-artifact-policy.mjs";
-import { compactCodexEventLine, redactSensitiveEventText } from "./codex-event-log.mjs";
+import { compactCodexEventLine, redactSensitiveEventText, codexFailureCategory } from "./codex-event-log.mjs";
 import {
   archiveStagedReport,
   extractReportArtifactPaths,
@@ -40,7 +40,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.100";
+const VERSION = "1.9.101";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -4313,7 +4313,7 @@ async function executeRecipeReviewJob(job) {
     child.stdout.resume();let stderr="";child.stderr.setEncoding("utf8");child.stderr.on("data",chunk=>{stderr=(stderr+chunk).slice(-12000)});
     const timer=setInterval(()=>heartbeat().catch(()=>undefined),20000);
     const code=await waitForCodexExitWithWatchdog(child,{taskKey:job.task_key,terminate:terminateChildProcessTree}).finally(()=>clearInterval(timer));
-    if(code!==0||!existsSync(output))throw new Error(`レビュー処理が終了しました (exit ${code}): ${redactSensitiveEventText(stderr).slice(-1200)}`);
+    if(code!==0||!existsSync(output))throw new Error(`レビュー処理が終了しました (exit ${code}, ${child.bridgeFailureCategory || "no_structured_error"}, output=${existsSync(output)?"present":"missing"}): ${redactSensitiveEventText(stderr).slice(-1200)}`);
     return JSON.parse(readFileSync(output,"utf8"));
   }
   let result = await run();
@@ -6758,6 +6758,8 @@ function attachCodexUsageObserver(child, budget = null) {
   function observeCodexUsageLine(line) {
     let event;
     try { event = JSON.parse(String(line || "")); } catch { return; }
+    const failureCategory = codexFailureCategory(event);
+    if (failureCategory) child.bridgeFailureCategory = failureCategory;
     if (event?.type === "item.started") {
       const itemType = String(event?.item?.type || "");
       if (itemType === "mcp_tool_call" && /cua|computer/i.test(String(event?.item?.server || ""))) {
