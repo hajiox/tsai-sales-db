@@ -58,7 +58,7 @@ The scripts deliberately emit filenames, hashes, schema counts, date ranges, and
 
 ## Bridge Input Contract
 
-Use the compact Bridge job input as complete. Run a fresh, non-resumed `codex exec` only for missing downloads. Never open, read, search, or reuse app Chats, previous tasks, saved sessions, or development history. The TSA interactive Bridge owns the CLI process and runs this task serially with its other browser jobs. Use Astra (gpt-6-astra), medium reasoning. The local carrier application owns archive validation, SQLite import, locking and alerts; do not duplicate these actions inside the AI phase.
+Use the compact Bridge job input as complete. Run a fresh, non-resumed `codex exec` only for missing downloads. Never open, read, search, or reuse app Chats, previous tasks, saved sessions, or development history. The TSA interactive Bridge owns the CLI process and runs this task serially with its other browser jobs. Use GPT-6 Luna (gpt-6-luna), high reasoning. The local carrier application owns archive validation, SQLite import, locking and alerts; do not duplicate these actions inside the AI phase.
 
 The local page has one month selector and one 実行 button. It enqueues a local request; it does not launch another CLI worker or console. Wait for operator action after any login, MFA, CAPTCHA or permission issue; report the observed condition without inferring an unverified cause.
 
@@ -69,3 +69,7 @@ Proceed automatically with the authorized carrier/month acquisition. Codex's aut
 Only an actual supported human-input form is hosted by the Bridge. A received request is not evidence that a dialog is visible: describe a form as displayed only after its shown acknowledgment. Browser authentication challenges remain with the official browser/Codex handler. Wait for the same pending call; do not answer a human form yourself. Actual login, MFA, CAPTCHA, permission refusal, or unavailable required input stops the job. Distinguish technical display failure from human cancellation and timeout.
 
 First discover the current Chrome inventory with the supplied CUA API and reuse the official signed-in tabs. Do not infer browser_access from an ordinary selector/transport failure or an unobserved possibility; use execution_failed for unexplained technical failures. A browser_access result alone does not establish carrier-site rejection or a missing signed-in browser.
+
+## 作業完了後のタブ整理
+
+開始時の既存タブと、このジョブが作成した作業用タブのIDを区別して記録する。取得・登録・更新・投稿の最終確認後、結果JSONを返す前に、このジョブが作成して不要になったタブをブラウザの文書化されたAPIで閉じ、一覧で閉鎖を確認する。既存のユーザー所有タブ、別ジョブのタブ、未確定の送信画面は閉じない。ログイン・MFA・許可待ちはユーザーが操作するタブだけ保持する。閉鎖APIが利用不可・拒否された場合は結果messageへ理由を記録し、業務操作をやり直さない。Chrome全体やプロセスを終了しない。

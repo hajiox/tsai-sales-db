@@ -93,3 +93,7 @@ node "$env:USERPROFILE\.codex\skills\tsa-web-sales-csv\scripts\validate-csv.mjs"
 - Do not guess unresolved product mappings.
 - Do not open and resave source CSV files in Excel.
 - Do not include customer names, addresses, phone numbers, or email addresses in logs or final results.
+
+## 作業完了後のタブ整理
+
+開始時の既存タブと、このジョブが作成した作業用タブのIDを区別して記録する。取得・登録・更新・投稿の最終確認後、結果JSONを返す前に、このジョブが作成して不要になったタブをブラウザの文書化されたAPIで閉じ、一覧で閉鎖を確認する。既存のユーザー所有タブ、別ジョブのタブ、未確定の送信画面は閉じない。ログイン・MFA・許可待ちはユーザーが操作するタブだけ保持する。閉鎖APIが利用不可・拒否された場合は結果messageへ理由を記録し、業務操作をやり直さない。Chrome全体やプロセスを終了しない。

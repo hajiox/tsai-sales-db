@@ -209,7 +209,7 @@ export default function WebSalesCodexAnalysis({ month, focus }: { month: string;
                 事務所PC {workerOnline ? "オンライン" : "オフライン"}
               </span>
               {data.worker?.version && <span className="text-gray-500">Bridge {data.worker.version}</span>}
-              <span className="text-gray-500">モデル: GPT-5.6 Sol</span>
+              <span className="text-gray-500">モデル: GPT-6 Astra</span>
             </div>
           </div>
 

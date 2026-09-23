@@ -20,7 +20,7 @@ assert.ok(bridgeVersion);
 assert.equal(requiredVersion.match(/REQUIRED_TSA_CODEX_BRIDGE_VERSION = "([^"]+)"/)?.[1], bridgeVersion);
 assert.match(types, /\| "recipe_sns_generate"/);
 assert.match(bridge, /recipeSnsProtocolVersion: 3/);
-assert.match(bridge, /recipeSnsModel: "gpt-6-astra"/);
+assert.match(bridge, /recipeSnsModel: taskModelPolicy\("recipe_sns_generate"\)\.model/);
 assert.match(bridge, /const HEADLESS_SAFE_TASK_KEYS = new Set\(\[[\s\S]*?"recipe_sns_generate"/);
 assert.match(bridge, /codexTaskKeys: config\.allowedTaskKeys/);
 assert.match(bridge, /job\.task_key === "recipe_sns_generate"/);
@@ -30,8 +30,8 @@ const validator = bridge.slice(
   bridge.indexOf("function validateRecipeSnsGenerateJobParameters"),
   bridge.indexOf("async function executeRecipeSnsGenerateJob"),
 );
-assert.match(validator, /parameters\.model \|\| ""\) !== "gpt-6-astra"/);
-assert.match(validator, /parameters\.reasoningEffort \|\| ""\) !== "medium"/);
+assert.match(validator, /acceptsTaskModelParameters\("recipe_sns_generate", parameters\)/);
+assert.match(validator, /taskModelPolicy\("recipe_sns_generate"\)/);
 assert.match(validator, /09-02\|09-11/);
 assert.match(validator, /sourceSnapshot\.recipeId/);
 assert.match(validator, /sourceSnapshot\.variationKey/);

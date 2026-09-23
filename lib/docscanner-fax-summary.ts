@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
 export const DOCSCANNER_FAX_SUMMARY_TASK_KEY = "docscanner_fax_summary" as const;
-export const DOCSCANNER_FAX_SUMMARY_MODEL = "gpt-6-astra";
+export const DOCSCANNER_FAX_SUMMARY_MODEL = "gpt-6-sol";
 export const DOCSCANNER_FAX_SUMMARY_REASONING_EFFORT = "medium";
 export const DOCSCANNER_FAX_SUMMARY_RULES_VERSION = "2026-08-27.1";
 export const DOCSCANNER_FAX_SUMMARY_MAX_IMAGES = 6;

@@ -62,3 +62,7 @@ Use the signed-in Chrome session and official seller/admin pages only. Read the 
 Return `waiting_for_user` for login, MFA, CAPTCHA, account selection, an actual permission prompt, or changed UI requiring a person. A verified official download blocked only by local Chrome transport must first use the bounded same-origin recovery above. Return `needs_review` when an official monthly report is not published, the settlement result is empty while period-matched orders exist, or the report type, funding source, or arithmetic cannot be confirmed. Network archive writes are owned by the Bridge and are never a user-action condition. Do not change orders, listings, prices, promotions, advertising, billing settings, or account settings.
 
 After observing any authentication or permission screen once, stop immediately. Never refresh it, retry sign-in, or search alternate routes in a loop; return `waiting_for_user`.
+
+## 作業完了後のタブ整理
+
+開始時の既存タブと、このジョブが作成した作業用タブのIDを区別して記録する。取得・登録・更新・投稿の最終確認後、結果JSONを返す前に、このジョブが作成して不要になったタブをブラウザの文書化されたAPIで閉じ、一覧で閉鎖を確認する。既存のユーザー所有タブ、別ジョブのタブ、未確定の送信画面は閉じない。ログイン・MFA・許可待ちはユーザーが操作するタブだけ保持する。閉鎖APIが利用不可・拒否された場合は結果messageへ理由を記録し、業務操作をやり直さない。Chrome全体やプロセスを終了しない。

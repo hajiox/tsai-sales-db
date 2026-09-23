@@ -1,3 +1,4 @@
+import {applyTaskModelPolicy} from '../tools/tsa-codex-bridge/task-model-policy.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';
@@ -18,14 +19,14 @@ test('monitor strips all raw and unexpected source data',()=>{
  const p=carrierMonitorPayload({status:'needs_operator',progress:900,currentStep:'private',summary:'private',reason:'private',csv:'private'});
  assert.equal(p.status,'waiting_for_user');assert.equal(p.progress,100);assert.ok(!JSON.stringify(p).includes('private'));
 });
-test('integration is same worker, fixed Astra medium, no cloud local IDs or separate process',()=>{
+test('integration is same worker, fixed Luna high, no cloud local IDs or separate process',()=>{
  const s=readFileSync(new URL('../tools/tsa-codex-bridge/bridge.mjs',import.meta.url),'utf8');
  assert.ok(s.indexOf('await adapter.runCarrierJob')<s.indexOf('const claimed = await api'));
  assert.match(s,/currentJobId: currentJobIsLocal \? null : currentJobId/);
  assert.match(s,/lastDesktopTerminalState\?\.taskKey === CARRIER_TASK_KEY \? null/);
  assert.match(s,/if \(currentJobIsLocal\) return \{ok:true\}/);
  assert.match(s,/spawnSkillCodex\(CARRIER_TASK_KEY, carrierPrompt, args/);
- assert.match(s,/schema: schemaPath, model: "gpt-6-astra", reasoningEffort: "medium"/);
+ assert.match(s,/schema: schemaPath, model: "gpt-6-luna", reasoningEffort: "high"/);
 });
 import { EventEmitter } from 'node:events';
 import { waitForCarrierChildClose } from '../tools/tsa-codex-bridge/carrier-local-job.mjs';
@@ -35,11 +36,11 @@ test('watchdog stop retains worker serialization until actual child close',async
  await Promise.resolve();assert.equal(waiting,1);assert.equal(nextJob,false);
  child.exitCode=1;child.emit('close',1);await held;assert.equal(nextJob,true);
 });
-test('shared CLI builder forces Astra medium even without per-job model',()=>{
+test('shared CLI builder defaults to Luna high before final task routing',()=>{
  const s=readFileSync(new URL('../tools/tsa-codex-bridge/bridge.mjs',import.meta.url),'utf8');
  const builder=s.slice(s.indexOf('function buildIsolatedCodexArgs('),s.indexOf('function emptyCodexUsage('));
- assert.match(builder,/args.push\("--model", "gpt-6-astra"\)/);
- assert.match(builder,/const reasoningEffort = "medium"/);
+ assert.match(builder,/args.push\("--model", options.model \|\| "gpt-6-luna"\)/);
+ assert.match(builder,/const reasoningEffort = options.reasoningEffort \|\| "high"/);
  assert.doesNotMatch(builder,/if \(options.model\)/);
 });
 import vm from 'node:vm';
@@ -48,7 +49,7 @@ test('CLI arguments preserve isolated focused execution while overriding stale m
  const builder=s.slice(s.indexOf('function buildIsolatedCodexArgs('),s.indexOf('function emptyCodexUsage('));
  const build=vm.runInNewContext(builder+';buildIsolatedCodexArgs',{BROWSER_ROUTE_POLICY:'fixture policy',appendChromeDevtoolsMcpArgs:args=>args.push('-c','debug_fixture=true'),config:{workspace:'C:/fixture',codexHome:'C:/fixture',reasoningEffort:'low'},RESULT_SCHEMA:'fixture.schema.json',uniquePaths:items=>items.filter(Boolean),appendUnifiedCuaMcpArgs:args=>args.push('-c','mcp_fixture=true')});
  for(const options of [{},{model:'gpt-5.6-sol',reasoningEffort:'ultra',focusedContext:true,ephemeral:true}]){
-  const args=build('result.json',[],options);assert.equal(args[args.indexOf('--model')+1],'gpt-6-astra');assert.ok(args.includes('model_reasoning_effort="medium"'));
+  const args=applyTaskModelPolicy('carrier_monthly_import',build('result.json',[],options));assert.equal(args[args.indexOf('--model')+1],'gpt-6-luna');assert.ok(args.includes('model_reasoning_effort="high"'));
   if(options.focusedContext){assert.ok(args.includes('--ignore-user-config'));assert.ok(args.includes('--ephemeral'));assert.ok(args.includes('mcp_fixture=true'));}
  }
 });

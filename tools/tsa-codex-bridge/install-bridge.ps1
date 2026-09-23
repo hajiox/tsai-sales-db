@@ -29,6 +29,7 @@ if ($CarrierAppDir -and (-not [System.IO.Path]::IsPathRooted($CarrierAppDir) -or
 }
 $requiredSourceFiles = @(
   "bridge.mjs",
+  "task-model-policy.mjs",
   "review-collection.schema.json",
   "review-analysis.schema.json",
   "review-browser-recovery.mjs",
@@ -489,6 +490,7 @@ try {
   }
 
 Copy-Item -LiteralPath (Join-Path $sourceDir "carrier-local-job.mjs") -Destination (Join-Path $installDir "carrier-local-job.mjs") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "task-model-policy.mjs") -Destination (Join-Path $installDir "task-model-policy.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "bridge.mjs") -Destination (Join-Path $installDir "bridge.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "chrome-devtools-daemon-relay.mjs") -Destination (Join-Path $installDir "chrome-devtools-daemon-relay.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "chrome-devtools-connection.mjs") -Destination (Join-Path $installDir "chrome-devtools-connection.mjs") -Force

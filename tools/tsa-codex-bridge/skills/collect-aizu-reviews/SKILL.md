@@ -19,3 +19,7 @@ Chrome連係 → Chrome DevTools MCP → 最後にPC操作。同じ未完了の�
 Run in a fresh, non-resumed `codex exec` session. Treat compact Bridge job input as complete. Never open, read, search, or reuse app Chats. Use only the locked recipe/product identifiers or saved review packet supplied for this job. Return the required JSON; deterministic TSA code validates identity, evidence, deduplication and persistence.
 
 識別IDを取得できないレビューを空externalIdで出力しない。その行はreviewsに含めず、sourceをpartialとして未取得件数・理由をmessageに残す。他ECの有効な取得分は保持する。
+
+## 作業完了後のタブ整理
+
+開始時の既存タブと、このジョブが作成した作業用タブのIDを区別して記録する。取得・登録・更新・投稿の最終確認後、結果JSONを返す前に、このジョブが作成して不要になったタブをブラウザの文書化されたAPIで閉じ、一覧で閉鎖を確認する。既存のユーザー所有タブ、別ジョブのタブ、未確定の送信画面は閉じない。ログイン・MFA・許可待ちはユーザーが操作するタブだけ保持する。閉鎖APIが利用不可・拒否された場合は結果messageへ理由を記録し、業務操作をやり直さない。Chrome全体やプロセスを終了しない。

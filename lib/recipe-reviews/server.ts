@@ -44,6 +44,6 @@ export async function enqueueReview(recipeId:string,mode:"collect"|"analyze",req
  if(mode==="collect"&&!sources.length)throw new Error("ECの商品紐付けがありません。収集元の商品番号とURLを登録してください");
  if(mode==="analyze"&&!(await allReviews(recipeId)).length)throw new Error("先にレビューを収集してください");
  if(sources.length>40)throw new Error("収集元が40件を超えています");
- const {data,error}=await db().from("web_sales_codex_jobs").insert({task_key:task,status:"queued",requested_by:requestedBy,trigger_type:"manual",max_attempts:1,idempotency_key:"reviews:"+randomUUID(),parameters:{recipeId,recipeName:recipe.name,janCode:recipe.jan_code,sources,protocol:"1",model:"gpt-6-astra",reasoningEffort:"medium"}}).select("id,status").single();
+ const {data,error}=await db().from("web_sales_codex_jobs").insert({task_key:task,status:"queued",requested_by:requestedBy,trigger_type:"manual",max_attempts:1,idempotency_key:"reviews:"+randomUUID(),parameters:{recipeId,recipeName:recipe.name,janCode:recipe.jan_code,sources,protocol:"1",model:task==="recipe_reviews_collect"?"gpt-6-luna":"gpt-6-astra",reasoningEffort:task==="recipe_reviews_collect"?"high":"medium"}}).select("id,status").single();
  if(error){if(error.code==="23505")return {reused:true};throw error;}return {job:data};
 }

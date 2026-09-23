@@ -1,3 +1,4 @@
+import { taskModelPolicy, acceptsTaskModelParameters, applyTaskModelPolicy, TASK_MODEL_POLICIES, TASK_MODEL_POLICY_VERSION, BROWSER_COMPLETION_POLICY } from "./task-model-policy.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -40,7 +41,7 @@ import {
 
 const { writeMonitorStateJson } = monitorStateFile;
 
-const VERSION = "1.9.100";
+const VERSION = "1.9.101";
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -299,7 +300,7 @@ async function runCarrierCodex({prompt, workDir, resultPath, schemaPath, addDirs
     updateDesktopMonitor(currentJobId, carrierMonitorPayload({status:"running", browserConfirmation:status, browserConfirmationDetails:details}));
   };
   const args = buildIsolatedCodexArgs(resultPath, [workDir, ...addDirs], {
-    schema: schemaPath, model: "gpt-6-astra", reasoningEffort: "medium",
+    schema: schemaPath, model: "gpt-6-luna", reasoningEffort: "high",
     snsConfirmation: {statePath:confirmationStatePath, target:"ヤマト・佐川 出荷CSV取得"},
     cwd: workDir, focusedContext: true, ephemeral: true,
   });
@@ -443,8 +444,8 @@ async function executeJob(job) {
   });
 
   const args = buildIsolatedCodexArgs(outputFile, [downloadsDir, workDir], {
-    model: "gpt-6-astra",
-    reasoningEffort: "medium",
+    model: "gpt-6-luna",
+    reasoningEffort: "high",
     focusedContext: true,
     ephemeral: true,
   });
@@ -701,8 +702,7 @@ function validateDocScannerFaxSummaryJobParameters(input) {
     || !Number.isInteger(sourceImageCount) || sourceImageCount < imageFiles.length || sourceImageCount > 72) {
     throw new Error("FAX要約の受信IDまたは画像件数が正しくありません");
   }
-  if (String(parameters.model || "") !== "gpt-6-astra"
-    || String(parameters.reasoningEffort || "") !== "medium"
+  if (!acceptsTaskModelParameters("docscanner_fax_summary", parameters)
     || String(parameters.rulesVersion || "") !== "2026-08-27.1"
     || String(parameters.executionPolicy || "") !== "local_images_then_fresh_ephemeral_codex_skill"
     || String(parameters.mutationScope || "") !== "tsg_fax_summary_only") {
@@ -723,7 +723,7 @@ function validateDocScannerFaxSummaryJobParameters(input) {
     pages.add(page);
     return { localPath, sha256, size, page };
   }).sort((left, right) => left.page - right.page);
-  return { ...parameters, sourceKey, sourceImageCount, imageFiles: normalizedImages };
+  return { ...parameters, ...taskModelPolicy("docscanner_fax_summary"), sourceKey, sourceImageCount, imageFiles: normalizedImages };
 }
 
 async function notifyDocScannerFaxSummaryFailure(job, sourceKey) {
@@ -3032,8 +3032,8 @@ async function assertEcPriceRecipeSnapshot(job, parameters, phase) {
 async function runEcPriceCodexPhase({ job, workDir, workspaceDir = null, outputFile, jsonlLog, schema, prompt, progressStart, progressMax, eventType, activityLabel, stepPrefix = "", abortOnTabPolicyViolation, maxTemporaryTabs = 0 }) {
   const args = buildIsolatedCodexArgs(outputFile, [workDir, workspaceDir], {
     schema,
-    model: "gpt-6-astra",
-    reasoningEffort: "medium",
+    model: "gpt-6-luna",
+    reasoningEffort: "high",
     cwd: workspaceDir || workDir,
     focusedContext: true,
     ephemeral: true,
@@ -3714,10 +3714,9 @@ function validateEcProductNameGenerateJobParameters(input) {
   if (!recipeId || !sourceSnapshot || String(sourceSnapshot.recipeId || "") !== recipeId || !siteRules || !unifiedRule) {
     throw new Error("AI商品名生成の対象商品情報が正しくありません");
   }
-  if (String(parameters.model || "") !== "gpt-6-astra"
-    || String(parameters.reasoningEffort || "") !== "medium"
+  if (!acceptsTaskModelParameters("ec_product_name_generate", parameters)
     || String(parameters.rulesVersion || "") !== "2026-08-27.1") {
-    throw new Error("AI商品名生成はGPT-5.6 Sol / medium専用です");
+    throw new Error("AI商品名生成はGPT-6 Sol / medium専用です");
   }
   const unifiedTargets = Array.isArray(unifiedRule.targets)
     ? unifiedRule.targets.map((entry) => String(entry?.id || "").trim()).sort() : [];
@@ -3745,8 +3744,7 @@ function validateEcProductNameGenerateJobParameters(input) {
     sourceSnapshot,
     siteRules,
     unifiedRule,
-    model: "gpt-6-astra",
-    reasoningEffort: "medium",
+    ...taskModelPolicy("ec_product_name_generate"),
   };
 }
 
@@ -3906,10 +3904,9 @@ function validateEcCatchcopyGenerateJobParameters(input) {
   if (!recipeId || !sourceSnapshot || String(sourceSnapshot.recipeId || "") !== recipeId || !siteRules || !unifiedRule) {
     throw new Error("AIキャッチコピー生成の対象商品情報が正しくありません");
   }
-  if (String(parameters.model || "") !== "gpt-6-astra"
-    || String(parameters.reasoningEffort || "") !== "medium"
+  if (!acceptsTaskModelParameters("ec_catchcopy_generate", parameters)
     || String(parameters.rulesVersion || "") !== "2026-08-27.1") {
-    throw new Error("AIキャッチコピー生成はGPT-5.6 Sol / medium専用です");
+    throw new Error("AIキャッチコピー生成はGPT-6 Sol / medium専用です");
   }
   const unifiedTargets = Array.isArray(unifiedRule.targets)
     ? unifiedRule.targets.map((entry) => String(entry?.id || "").trim()).sort() : [];
@@ -3937,8 +3934,7 @@ function validateEcCatchcopyGenerateJobParameters(input) {
     sourceSnapshot,
     siteRules,
     unifiedRule,
-    model: "gpt-6-astra",
-    reasoningEffort: "medium",
+    ...taskModelPolicy("ec_catchcopy_generate"),
   };
 }
 
@@ -4102,12 +4098,11 @@ function validateEcProductContentGenerateJobParameters(input) {
     || Number(parameters.maxCharacters) !== EC_PRODUCT_CONTENT_MAX_CHARACTERS) {
     throw new Error("商品文章調整の文字数情報が正しくありません");
   }
-  if (String(parameters.model || "") !== "gpt-6-astra"
-    || String(parameters.reasoningEffort || "") !== "medium"
+  if (!acceptsTaskModelParameters("ec_product_content_generate", parameters)
     || String(parameters.rulesVersion || "") !== "2026-08-27.1") {
-    throw new Error("商品文章調整はGPT-5.6 Sol / medium専用です");
+    throw new Error("商品文章調整はGPT-6 Sol / medium専用です");
   }
-  return { ...parameters, recipeId, sourceSnapshot: { ...sourceSnapshot, productPoints, webDescription, sourceCharacters }, model: "gpt-6-astra", reasoningEffort: "medium" };
+  return { ...parameters, recipeId, sourceSnapshot: { ...sourceSnapshot, productPoints, webDescription, sourceCharacters }, ...taskModelPolicy("ec_product_content_generate") };
 }
 
 async function executeEcProductContentGenerateJob(job) {
@@ -4276,18 +4271,16 @@ function validateIngredientLabelGenerateJobParameters(input) {
     || !Array.isArray(allergenPolicy?.recommended)) {
     throw new Error("原材料表示生成の保存済みレシピ情報が正しくありません");
   }
-  if (String(parameters.model || "") !== "gpt-6-astra"
-    || String(parameters.reasoningEffort || "") !== "medium"
+  if (!acceptsTaskModelParameters("ingredient_label_generate", parameters)
     || String(parameters.rulesVersion || "") !== "2026-08-27.2"
     || String(sourceSnapshot.rulesVersion || "") !== "2026-08-27.2") {
-    throw new Error("原材料表示生成はGPT-5.6 Sol / ultra / 2026-08-27.2専用です");
+    throw new Error("原材料表示生成はGPT-6 Sol / medium / 2026-08-27.2専用です");
   }
   return {
     ...parameters,
     recipeId,
     sourceSnapshot,
-    model: "gpt-6-astra",
-    reasoningEffort: "medium",
+    ...taskModelPolicy("ingredient_label_generate"),
     rulesVersion: "2026-08-27.2",
   };
 }
@@ -4531,10 +4524,9 @@ function validateRecipeSnsGenerateJobParameters(input) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(generationId)) {
     throw new Error("SNS投稿生成履歴IDが正しくありません");
   }
-  if (String(parameters.model || "") !== "gpt-6-astra"
-    || String(parameters.reasoningEffort || "") !== "medium"
+  if (!acceptsTaskModelParameters("recipe_sns_generate", parameters)
     || !/^2026-(?:09-02|09-11)\..+$/.test(String(parameters.rulesVersion || ""))) {
-    throw new Error("SNS素材生成はGPT-6 Astra / medium / 対応ルール専用です");
+    throw new Error("SNS素材生成はGPT-6 Sol / medium / 対応ルール専用です");
   }
   const productLpUrl = String(sourceSnapshot.productLpUrl || "").trim();
   if (productLpUrl) {
@@ -4574,8 +4566,7 @@ function validateRecipeSnsGenerateJobParameters(input) {
     platformRules,
     targetPlatform,
     baseGenerationId: targetPlatform ? baseGenerationId : null,
-    model: "gpt-6-astra",
-    reasoningEffort: "medium",
+    ...taskModelPolicy("recipe_sns_generate"),
   };
 }
 
@@ -5075,8 +5066,7 @@ function validateRecipeSnsPublishJobParameters(input) {
   if (snapshotTargets.join("|") !== targets.join("|")) {
     throw new Error("SNS投稿先と固定スナップショットが一致しません");
   }
-  if (String(parameters.model || "") !== "gpt-6-astra"
-    || String(parameters.reasoningEffort || "") !== "medium"
+  if (!acceptsTaskModelParameters("recipe_sns_publish", parameters)
     || !["2026-08-31.5", "2026-09-07.1"].includes(String(parameters.rulesVersion || ""))
     || snapshot.rulesVersion !== parameters.rulesVersion) {
     throw new Error("SNS投稿のモデルまたはルールバージョンが正しくありません");
@@ -5148,8 +5138,7 @@ function validateRecipeSnsPublishJobParameters(input) {
     targets,
     snapshot,
     platforms,
-    model: "gpt-6-astra",
-    reasoningEffort: "medium",
+    ...taskModelPolicy("recipe_sns_publish"),
   };
 }
 
@@ -5859,8 +5848,8 @@ async function executeAdCostJob(job) {
   });
 
   const args = buildIsolatedCodexArgs(outputFile, [downloadsDir, workDir], {
-    model: "gpt-6-astra",
-    reasoningEffort: "medium",
+    model: "gpt-6-luna",
+    reasoningEffort: "high",
     focusedContext: true,
     ephemeral: true,
   });
@@ -6032,8 +6021,8 @@ async function executeEcProfitJob(job) {
   });
 
   const args = buildIsolatedCodexArgs(outputFile, [downloadsDir, workDir], {
-    model: "gpt-6-astra",
-    reasoningEffort: "medium",
+    model: "gpt-6-luna",
+    reasoningEffort: "high",
     focusedContext: true,
     ephemeral: true,
   });
@@ -6545,6 +6534,7 @@ function prepareSkillControlledPrompt(taskKey, prompt) {
       ? "- Automatic carrier execution: the operator already authorized this fixed period. Execute ordinary permitted browser work without additional conversational confirmation. Return needs_operator only for an observed login/MFA/CAPTCHA/account ambiguity/permission block, never a hypothetical one. Wait for an actually pending browser confirmation call; never bypass a denial or retry authentication in a loop."
       : "- Authentication stop rule: after observing login, MFA, CAPTCHA, account selection, or permission UI once, do not refresh, retry authentication, or explore alternate routes in a loop. Return waiting_for_user immediately.",
     "",
+    taskModelPolicy(taskKey).browser ? BROWSER_COMPLETION_POLICY : "",
     promptText,
   ].join("\n");
 }
@@ -6671,7 +6661,7 @@ function appendChromeDevtoolsMcpArgs(args, codexHome, options = {}) {
 
 function buildIsolatedCodexArgs(outputFile, writableDirectories, options = {}) {
   const schema = options.schema || RESULT_SCHEMA;
-  const reasoningEffort = "medium";
+  const reasoningEffort = options.reasoningEffort || "high";
   const workingDirectory = options.cwd || config.workspace;
   const args = [
     "exec", "--json", "--color", "never",
@@ -6702,7 +6692,7 @@ function buildIsolatedCodexArgs(outputFile, writableDirectories, options = {}) {
   }
   if (options.ephemeral) args.push("--ephemeral");
   if (options.sandbox) args.push("--sandbox", options.sandbox);
-  args.push("--model", "gpt-6-astra");
+  args.push("--model", options.model || "gpt-6-luna");
   for (const imagePath of uniquePaths(options.images || [])) {
     args.push("--image", imagePath);
   }
@@ -7437,8 +7427,11 @@ function workerPayload() {
       tokenSavingPreflight: true,
       archivedArtifactReuse: true,
       recipeReviewsProtocol: "1",
+      taskModelPolicyVersion: TASK_MODEL_POLICY_VERSION,
+      taskModelPolicies: TASK_MODEL_POLICIES,
+      completedTaskTabCleanup: true,
       monthlyAnalysis: supports("web_sales_analysis"),
-      analysisModel: "gpt-6-astra",
+      analysisModel: taskModelPolicy("web_sales_analysis").model,
       archiveRoot: true,
       platform: process.platform,
       hostname: process.env.COMPUTERNAME || "unknown",
@@ -7456,36 +7449,36 @@ function workerPayload() {
       ecPriceProtocolVersion: 3,
       ecProductRegister: supports("ec_product_register"),
       ecProductRegisterProtocolVersion: 1,
-      ecProductRegisterModel: "gpt-6-astra",
+      ecProductRegisterModel: taskModelPolicy("ec_product_register").model,
       ecProductNameUpdate: supports("ec_product_name_update"),
       ecProductNameProtocolVersion: 2,
       ecProductNameAi: supports("ec_product_name_generate"),
       ecProductNameAiProtocolVersion: 1,
-      ecProductNameAiModel: "gpt-6-astra",
+      ecProductNameAiModel: taskModelPolicy("ec_product_name_generate").model,
       ecCatchcopyUpdate: supports("ec_catchcopy_update"),
       ecCatchcopyProtocolVersion: 1,
       ecCatchcopyAi: supports("ec_catchcopy_generate"),
       ecCatchcopyAiProtocolVersion: 1,
-      ecCatchcopyAiModel: "gpt-6-astra",
+      ecCatchcopyAiModel: taskModelPolicy("ec_catchcopy_generate").model,
       ecProductContentUpdate: supports("ec_product_content_update"),
       ecProductContentProtocolVersion: 1,
       ecProductContentAi: supports("ec_product_content_generate"),
       ecProductContentAiProtocolVersion: 1,
-      ecProductContentAiModel: "gpt-6-astra",
+      ecProductContentAiModel: taskModelPolicy("ec_product_content_generate").model,
       ingredientLabelAi: supports("ingredient_label_generate"),
       ingredientLabelAiProtocolVersion: 1,
-      ingredientLabelAiModel: "gpt-6-astra",
+      ingredientLabelAiModel: taskModelPolicy("ingredient_label_generate").model,
       ingredientLabelAiReasoningEffort: "medium",
       docScannerFaxSummary: supports("docscanner_fax_summary"),
       docScannerFaxSummaryProtocolVersion: 1,
-      docScannerFaxSummaryModel: "gpt-6-astra",
+      docScannerFaxSummaryModel: taskModelPolicy("docscanner_fax_summary").model,
       docScannerFaxSummaryReasoningEffort: "medium",
       recipeSns: supports("recipe_sns_generate"),
       recipeSnsProtocolVersion: 3,
-      recipeSnsModel: "gpt-6-astra",
+      recipeSnsModel: taskModelPolicy("recipe_sns_generate").model,
       recipeSnsPublish: supports("recipe_sns_publish"),
       recipeSnsPublishProtocolVersion: 1,
-      recipeSnsPublishModel: "gpt-6-astra",
+      recipeSnsPublishModel: taskModelPolicy("recipe_sns_publish").model,
       codexTaskKeys: config.allowedTaskKeys,
     },
   };
@@ -8155,7 +8148,7 @@ async function spawnSkillCodex(taskKey, prompt, args, options) {
     },
   }) : () => {};
   let child;
-  try { child = await spawnCodexProcess(args, spawnOptions); }
+  try { child = await spawnCodexProcess(applyTaskModelPolicy(taskKey, args), spawnOptions); }
   catch (error) { stopConnectionSupervisor(); throw error; }
   child.once("close", stopConnectionSupervisor);
   attachCodexUsageObserver(child, bridgeBudget);

@@ -73,7 +73,7 @@ assert.match(bridge, /Authentication stop rule:[\s\S]*Return waiting_for_user im
 assert.equal((bridge.match(/spawnSkillCodex\(job\.task_key, prompt, args/g) || []).length, 12);
 assert.equal((bridge.match(/waitForCodexExitWithWatchdog\(codex/g) || []).length, 12);
 assert.doesNotMatch(bridge, /const exitCode = await new Promise\(\(resolveExit/);
-assert.match(bridge, /spawnCodexProcess\(args, spawnOptions\)/);
+assert.match(bridge, /spawnCodexProcess\(applyTaskModelPolicy\(taskKey, args\), spawnOptions\)/);
 assert.match(bridge, /async function spawnCodexProcess\(args, options\)/);
 assert.match(bridge, /attachCodexUsageObserver\(child, bridgeBudget\)/);
 assert.doesNotMatch(bridge, /spawnCodex\(/);
