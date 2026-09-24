@@ -3,7 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db, loadSources } from "@/lib/recipe-reviews/server";
 import { sourceSchema } from "@/lib/recipe-reviews/model";
-import { batchEntryStatus, type BatchEntry, type BatchJob } from "@/lib/recipe-reviews/batch-status";
+import { type BatchEntry, type BatchJob } from "@/lib/recipe-reviews/batch-status";
+import { batchDetails } from "@/lib/recipe-reviews/batch-details";
 import { directOverrides } from "@/lib/recipe-reviews/direct-server";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -20,7 +21,7 @@ export async function GET(){
    db().from("web_sales_codex_jobs").select("id,status,task_key,idempotency_key,current_step,error_message,parameters").in("id",chunk),
    db().from("web_sales_codex_jobs").select("id,status,task_key,idempotency_key,current_step,error_message").in("idempotency_key",chunk.map(id=>`reviews-analysis:${id}`))
   ]);for(const r of results){if(r.error)throw r.error;jobs.push(...r.data);}}
-  return NextResponse.json({batch:{...batch,entries:entries.map(e=>batchEntryStatus(e,jobs))}});
+  return NextResponse.json({batch:{...batch,entries:await batchDetails(entries,jobs)}});
  }catch(e){console.error("Review batch read failed",e instanceof Error?e.message:"database error");return NextResponse.json({error:"一括巡回の状況を取得できませんでした"},{status:500});}
 }
 export async function POST(){
@@ -39,3 +40,4 @@ export async function POST(){
   return NextResponse.json({id:queued.data});
  }catch(e){console.error("Review batch enqueue failed",e instanceof Error?e.message:"database error");return NextResponse.json({error:"一括巡回を登録できませんでした。状況を更新してから再実行してください"},{status:500});}
 }
+

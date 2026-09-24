@@ -3,7 +3,8 @@ import { z } from "zod";
 import { db } from "@/lib/recipe-reviews/server";
 import { directAuthorized } from "@/lib/recipe-reviews/direct-policy";
 import { directPacket, directOverrides, importDirect } from "@/lib/recipe-reviews/direct-server";
-import { batchEntryStatus, type BatchEntry, type BatchJob } from "@/lib/recipe-reviews/batch-status";
+import { type BatchEntry, type BatchJob } from "@/lib/recipe-reviews/batch-status";
+import { batchDetails } from "@/lib/recipe-reviews/batch-details";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export const maxDuration=60;
@@ -38,7 +39,8 @@ export async function GET(request:Request) {
         db().from("web_sales_codex_jobs").select("id,status,task_key,idempotency_key,current_step,error_message,parameters").in("idempotency_key",chunk.map(id=>`reviews-analysis:${id}`)),
       ])) {if(result.error) throw result.error; jobs.push(...result.data);}
     }
-    return reply({batchId,entries:entries.map(e=>({...batchEntryStatus({...e,jobId:e.jobId?(overrides.get(e.jobId)??e.jobId):null},jobs),jobId:e.jobId,effectiveJobId:e.jobId?(overrides.get(e.jobId)??e.jobId):null}))});
+    const details=await batchDetails(entries.map(e=>({...e,jobId:e.jobId?(overrides.get(e.jobId)??e.jobId):null})),jobs);
+    return reply({batchId,entries:details.map((e,i)=>({...e,jobId:entries[i].jobId,effectiveJobId:e.jobId}))});
   }catch(e){return failure(e);}
 }
 export async function POST(request:Request) {
@@ -51,3 +53,4 @@ export async function POST(request:Request) {
     return reply(await importDirect(JSON.parse(Buffer.concat(chunks).toString("utf8"))));
   }catch(e){return failure(e);}finally{reader.releaseLock();}
 }
+
