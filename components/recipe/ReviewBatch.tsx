@@ -6,6 +6,13 @@ type Batch={id:string;created_at:string;entries:BatchProgress[]};
 const channels:Record<string,string>={amazon:"Amazon",rakuten:"楽天",yahoo:"Yahoo",base:"BASE"};
 const sourceLabels:Record<string,string>={complete:"取得済み",no_reviews:"レビュー0件確認",partial:"一部取得・制限あり",blocked:"未取得・確認が必要"};
 export default function ReviewBatch(){
+ const [open,setOpen]=useState(false);
+ return <div className="mt-6 border-t border-slate-100 pt-3">
+  <button type="button" aria-expanded={open} aria-controls="review-batch-tools" onClick={()=>setOpen(v=>!v)} className="text-xs text-slate-500 hover:text-slate-800 hover:underline">{open?"レビュー収集・履歴を閉じる":"レビュー収集・履歴"}</button>
+  {open&&<div id="review-batch-tools"><ReviewBatchPanel /></div>}
+ </div>;
+}
+function ReviewBatchPanel(){
  const [batch,setBatch]=useState<Batch|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState("");
  const [filter,setFilter]=useState<BatchCategory|"all">("all");
  const [loaded,setLoaded]=useState(false);const submitting=useRef(false);
@@ -17,7 +24,7 @@ export default function ReviewBatch(){
  const counts=Object.keys(batchCategoryLabels).map(key=>({key:key as BatchCategory,count:batch?.entries.filter(e=>e.category===key).length||0}));
  const visible=batch?.entries.filter(e=>filter==="all"||e.category===filter)||[];
  async function start(){if(submitting.current)return;submitting.current=true;setBusy(true);setError("");try{const r=await fetch("/api/recipe/reviews/batch",{method:"POST"});const d=await r.json();if(!r.ok)throw new Error(d.error);await refresh();}catch(e){setError(e instanceof Error?e.message:"登録できませんでした");}finally{submitting.current=false;setBusy(false)}}
- return <section aria-label="全商品のレビュー巡回" className="my-5 rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50 to-white p-5 md:p-6">
+ return <section aria-label="全商品のレビュー巡回" className="mt-3 rounded-lg border border-slate-200 bg-white p-4">
   <div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="text-lg font-bold text-slate-900">全商品のレビューをまとめて収集</h2><p className="mt-1 text-sm leading-6 text-slate-600">ネット専用の全商品が対象です。紐付け済みのAmazon・楽天・Yahoo・BASEを巡回し、保存から傾向分析まで順次実行します。</p></div>
   <button disabled={busy||active>0||!loaded} onClick={()=>void start()} className="shrink-0 rounded-xl bg-blue-700 px-6 py-3 font-bold text-white shadow-sm hover:bg-blue-800 disabled:opacity-50">{busy?"全商品を登録中…":active?"全商品レビュー巡回中":"全商品のレビューを自動巡回"}</button></div>
   <p className="mt-3 text-xs leading-5 text-slate-500">登録後は画面を閉じても続行します。事務所PCとログイン済みChromeが必要です。ログイン・許可待ちは自動では解除されません。取得範囲は既存の巡回仕様（各商品・EC最大200件）に従います。</p>

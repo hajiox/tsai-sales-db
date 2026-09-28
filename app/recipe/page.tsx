@@ -759,8 +759,6 @@ export default function RecipePage() {
                 </button>
             </div>
 
-            {activeTab === "ネット専用" && <ReviewBatch />}
-
             {/* Filters */}
             <div className="bg-white rounded-lg shadow p-4 mb-6 border-t-0 rounded-t-none">
                 <div className="flex flex-wrap gap-4 items-center">
@@ -1445,6 +1443,8 @@ export default function RecipePage() {
                     })
                 )}
             </div>
+
+            {activeTab === "ネット専用" && <ReviewBatch />}
 
             {/* === WEB販売商品新規作成モーダル === */}
             {seriesModalOpen && seriesModalData && (
