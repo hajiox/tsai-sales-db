@@ -3,6 +3,9 @@
 const nextConfig = {
   reactStrictMode: true,
   serverExternalPackages: ['puppeteer', 'pdf-parse', 'pdfjs-dist', '@napi-rs/canvas'],
+  outputFileTracingIncludes: {
+    '/api/finance/annual-statements': ['./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs'],
+  },
   typescript: {
     ignoreBuildErrors: true,
   },
