@@ -83,9 +83,9 @@ function genericRecords(page: ClosingPageInput, section: string): ClosingRecord[
     return [{ page: page.pageNumber, rowNo: index + 1, section,
       accountName: cleanLabel.slice(0, 160) || '金額候補・列対応要確認',
       amount: simple ? candidates[0].amount : null, rawText,
-      metadata: { status: simple ? 'extracted' : 'needs_review',
+      metadata: { status: 'needs_review',
         candidates: candidates.map(({ amount, raw }) => ({ amount, raw })),
-        unit: 'JPY', extraction: simple ? 'single_labelled_amount' : 'unassigned_numeric_candidates' },
+        unit: null, extraction: simple ? 'single_labelled_amount' : 'unassigned_numeric_candidates' },
     }];
   });
 }

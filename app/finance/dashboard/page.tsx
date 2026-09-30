@@ -4,9 +4,10 @@
 // - データ削除機能付き（確認ダイアログ）
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { FinanceAnnualSummary, type AnnualPeriod, type AnnualRecord } from '@/components/finance-annual-summary';
+import { FinanceAccessPrompt } from '@/components/finance-access-prompt';
 import {
   Calendar,
   CheckCircle2,
@@ -223,6 +224,21 @@ export default function FinanceDashboardPage() {
   const [insightData, setInsightData] = useState<FinanceInsightResponse | null>(null);
   const [insightLoading, setInsightLoading] = useState(false);
   const [annualData, setAnnualData] = useState<{ selected: AnnualPeriod | null; periods: AnnualPeriod[]; records: AnnualRecord[] } | null>(null);
+  const [annualAccessNeeded, setAnnualAccessNeeded] = useState(false);
+
+  const fetchAnnualData = useCallback(async () => {
+    try {
+      const response = await fetch('/api/finance/annual-statements', { cache: 'no-store' });
+      if (response.status === 401) {
+        setAnnualData(null);
+        setAnnualAccessNeeded(true);
+        return;
+      }
+      if (!response.ok) throw new Error('決算資料を取得できませんでした');
+      setAnnualData(await response.json());
+      setAnnualAccessNeeded(false);
+    } catch { setAnnualData(null); }
+  }, []);
 
   async function doSearch(query: string, page: number) {
     setSearching(true);
@@ -240,10 +256,9 @@ export default function FinanceDashboardPage() {
   useEffect(() => {
     fetchImportStatus();
     fetchLatestInsight();
-    fetch('/api/finance/annual-statements', { cache: 'no-store' }).then(async response => {
-      if (response.ok) setAnnualData(await response.json());
-    }).catch(() => setAnnualData(null));
   }, []);
+
+  useEffect(() => { void fetchAnnualData(); }, [fetchAnnualData]);
 
   async function fetchImportStatus() {
     setLoading(true);
@@ -411,6 +426,7 @@ export default function FinanceDashboardPage() {
         </div>
       )}
 
+      {annualAccessNeeded && <FinanceAccessPrompt onAuthenticated={fetchAnnualData} />}
       {annualData?.selected && <FinanceAnnualSummary period={annualData.selected} previous={annualData.periods.find(period => period.companyName === annualData.selected?.companyName && period.periodEnd < annualData.selected.periodEnd)} records={annualData.records || []} />}
       {annualData?.selected && annualData.selected.periodEnd.slice(0, 7) === insightData?.month ? (
         <details className="rounded-2xl border border-slate-200 bg-white p-4">

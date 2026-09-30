@@ -147,6 +147,15 @@ function asJsonObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function supplementalMetadata(value: unknown): Record<string, unknown> {
+  const metadata = asJsonObject(value);
+  if (metadata.extraction === 'single_labelled_amount' || metadata.extraction === 'unassigned_numeric_candidates') {
+    return { ...metadata, sourceUnit: metadata.unit ?? null, sourceStatus: metadata.status ?? null,
+      unit: null, status: 'needs_review' };
+  }
+  return metadata;
+}
+
 function asWarnings(value: unknown): string[] {
   return Array.isArray(value) ? value.map(item => String(item)).filter(Boolean) : [];
 }
@@ -359,7 +368,7 @@ export async function GET(request: NextRequest) {
             order by document_id, page_number, row_no`, [ids]);
         records = recordResult.rows.map((row: any) => ({ id: String(row.id), documentId: String(row.document_id),
           page: row.page_number, rowNo: row.row_no, section: row.section, accountName: row.account_name,
-          amount: row.amount == null ? null : asNumber(row.amount), rawText: row.raw_text, metadata: asJsonObject(row.metadata), }));
+          amount: row.amount == null ? null : asNumber(row.amount), rawText: row.raw_text, metadata: supplementalMetadata(row.metadata), }));
       }
     }
     const coverage = { documents: documents.length, pages: pages.length,

@@ -140,9 +140,9 @@ export function FinanceClosingDocuments({
         <p className="mt-1 text-xs leading-5 text-slate-500">
           {coverage?.documents ?? documents.length}ファイル / 全
           {coverage?.pages ?? pages.length}ページ / 分類済み{' '}
-          {coverage?.classifiedPages ?? 0}ページ / 金額をデータ化{' '}
+          {coverage?.classifiedPages ?? 0}ページ / 数値をデータ化{' '}
           {coverage?.amountRecords ?? 0}
-          項目。未確定のOCRは原文を残して「要確認」と表示します。
+          項目（未照合候補を含む）。未確定のOCRは原文を残し、単位が不明な数値を円と断定しません。
         </p>
       </div>
       <div className="space-y-3">
@@ -255,7 +255,7 @@ export function FinanceClosingDocuments({
             <tr>
               <th className="p-3 text-left">根拠頁</th>
               <th className="p-3 text-left">区分 / 内容</th>
-              <th className="p-3 text-right">金額</th>
+              <th className="p-3 text-right">金額 / 数値候補</th>
               <th className="p-3 text-left">原文・補足</th>
             </tr>
           </thead>
@@ -278,7 +278,7 @@ export function FinanceClosingDocuments({
                   {row.amount == null ? (
                     <span className="text-xs text-amber-700">要確認</span>
                   ) : (
-                    `${row.amount < 0 ? '△' : ''}${Math.abs(row.amount).toLocaleString('ja-JP')}円`
+                    <><span>{`${row.amount < 0 ? '△' : ''}${Math.abs(row.amount).toLocaleString('ja-JP')}${row.metadata.extraction === 'single_labelled_amount' ? '' : '円'}`}</span>{row.metadata.extraction === 'single_labelled_amount' && <div className="text-xs font-sans text-amber-700">数値候補・単位要確認</div>}</>
                   )}
                 </td>
                 <td className="max-w-lg p-3 align-top">

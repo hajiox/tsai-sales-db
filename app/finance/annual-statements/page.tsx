@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { uploadClosingPackage } from '@/lib/finance/closing-package-upload';
 import { FinanceAnnualSummary } from '@/components/finance-annual-summary';
+import { FinanceAccessPrompt } from '@/components/finance-access-prompt';
 import { FinanceClosingDocuments, type ClosingDocument, type ClosingPage, type ClosingRecord, type ClosingCoverage } from '@/components/finance-closing-documents';
 import {
   AlertTriangle,
@@ -147,6 +148,7 @@ function queueId(file: File, index: number) {
 export default function AnnualStatementsPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const requestedPeriodRef = useRef<string | null>(null);
   const [data, setData] = useState<ApiResponse>({ periods: [], selected: null, accounts: [] });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<StatementType>('bs');
@@ -157,8 +159,10 @@ export default function AnnualStatementsPage() {
   const [error, setError] = useState('');
   const [appendPeriodId, setAppendPeriodId] = useState('');
   const [replacePrimary, setReplacePrimary] = useState(false);
+  const [financeAccessNeeded, setFinanceAccessNeeded] = useState(false);
 
   const load = useCallback(async (id?: string | null) => {
+    requestedPeriodRef.current = id || null;
     setLoading(true);
     setError('');
     try {
@@ -166,19 +170,20 @@ export default function AnnualStatementsPage() {
         cache: 'no-store',
       });
       if (response.status === 401) {
-        router.push('/finance/general-ledger');
+        setFinanceAccessNeeded(true);
         return;
       }
       const json = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(json?.error || '決算書データを取得できませんでした');
       setData(json);
       setSelectedId(json.selected?.id || null);
+      setFinanceAccessNeeded(false);
     } catch (caught: any) {
       setError(caught?.message || '決算書データを取得できませんでした');
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     void load(new URLSearchParams(window.location.search).get('id'));
@@ -230,7 +235,7 @@ export default function AnnualStatementsPage() {
         latestId = json.statement?.id || latestId;
         updateQueue(item.id, {
           status: 'done',
-          message: `${json.stats?.pages ?? 0}ページ・${json.stats?.accounts ?? 0}決算項目・${json.stats?.records ?? 0}資料明細を保存しました${json.duplicate ? '（登録済み）' : ''}${!json.primaryUpdated && !json.duplicate ? '。年次指標は変更していません。確認事項を参照してください。' : ''}`,
+          message: json.duplicate && !json.primaryUpdated ? `登録済みPDFです（${json.stats?.pages ?? 0}ページ）。原本・明細・年次指標は保存済みデータを保持しました。` : `${json.stats?.pages ?? 0}ページ・${json.stats?.accounts ?? 0}決算項目・${json.stats?.records ?? 0}資料明細を保存しました${!json.primaryUpdated ? '。年次指標は変更していません。確認事項を参照してください。' : ''}`,
         });
       } catch (caught: any) {
         updateQueue(item.id, { status: 'error', message: caught?.message || '取込に失敗しました' });
@@ -259,6 +264,14 @@ export default function AnnualStatementsPage() {
     ? (beginningInventory + endingInventory) / 2
     : null;
   const inventoryTurnover = cogs != null && averageInventory && averageInventory !== 0 ? cogs / averageInventory : null;
+
+  if (financeAccessNeeded) return (
+    <div className="mx-auto max-w-3xl space-y-5 p-4 sm:p-6">
+      <h1 className="text-2xl font-bold text-slate-900">決算資料一式の取込・年次比較</h1>
+      <FinanceAccessPrompt onAuthenticated={async () => { await load(requestedPeriodRef.current || selectedId); }} />
+      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+    </div>
+  );
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-6 p-4 sm:p-6">
