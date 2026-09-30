@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { FinanceAnnualSummary, type AnnualPeriod, type AnnualRecord } from '@/components/finance-annual-summary';
 import {
   Calendar,
   CheckCircle2,
@@ -221,6 +222,7 @@ export default function FinanceDashboardPage() {
   // 今期累計の経営シグナル
   const [insightData, setInsightData] = useState<FinanceInsightResponse | null>(null);
   const [insightLoading, setInsightLoading] = useState(false);
+  const [annualData, setAnnualData] = useState<{ selected: AnnualPeriod | null; periods: AnnualPeriod[]; records: AnnualRecord[] } | null>(null);
 
   async function doSearch(query: string, page: number) {
     setSearching(true);
@@ -238,6 +240,9 @@ export default function FinanceDashboardPage() {
   useEffect(() => {
     fetchImportStatus();
     fetchLatestInsight();
+    fetch('/api/finance/annual-statements', { cache: 'no-store' }).then(async response => {
+      if (response.ok) setAnnualData(await response.json());
+    }).catch(() => setAnnualData(null));
   }, []);
 
   async function fetchImportStatus() {
@@ -406,7 +411,14 @@ export default function FinanceDashboardPage() {
         </div>
       )}
 
-      <BusinessSignalPanel data={insightData} loading={insightLoading} />
+      {annualData?.selected && <FinanceAnnualSummary period={annualData.selected} previous={annualData.periods.find(period => period.companyName === annualData.selected?.companyName && period.periodEnd < annualData.selected.periodEnd)} records={annualData.records || []} />}
+      {annualData?.selected && annualData.selected.periodEnd.slice(0, 7) === insightData?.month ? (
+        <details className="rounded-2xl border border-slate-200 bg-white p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-slate-600">月次試算表ベースの指標を見る（上の決算書とは別データ）</summary>
+          <p className="my-3 text-xs leading-5 text-slate-500">確定決算の年次数値は上の検算済み決算書を参照してください。月次試算表・元帳には決算時の修正が反映されていない場合があります。</p>
+          <BusinessSignalPanel data={insightData} loading={insightLoading} />
+        </details>
+      ) : <BusinessSignalPanel data={insightData} loading={insightLoading} />}
 
       {/* クイックリンク */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4 xl:grid-cols-7">

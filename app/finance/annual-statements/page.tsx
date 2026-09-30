@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { uploadClosingPackage } from '@/lib/finance/closing-package-upload';
+import { FinanceAnnualSummary } from '@/components/finance-annual-summary';
+import { FinanceClosingDocuments, type ClosingDocument, type ClosingPage, type ClosingRecord, type ClosingCoverage } from '@/components/finance-closing-documents';
 import {
   AlertTriangle,
   ArrowDownRight,
@@ -34,6 +37,7 @@ type StatementMetric = {
 type StatementPeriod = {
   id: string;
   companyName: string;
+  primaryDocumentId?: string | null;
   periodNumber: number | null;
   fiscalYear: number;
   periodStart: string;
@@ -61,6 +65,10 @@ type ApiResponse = {
   periods: StatementPeriod[];
   selected: StatementPeriod | null;
   accounts: StatementAccount[];
+  documents?: ClosingDocument[];
+  pages?: ClosingPage[];
+  records?: ClosingRecord[];
+  coverage?: ClosingCoverage;
 };
 
 type QueueItem = {
@@ -83,6 +91,7 @@ const comparisonMetrics = [
   ['gross_profit', '売上総利益'],
   ['operating_income', '営業利益'],
   ['net_income', '当期純利益'],
+  ['depreciation_total', '計上済み減価償却費（リース含む）'],
   ['cash_and_deposits', '現金・預金'],
   ['inventory', '棚卸資産（BS）'],
   ['beginning_inventory', '期首棚卸高'],
@@ -146,6 +155,8 @@ export default function AnnualStatementsPage() {
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState('');
+  const [appendPeriodId, setAppendPeriodId] = useState('');
+  const [replacePrimary, setReplacePrimary] = useState(false);
 
   const load = useCallback(async (id?: string | null) => {
     setLoading(true);
@@ -170,7 +181,7 @@ export default function AnnualStatementsPage() {
   }, [router]);
 
   useEffect(() => {
-    void load();
+    void load(new URLSearchParams(window.location.search).get('id'));
   }, [load]);
 
   function addFiles(files: File[]) {
@@ -211,15 +222,15 @@ export default function AnnualStatementsPage() {
     for (const item of pending) {
       updateQueue(item.id, { status: 'uploading', message: 'PDFを解析中…' });
       try {
-        const form = new FormData();
-        form.append('file', item.file);
-        const response = await fetch('/api/finance/annual-statements', { method: 'POST', body: form });
-        const json = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(json?.error || '取込に失敗しました');
+        const json = await uploadClosingPackage(item.file, {
+          periodId: appendPeriodId || null,
+          replacePrimary,
+          onProgress: message => updateQueue(item.id, { message }),
+        });
         latestId = json.statement?.id || latestId;
         updateQueue(item.id, {
           status: 'done',
-          message: `${json.stats?.accounts ?? 0}項目・${json.stats?.metrics ?? 0}指標を取り込みました`,
+          message: `${json.stats?.pages ?? 0}ページ・${json.stats?.accounts ?? 0}決算項目・${json.stats?.records ?? 0}資料明細を保存しました${json.duplicate ? '（登録済み）' : ''}${!json.primaryUpdated && !json.duplicate ? '。年次指標は変更していません。確認事項を参照してください。' : ''}`,
         });
       } catch (caught: any) {
         updateQueue(item.id, { status: 'error', message: caught?.message || '取込に失敗しました' });
@@ -265,10 +276,10 @@ export default function AnnualStatementsPage() {
             <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-500 text-white shadow-sm">
               <FileText className="h-5 w-5" />
             </span>
-            決算書PDF取込・年次比較
+            決算資料一式の取込・年次比較
           </h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-            決算書PDFをアップロードまたはドロップすると、貸借対照表・損益計算書・販管費内訳・株主資本・注記をデータ化します。借入金と棚卸資産は決算期ごとの差額を自動表示します。
+            税理士事務所から届いたPDF一式をそのままアップロード・ドロップできます。決算書、税申告、借入・固定資産などを分類し、原本と全ページの根拠を保存します。借入と在庫は前期比較できます。
           </p>
         </div>
         <button
@@ -286,9 +297,11 @@ export default function AnnualStatementsPage() {
         <div className="border-b border-slate-100 bg-slate-50 px-5 py-4">
           <div className="flex items-center gap-2">
             <Upload className="h-4 w-4 text-indigo-600" />
-            <h2 className="font-bold text-slate-900">決算書PDFを追加</h2>
+            <h2 className="font-bold text-slate-900">決算資料PDFを追加</h2>
           </div>
-          <p className="mt-1 text-xs text-slate-500">PDFのみ・1ファイル20MBまで。複数年分をまとめて選択できます。</p>
+          <p className="mt-1 text-xs text-slate-500">PDFのみ・1ファイル20MBまで。複数選択可。同じPDFの再投入は重複登録されません。</p>
+          <label className="mt-3 flex items-center gap-2 text-xs text-amber-800"><input type="checkbox" checked={replacePrimary} onChange={event => setReplacePrimary(event.target.checked)} disabled={uploading} />同年度の決算書を差し替える（検算成功時のみ。旧原本は保持）</label>
+          <label className="mt-3 block text-xs text-slate-600">取込先 <select className="ml-2 max-w-full rounded-lg border border-slate-200 bg-white p-2" value={appendPeriodId} onChange={event => setAppendPeriodId(event.target.value)} disabled={uploading}><option value="">PDFから決算年度を自動判定</option>{data.periods.map(period => <option key={period.id} value={period.id}>{period.fiscalYear}年決算へ補足資料を追加</option>)}</select></label>
         </div>
 
         <div className="grid gap-0 lg:grid-cols-[minmax(360px,0.8fr)_1.2fr]">
@@ -372,7 +385,7 @@ export default function AnnualStatementsPage() {
             <button
               type="button"
               onClick={() => void uploadAll()}
-              disabled={uploading || !queue.some(item => item.status === 'ready')}
+              disabled={uploading || !queue.some(item => item.status === 'ready' || item.status === 'error' && item.message !== 'PDF形式ではありません' && item.file.size <= 20 * 1024 * 1024)}
               className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
@@ -402,6 +415,7 @@ export default function AnnualStatementsPage() {
         </section>
       ) : (
         <>
+          <FinanceAnnualSummary period={selected} previous={previous} records={data.records || []} />
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
@@ -539,6 +553,7 @@ export default function AnnualStatementsPage() {
             </div>
           </section>
 
+          <FinanceClosingDocuments key={selected.id} periodId={selected.id} documents={data.documents || []} pages={data.pages || []} records={data.records || []} coverage={data.coverage} />
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 px-5 pt-4">
               <h2 className="font-bold text-slate-900">取込明細</h2>
@@ -578,7 +593,7 @@ export default function AnnualStatementsPage() {
                     <tr key={row.id} className="hover:bg-slate-50/70">
                       <td className="px-4 py-3 font-mono text-xs text-slate-400">{row.rowNo}</td>
                       <td className="px-4 py-3 text-xs font-semibold text-slate-500">{row.section || '-'}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-700">{row.accountName}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-700">{row.accountName}{row.metadata.isDerived === true && <span className="ml-2 text-xs font-normal text-amber-700">合計差額から補完</span>}</td>
                       <td className="px-4 py-3 text-right font-mono font-semibold text-slate-900">{yen(row.amount)}</td>
                     </tr>
                   ))}

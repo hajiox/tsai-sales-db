@@ -63,6 +63,9 @@ export interface FinancialStatementMetrics {
   income_taxes: number | null;
   net_income: number | null;
   interest_expense: number | null;
+  depreciation_expense: number | null;
+  lease_depreciation_expense: number | null;
+  depreciation_total: number | null;
 }
 
 export interface FinancialStatementValidationCheck {
@@ -113,7 +116,11 @@ interface NumberToken {
   raw: string;
 }
 
-const NUMBER_TOKEN_RE = /\(\s*[△▲-]?\s*\d[\d,]*\s*\)|[△▲-]\s*\d[\d,]*|\d[\d,]*/g;
+const FINANCIAL_NUMBER = String.raw`(?:\d{1,3}(?:,\s*\d{3})+|\d+)`;
+const NUMBER_TOKEN_RE = new RegExp(
+  String.raw`\(\s*[△▲ムA-]?\s*${FINANCIAL_NUMBER}\s*\)|[△▲ムA-]\s*${FINANCIAL_NUMBER}|${FINANCIAL_NUMBER}`,
+  'g',
+);
 const ONE_YEN_TOLERANCE = 1;
 
 function normalizeWidth(value: string) {
@@ -127,6 +134,11 @@ function compact(value: string) {
 function displayAccountName(value: string) {
   return compact(value)
     .replace(/^[|｜:：]+|[|｜:：]+$/g, '')
+    .replace(/リ[ー−－-]ス/g, 'リース')
+    .replace(/^リース資産減価償(?:去階|却費)$/, 'リース資産減価償却費')
+    .replace(/^図書教青費$/, '図書教育費')
+    .replace(/^販売費及び刊撒費$/, '販売費及び一般管理費')
+    .replace(/^目I」受金$/, '前受金')
     .trim();
 }
 
@@ -142,8 +154,8 @@ export function parseJapaneseFinancialNumber(value: string | number | null | und
   const normalized = normalizeWidth(String(value ?? '')).trim();
   if (!normalized || !/\d/.test(normalized)) return null;
 
-  const negative = /[△▲]/.test(normalized) || /^\s*-/.test(normalized);
-  const digits = normalized.replace(/[△▲(),，\s円￥-]/g, '');
+  const negative = /[△▲]/.test(normalized) || /^\s*[ムA-]\s*\d/.test(normalized);
+  const digits = normalized.replace(/[△▲ムA(),，\s円￥-]/g, '');
   if (!/^\d+(?:\.\d+)?$/.test(digits)) return null;
   const parsed = Number(digits);
   if (!Number.isFinite(parsed)) return null;
@@ -200,6 +212,17 @@ function splitPages(text: string): SourcePage[] {
   if (matches.length === 0) {
     const formFeedPages = text.split('\f');
     return formFeedPages.map((pageText, index) => ({ number: index + 1, text: pageText }));
+  }
+
+  // pdf-parse historically appended pageJoiner after each page. Preserve those
+  // archived imports while accepting the canonical markers before each page.
+  if (text.slice(0, matches[0].index).trim()) {
+    return matches.map((match, index) => {
+      const start = index === 0
+        ? 0
+        : (matches[index - 1].index ?? 0) + matches[index - 1][0].length;
+      return { number: Number(match[1]), text: text.slice(start, match.index) };
+    });
   }
 
   return matches.map((match, index) => {
@@ -261,8 +284,15 @@ function parseBalanceSheet(page: SourcePage) {
       previousEnd = token.end;
       if (!accountName || /^\d+$/.test(accountName)) continue;
 
-      const isLeftColumn = token.start < 50;
-      const side: Exclude<BalanceSheetSide, null> = isLeftColumn ? 'assets' : rightSide;
+      const name = metricAccountName(accountName);
+      const side: Exclude<BalanceSheetSide, null> =
+        /(?:純資産|株主資本|資本金|利益剰余金|当期純利益)/.test(name)
+          ? 'net_assets'
+          : /(?:負債|買掛金|未払|借入金|リース債務|預り金|受金)/.test(name)
+            ? 'liabilities'
+            : tokens.length > 1 && tokens.indexOf(token) > 0
+              ? rightSide
+              : 'assets';
       rows.push(
         row('balance_sheet', accountName, [token.value], page.number, rawLine, {
           side,
@@ -311,7 +341,7 @@ function parseIncomeStatement(page: SourcePage) {
       }),
     );
 
-    if (values.length > 1 && normalizedName === '期末棚卸高') {
+    if (values.length > 1 && /^(?:期末棚卸高|期末商品棚卸高)$/.test(normalizedName)) {
       rows.push(
         row('income_statement', '売上原価', [values[1]], page.number, rawLine, {
           amount: values[1],
@@ -353,9 +383,24 @@ function parseSga(page: SourcePage) {
       continue;
     }
     const tokens = extractNumberTokens(line);
-    if (tokens.length === 0) continue;
-    const accountName = displayAccountName(line.slice(0, tokens[0].start));
+    const damagedWelfare = lineCompact.startsWith('法定福利費') &&
+      !/^[\d,△▲ムA()円\s-]+$/.test(lineCompact.slice('法定福利費'.length));
+    const accountName = damagedWelfare
+      ? '法定福利費'
+      : displayAccountName(tokens.length ? line.slice(0, tokens[0].start) : line);
+    if (damagedWelfare) {
+      rows.push(row('selling_general_administrative', accountName, [], page.number, rawLine, { category: '販売費及び一般管理費', amount: null }));
+      continue;
+    }
+    if (tokens.length === 0) {
+      if (/^(?:法定福利費|減価償却費|リース資産減価償却費)$/.test(accountName)) {
+        rows.push(row('selling_general_administrative', accountName, [], page.number, rawLine, { category: '販売費及び一般管理費', amount: null }));
+      }
+      continue;
+    }
     if (!accountName) continue;
+    if (!/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(accountName)) continue;
+    if (/[^\d,△▲ムA()円\s-]/.test(line.slice(tokens[0].start))) continue;
     rows.push(
       row(
         'selling_general_administrative',
@@ -366,6 +411,20 @@ function parseSga(page: SourcePage) {
         { amount: tokens[0].value, category: '販売費及び一般管理費' },
       ),
     );
+  }
+  const total = rows.find((candidate) => candidate.normalizedAccountName === '販売費及び一般管理費');
+  const details = rows.filter((candidate) => candidate !== total);
+  const missing = details.filter((candidate) => candidate.amount === null);
+  if (
+    total?.amount !== null && total?.amount !== undefined && details.length >= 5 && missing.length === 1 &&
+    new Set(details.map((candidate) => candidate.normalizedAccountName)).size === details.length
+  ) {
+    const residual = total.amount - details.reduce((sum, candidate) => sum + (candidate.amount ?? 0), 0);
+    if (residual >= 0) {
+      missing[0].amount = residual;
+      missing[0].amounts = [residual];
+      missing[0].isDerived = true;
+    }
   }
   return rows;
 }
@@ -380,7 +439,7 @@ function parseEquityChanges(page: SourcePage) {
       category = '利益剰余金の内訳';
       continue;
     }
-    const nameMatch = lineCompact.match(/^(当期首残高|当期純利益|当期変動額合計|当期末残高)/);
+    const nameMatch = lineCompact.match(/(当期首残高|当期純利益|当期変動額合計|当期末残高)/);
     if (!nameMatch) continue;
     const tokens = extractNumberTokens(rawLine);
     if (tokens.length === 0) continue;
@@ -409,9 +468,9 @@ function parseNotes(page: SourcePage) {
     ) {
       continue;
     }
-    const heading = lineCompact.match(/^(\d+)\.(.+)$/);
+    const heading = lineCompact.match(/^([\dlI])\.(.+)$/);
     if (heading) {
-      category = `${heading[1]}.${heading[2]}`;
+      category = `${/[lI]/.test(heading[1]) ? '1' : heading[1]}.${heading[2]}`;
       rows.push(row('notes', category, [], page.number, rawLine, { category, amount: null }));
       continue;
     }
@@ -468,6 +527,10 @@ function buildMetrics(accounts: FinancialStatementAccounts): FinancialStatementM
   const longTermBorrowings = findAmount(bs, '長期借入金');
   const beginningInventory = findAmount(pl, '期首棚卸高', '期首商品棚卸高');
   const endingInventory = findAmount(pl, '期末棚卸高', '期末商品棚卸高');
+  const depreciationExpense = accounts.sellingGeneralAdministrative.find(
+    (candidate) => candidate.normalizedAccountName === '減価償却費',
+  )?.amount ?? null;
+  const leaseDepreciationExpense = findAmount(accounts.sellingGeneralAdministrative, 'リース資産減価償却費');
 
   return {
     cash_and_deposits: findAmount(bs, '現金及び預金'),
@@ -512,6 +575,9 @@ function buildMetrics(accounts: FinancialStatementAccounts): FinancialStatementM
     income_taxes: findAmount(pl, '法人税等'),
     net_income: findAmount(pl, '当期純利益', '当期純損失'),
     interest_expense: findAmount(pl, '支払利息'),
+    depreciation_expense: depreciationExpense,
+    lease_depreciation_expense: leaseDepreciationExpense,
+    depreciation_total: addNullable(depreciationExpense, leaseDepreciationExpense),
   };
 }
 
@@ -600,6 +666,20 @@ function buildWarnings(
   validation: FinancialStatementValidation,
 ) {
   const warnings: string[] = [];
+  for (const candidate of accounts.sellingGeneralAdministrative) {
+    if (candidate.isDerived) {
+      warnings.push(`${candidate.accountName} はOCR金額を読み取れないため、販管費合計との差額から補完しました（${candidate.amount} 円、${candidate.page}ページ）。原本と照合してください。`);
+    } else if (candidate.amount === null) {
+      warnings.push(`${candidate.accountName} の金額を読み取れませんでした（${candidate.page}ページ）。`);
+    }
+  }
+  const sgaDetails = accounts.sellingGeneralAdministrative.filter((candidate) => !candidate.isTotal);
+  if (metrics.sga !== null && sgaDetails.length > 0 && sgaDetails.every((candidate) => candidate.amount !== null)) {
+    const sgaSum = sgaDetails.reduce((sum, candidate) => sum + (candidate.amount ?? 0), 0);
+    if (Math.abs(sgaSum - metrics.sga) > ONE_YEN_TOLERANCE) {
+      warnings.push(`販管費の明細合計と損益計算書が一致しません（差額 ${sgaSum - metrics.sga} 円）。`);
+    }
+  }
   if (accounts.balanceSheet.length === 0) warnings.push('貸借対照表の勘定科目を抽出できませんでした。');
   if (accounts.incomeStatement.length === 0) warnings.push('損益計算書の勘定科目を抽出できませんでした。');
   if (metrics.total_assets === null) warnings.push('資産合計を抽出できませんでした。');
@@ -626,45 +706,48 @@ function buildWarnings(
 
 function detectPageSection(page: SourcePage) {
   const text = compact(page.text);
-  if (text.includes('貸借対照表')) return 'balance_sheet' as const;
-  if (text.includes('損益計算書')) return 'income_statement' as const;
-  if (text.includes('販売費・一般管理費内訳書') || text.includes('販売費及び一般管理費内訳書')) {
+  const headings = page.text.split(/\r?\n/).map(compact).filter(Boolean).slice(0, 8);
+  const hasHeading = (name: string) => headings.some((line) => line === name);
+  // A complete filing packet also contains forms that mention these statements.
+  // Require a statement heading or its characteristic account structure, rather
+  // than accepting an incidental phrase anywhere in a tax form.
+  if (hasHeading('貸借対照表') ||
+      ['資産の部', '負債の部', '現金及び預金', '流動資産', '流動負債'].every((name) => text.includes(name))) return 'balance_sheet' as const;
+  if (hasHeading('損益計算書') ||
+      ['売上高', '期首棚卸高', '期末棚卸高', '売上総利益', '営業利益'].every((name) => text.includes(name))) return 'income_statement' as const;
+  if (hasHeading('販売費・一般管理費内訳書') || hasHeading('販売費及び一般管理費内訳書') ||
+      ['役員報酬', '給料手当', '広告宣伝費', '水道光熱費', '減価償却費', '支払手数料'].every((name) => text.includes(name))) {
     return 'selling_general_administrative' as const;
   }
   // 注記本文には「株主資本等変動計算書に関する注記」が現れるため、
   // 株主資本等変動計算書より先に判定する。
-  if (text.includes('個別注記表')) return 'notes' as const;
-  if (text.includes('株主資本等変動計算書')) return 'equity_changes' as const;
+  if (hasHeading('個別注記表') || text.includes('重要な会計方針に係る事項に関する注記')) return 'notes' as const;
+  if (hasHeading('株主資本等変動計算書') ||
+      ['当期首残高', '当期変動額合計', '当期末残高', '純資産合計'].every((name) => text.includes(name))) return 'equity_changes' as const;
   return null;
 }
 
 export function parseFinancialStatementText(text: string): ParsedFinancialStatement {
   const pages = splitPages(text);
-  const normalizedText = normalizeWidth(text);
+  const statementPages = pages.filter((page) => detectPageSection(page) !== null);
+  const headerPages = [...statementPages, ...pages.filter((page) => !statementPages.includes(page))];
+  const normalizedText = normalizeWidth(headerPages.map((page) => page.text).join('\n'));
   const compactText = compact(text);
-  const periodMatch = compactText.match(/第(\d+)期/);
-  const startMatch = compactText.match(/自((?:令和|平成|昭和)(?:元|\d+)年\d+月\d+日)/);
-  const endMatch = compactText.match(/至((?:令和|平成|昭和)(?:元|\d+)年\d+月\d+日)/);
+  const standalonePeriod = normalizedText.split(/\r?\n/).map(compact)
+    .map((line) => line.match(/^第(\d+)期$/)).find((match) => match !== null);
+  const periodMatch = standalonePeriod ?? compactText.match(/第(\d+)期/);
+  const headerText = compact(normalizedText);
+  const startMatch = headerText.match(/自((?:令和|平成|昭和)(?:元|\d+)年\d+月\d+日)/);
+  const endMatch = headerText.match(/至((?:令和|平成|昭和)(?:元|\d+)年\d+月\d+日)/);
 
   let companyName: string | null = null;
   for (const line of normalizedText.split(/\r?\n/)) {
     if (!line.includes('株式会社')) continue;
-    const candidate = compact(line).replace(/※/g, '');
-    if (!candidate || /(?:令和|平成|昭和)/.test(candidate)) continue;
+    const candidate = compact(line).replace(/※/g, '').match(/株式会社[^\d:;|【】()]+/)?.[0]
+      .split(/(?:令和|平成|昭和|単位|自令|至令|代表取締役)/, 1)[0];
+    if (!candidate) continue;
     companyName = candidate;
     break;
-  }
-  if (!companyName) {
-    for (const line of normalizedText.split(/\r?\n/)) {
-      if (!line.includes('株式会社')) continue;
-      const candidate = compact(line)
-        .replace(/※/g, '')
-        .split(/(?:令和|平成|昭和)/, 1)[0];
-      if (candidate) {
-        companyName = candidate;
-        break;
-      }
-    }
   }
 
   const accounts: FinancialStatementAccounts = {
