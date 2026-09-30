@@ -1,5 +1,3 @@
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
-
 export interface FinancialStatementPdfPage {
   number: number;
   text: string;
@@ -75,6 +73,8 @@ function reconstructLines(items: PositionedText[], deduplicate: boolean) {
 }
 
 export async function extractFinancialStatementPdfText(data: Uint8Array) {
+  // Initialise the optional PDF runtime only while parsing a PDF, not on GET/auth.
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const loading = getDocument({
     data: new Uint8Array(data),
     verbosity: 0,
