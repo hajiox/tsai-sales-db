@@ -1,5 +1,13 @@
 # TSA WEB Sales Codex Analysis Note
 
+## 2026-10-01 Codexアプリからの月次分析保存
+
+- 管理者セッション専用の `GET /api/web-sales/analysis/direct/packet?month=YYYY-MM` を追加。月初〜月末の既存 compact packetに `data_quality.direct_cost_warnings` を加え、内容ハッシュと保存IDを返す。Bridgeジョブは作らない。
+- `POST /api/web-sales/analysis/direct/save` は取得した `month`、`saveRequestId` を `requestId` として、`packetHash`、`packet`、使用モデル名、既存分析schemaに合う `data` を受け取る。保存直前に本番データからpacketを再構築し、内容が変わっていれば409で停止する。月次版番号、完了済みジョブ、分析結果、履歴イベントをDBトランザクションで保存し、同じ保存IDの再送は既存結果を返す。既存Bridge APIは変更しない。
+- 9月に販売のある商品で月次保存原価が欠損・0以下、または利益率0%から販売単価を原価扱いした場合は原価警告に表示する。EC精算の欠損・部分取得・推定、または原価警告がある分析は `needs_review` と制約の明記を必須にした。実原価未確認の `激辛パウダー 辛味ブースト20個セット` は、BASE取込後に該当すれば推定原価を確定値として扱わない。
+- TSGフロア投稿は direct-save では実行せず、履歴に `tsg_post_status=skipped` を記録する。既存Bridge投稿は事前検索による重複確認だが並行送信の一意制約までは確認できないため、初回の自動送信を見送る。
+- Focused test、変更ファイルのlint、Next.js本番build、secret scan、RLS checkを確認。9月の分析生成・本番保存は販売/控除取込完了後に行う。管理者セッションがない間はAPI呼出し不可。
+
 ## 2026-09-02
 
 - Corrected the August Qoo10 product-sales source after EC速報 and the official Qoo10 Shipping API proved 5 orders, 5 items, and JPY 13,330 while the QSM four-screen rule had imported zero.
