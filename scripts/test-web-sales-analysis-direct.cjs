@@ -14,7 +14,15 @@ const packet = {
   report_month: '2026-09',
   period: { start_date: '2026-09-01', end_date: '2026-09-30', type: 'monthly' },
   analysis_scope: { period_type: 'monthly' },
-  headline: { target: { sales: 10000, final_profit: 1200 } },
+  headline: { target: { sales: 10000, product_cost: 4000, final_profit: 1200 },
+    comparison: { sales_mom_rate: 10, final_profit_mom_rate: 5 } },
+  monthly_trend: [{ month: '2026-08', totals: { final_profit: 700 } },
+    { month: '2026-09', totals: { sales: 10000, final_profit: 1200 }, channel_final_profit: { base: 100 } }],
+  channel_details: [{ channel: 'base', sales: 1000, product_cost: 1000, final_profit: 0,
+    previous_month: { final_profit: 500 } }],
+  series_details: [{ sales: 1000, product_cost: 1000, product_profit_before_ec: 0 }],
+  important_products: [{ product_id: 'product-1', sales: 1000, product_cost: 1000,
+    product_profit_before_ec: 0 }],
   data_quality: { channels: [{ channel: 'amazon', settlement_coverage: 'complete', settlement_estimated: false }] },
 };
 const data = {
@@ -44,8 +52,21 @@ const unknownCost = [{ productId: 'product-1', name: '原価未確認商品', sa
 const warnedPacket = withDirectCostWarnings(packet, unknownCost);
 assert.deepEqual(warnedPacket.data_quality.direct_cost_warnings, unknownCost);
 assert.notEqual(analysisPacketHash(warnedPacket), input.packetHash);
+assert.equal(warnedPacket.headline.target.sales, 10000);
+assert.equal(warnedPacket.headline.target.product_cost, null);
+assert.equal(warnedPacket.headline.target.final_profit, null);
+assert.equal(warnedPacket.headline.comparison.final_profit_mom_rate, null);
+assert.equal(warnedPacket.monthly_trend[0].totals.final_profit, 700);
+assert.equal(warnedPacket.monthly_trend[1].totals.final_profit, null);
+assert.equal(warnedPacket.monthly_trend[1].channel_final_profit.base, null);
+assert.equal(warnedPacket.channel_details[0].final_profit, null);
+assert.equal(warnedPacket.channel_details[0].previous_month.final_profit, 500);
+assert.equal(warnedPacket.series_details[0].product_profit_before_ec, null);
+assert.equal(warnedPacket.important_products[0].product_cost, null);
 assert.throws(() => assertDirectQuality(input, packet, unknownCost), DirectAnalysisConflict);
-const reviewData = { ...data, status: 'needs_review', data_quality: { ...data.data_quality, limitations: ['原価が未確認'] } };
+const reviewData = { ...data, status: 'needs_review',
+  executive_summary: '原価が未確認のため最終利益は未確定',
+  data_quality: { ...data.data_quality, limitations: ['原価が未確認のため最終利益は未確定'] } };
 assertDirectQuality({ ...input, data: reviewData }, packet, unknownCost);
 assert.throws(() => assertDirectQuality(input, {
   ...packet, data_quality: { channels: [{ channel: 'base', settlement_coverage: 'partial', settlement_estimated: false }] },
@@ -62,7 +83,7 @@ async function main() {
   assert.match(derivedWarnings[0].reason, /保存利益率0%/);
   assert.throws(() => assertDirectQuality({ ...input, data: reviewData }, packet, derivedWarnings), DirectAnalysisConflict);
   const derivedReview = { ...reviewData, data_quality: {
-    ...reviewData.data_quality, limitations: ['利益率0%により販売単価を原価として計上した商品がある'],
+    ...reviewData.data_quality, limitations: ['利益率0%により販売単価を原価として計上した商品があり最終利益は未確定'],
   } };
   assertDirectQuality({ ...input, data: derivedReview }, packet, derivedWarnings);
 

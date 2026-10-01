@@ -72,15 +72,62 @@ export type DirectCostWarning = {
   reason: string;
 };
 
+const UNCONFIRMED_PROFIT_KEYS = new Set([
+  "product_cost", "product_cost_rate", "product_profit_before_ec",
+  "product_profit_before_expenses", "product_profit_rate_before_expenses",
+  "margin_rate_before_ec", "final_profit", "final_profit_rate",
+  "final_profit_mom_rate", "final_profit_yoy_rate", "product_cost_rate_change_mom",
+]);
+
+function unconfirmedProfitFields(value: unknown): Record<string, unknown> {
+  const row = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown> : {};
+  return Object.fromEntries(Object.entries(row).map(([key, item]) => [
+    key, UNCONFIRMED_PROFIT_KEYS.has(key) ? null : item,
+  ]));
+}
+
 export function withDirectCostWarnings(
   packet: Record<string, unknown>,
   warnings: DirectCostWarning[],
 ) {
+  const dataQuality = packet.data_quality as Record<string, unknown>;
+  if (warnings.length === 0) {
+    return { ...packet, data_quality: { ...dataQuality, direct_cost_warnings: [] } };
+  }
+  const headline = packet.headline as Record<string, unknown>;
+  const period = packet.period as Record<string, unknown>;
+  const scope = packet.analysis_scope as Record<string, unknown>;
+  const trend = Array.isArray(packet.monthly_trend) ? packet.monthly_trend as Record<string, unknown>[] : [];
+  const channels = Array.isArray(packet.channel_details) ? packet.channel_details as Record<string, unknown>[] : [];
+  const series = Array.isArray(packet.series_details) ? packet.series_details as Record<string, unknown>[] : [];
+  const products = Array.isArray(packet.important_products) ? packet.important_products as Record<string, unknown>[] : [];
   return {
     ...packet,
+    period: { ...period, label: "月次売上・経費集計（商品原価未確認）" },
+    analysis_scope: {
+      ...scope, profit_values_confirmed: false,
+      profit_limitation: "商品原価が未確認のため、当月の商品原価・粗利・最終利益とその比較率は未確定。数値を推定しない",
+    },
+    headline: {
+      ...headline,
+      target: unconfirmedProfitFields(headline.target),
+      comparison: unconfirmedProfitFields(headline.comparison),
+    },
+    monthly_trend: trend.map((row) => row.month === packet.report_month ? {
+      ...row,
+      totals: unconfirmedProfitFields(row.totals),
+      channel_final_profit: Object.fromEntries(
+        Object.keys(row.channel_final_profit as Record<string, unknown> || {}).map((channel) => [channel, null]),
+      ),
+    } : row),
+    channel_details: channels.map(unconfirmedProfitFields),
+    series_details: series.map(unconfirmedProfitFields),
+    important_products: products.map(unconfirmedProfitFields),
     data_quality: {
-      ...(packet.data_quality as Record<string, unknown>),
+      ...dataQuality,
       direct_cost_warnings: warnings,
+      direct_profit_status: "unconfirmed_cost",
     },
   };
 }
@@ -131,6 +178,12 @@ export function assertDirectQuality(
   const limitations = input.data.data_quality.limitations.join(" ");
   if (costWarnings.length > 0 && (input.data.status !== "needs_review" || !/原価|cost/i.test(limitations))) {
     throw new DirectAnalysisConflict("保存原価が未確認の商品があります。要確認の分析として原価の制約を記載してください");
+  }
+  if (costWarnings.length > 0 && (
+    !/最終利益.{0,80}(未確定|算定できない|確定できない)/s.test(input.data.executive_summary)
+    || !/最終利益/.test(limitations)
+  )) {
+    throw new DirectAnalysisConflict("商品原価が未確認のため、総評と制約に最終利益は未確定と明記してください");
   }
   if (costWarnings.some((warning) => warning.reason.includes("保存利益率0%"))
     && !/利益率\s*0\s*%|販売単価.*原価/.test(limitations)) {
