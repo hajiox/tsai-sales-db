@@ -48,6 +48,7 @@ export default function BaseCsvImportModal({
     productId: string;
     productName: string;
     quantity: number;
+    amount: number;
     isLearned?: boolean;
   }>>([]);
   const [savingMapping, setSavingMapping] = useState<string | null>(null);
@@ -74,6 +75,7 @@ export default function BaseCsvImportModal({
           productId: '',
           productName: '',
           quantity: u.quantity,
+          amount: u.amount,
           isLearned: false
         })),
         // productInfoがある場合とない場合の両方に対応
@@ -82,6 +84,7 @@ export default function BaseCsvImportModal({
           productId: m.productId || m.productInfo?.id || '',
           productName: m.productName || m.productInfo?.name || '',
           quantity: m.quantity,
+          amount: m.amount,
           isLearned: false
         })),
       ];
@@ -200,7 +203,7 @@ export default function BaseCsvImportModal({
               id: item.productId
             },
             quantity: item.quantity,
-            amount: (item as any).amount || 0
+            amount: item.amount
           })),
           newMappings: [],
         };
@@ -210,7 +213,7 @@ export default function BaseCsvImportModal({
           saleDate: `${saleMonth}-01`,
           matchedProducts: parseResult.matchedProducts.map((p: any) => ({
             ...p,
-            amount: p.amount || 0
+            amount: p.amount
           })),
           newMappings: [],
         };
@@ -219,7 +222,7 @@ export default function BaseCsvImportModal({
       const response = await fetch('/api/import/base-confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestData),
+        body: JSON.stringify({ ...requestData, expectedQuantity: parseResult.summary.totalQuantity, expectedAmount: parseResult.summary.totalAmount }),
       });
 
       const result = await response.json();

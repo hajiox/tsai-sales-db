@@ -22,9 +22,9 @@ type ChannelRow = {
   channel: string;
   label: string;
   quantity: number;
-  sales: number;
-  productCost: number;
-  productProfit: number;
+  sales: number | null;
+  productCost: number | null;
+  productProfit: number | null;
   refunds: number;
   platformFees: number;
   paymentFees: number;
@@ -37,8 +37,8 @@ type ChannelRow = {
   marketplaceFundedDiscounts: number;
   ecDeductions: number;
   directAdCost: number;
-  finalProfit: number;
-  profitRate: number;
+  finalProfit: number | null;
+  profitRate: number | null;
   reportedGross: number;
   adjustedReportedGross: number;
   reconciliationDifference: number | null;
@@ -61,9 +61,9 @@ type ProfitPayload = {
   channels: ChannelRow[];
   totals: {
     quantity: number;
-    sales: number;
-    productCost: number;
-    productProfit: number;
+    sales: number | null;
+    productCost: number | null;
+    productProfit: number | null;
     refunds: number;
     platformFees: number;
     paymentFees: number;
@@ -77,8 +77,8 @@ type ProfitPayload = {
     ecDeductions: number;
     adCost: number;
     sharedAdCost: number;
-    finalProfit: number;
-    profitRate: number;
+    finalProfit: number | null;
+    profitRate: number | null;
     netPayout: number;
   };
   adCosts: AdCostBreakdown;
@@ -326,7 +326,7 @@ export default function EcProfitOverview({ month }: { month: string }) {
       note: `共通 ${yen(data.totals.sharedAdCost)}`,
       comparison: metricComparison(data.totals.adCost, previousMonth.totals.adCost, previousYear.totals.adCost),
     },
-    { label: profitLabel, value: data.totals.finalProfit, icon: WalletCards, tone: data.totals.finalProfit >= 0 ? "emerald" : "red", note: `${data.totals.profitRate.toFixed(1)}%` },
+    { label: profitLabel, value: data.totals.finalProfit, icon: WalletCards, tone: (data.totals.finalProfit ?? 0) >= 0 ? "emerald" : "red", note: formatNullableRate(data.totals.profitRate) },
     { label: "入金レポート合計", value: data.totals.netPayout, icon: CheckCircle2, tone: "cyan", note: `${data.completeness.completedSettlements}/${data.completeness.totalSettlements}媒体` },
   ];
 
@@ -542,7 +542,7 @@ export default function EcProfitOverview({ month }: { month: string }) {
         <h3 className="text-sm font-bold text-slate-900">利益の内訳</h3>
         <div className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4 lg:grid-cols-7">
           <FormulaValue label="売上" value={data.totals.sales} positive />
-          <FormulaValue label="商品原価" value={-data.totals.productCost} />
+          <FormulaValue label="商品原価" value={data.totals.productCost === null ? null : -data.totals.productCost} />
           <FormulaValue label="手数料" value={-(data.totals.platformFees + data.totals.paymentFees)} />
           <FormulaValue label="値引・クーポン" value={-(data.totals.sellerDiscounts + data.totals.sellerCoupons + data.totals.sellerPoints)} />
           <FormulaValue label="返金・送料等" value={-(data.totals.refunds + data.totals.shippingCosts + data.totals.otherCosts - data.totals.otherCredits)} />
@@ -696,7 +696,7 @@ function SettlementStatusBadge({ issue }: { issue: SettlementIssue }) {
   );
 }
 
-function MetricCard({ label, value, note, icon: Icon, tone, comparison }: { label: string; value: number; note: string; icon: typeof ShoppingCart; tone: string; comparison?: { previous: number | null; previousYear: number | null } }) {
+function MetricCard({ label, value, note, icon: Icon, tone, comparison }: { label: string; value: number | null; note: string; icon: typeof ShoppingCart; tone: string; comparison?: { previous: number | null; previousYear: number | null } }) {
   const styles: Record<string, string> = {
     blue: "border-blue-200 bg-blue-50 text-blue-800",
     slate: "border-slate-200 bg-slate-50 text-slate-800",
@@ -722,13 +722,13 @@ function MetricCard({ label, value, note, icon: Icon, tone, comparison }: { labe
   );
 }
 
-function ExpenseComparison({ label, value, sales, previous, previousYear }: { label: string; value: number; sales: number; previous: number; previousYear: number }) {
+function ExpenseComparison({ label, value, sales, previous, previousYear }: { label: string; value: number; sales: number | null; previous: number; previousYear: number }) {
   return (
     <div className="min-w-0 border-l-2 border-amber-400 bg-slate-50 px-3 py-2.5">
       <div className="truncate text-[11px] font-semibold text-slate-600" title={label}>{label}</div>
       <div className="mt-1 flex items-baseline justify-between gap-2">
         <strong className="truncate text-base tabular-nums text-slate-950" title={yen(value)}>{yen(value)}</strong>
-        <span className="shrink-0 text-[10px] text-slate-500">売上比 {formatRate(rateOf(value, sales) || 0)}</span>
+        <span className="shrink-0 text-[10px] text-slate-500">売上比 {formatNullableRate(rateOf(value, sales))}</span>
       </div>
       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 border-t border-slate-200 pt-1.5">
         <CompactDelta label="前月" value={changeRate(value, previous)} />
@@ -770,11 +770,11 @@ function CompletionCell({ label, value, total }: { label: string; value: number;
   );
 }
 
-function FormulaValue({ label, value, positive, result }: { label: string; value: number; positive?: boolean; result?: boolean }) {
+function FormulaValue({ label, value, positive, result }: { label: string; value: number | null; positive?: boolean; result?: boolean }) {
   return (
     <div className={`min-w-0 border-l-2 px-2 ${result ? "border-emerald-500 bg-emerald-50 py-2" : "border-slate-200 py-1"}`}>
       <div className="truncate text-[11px] text-slate-500">{label}</div>
-      <div className={`mt-1 truncate font-bold tabular-nums ${result ? value >= 0 ? "text-emerald-700" : "text-red-700" : positive ? "text-blue-700" : "text-slate-800"}`} title={signedYen(value)}>{signedYen(value)}</div>
+      <div className={`mt-1 truncate font-bold tabular-nums ${result ? (value ?? 0) >= 0 ? "text-emerald-700" : "text-red-700" : positive ? "text-blue-700" : "text-slate-800"}`} title={signedYen(value)}>{signedYen(value)}</div>
     </div>
   );
 }
@@ -820,14 +820,14 @@ function ChannelExpenseCard({ row }: { row: ChannelRow }) {
         <ExpenseCardLine label="経費合計" value={totalExpenses} sales={row.sales} strong />
         <div className="mt-1 flex items-center justify-between gap-2 text-[11px]">
           <span className="font-medium text-slate-600">最終利益</span>
-          <strong className={`tabular-nums ${row.finalProfit >= 0 ? "text-emerald-700" : "text-red-600"}`}>{yen(row.finalProfit)}</strong>
+          <strong className={`tabular-nums ${(row.finalProfit ?? 0) >= 0 ? "text-emerald-700" : "text-red-600"}`}>{yen(row.finalProfit)}</strong>
         </div>
       </div>
     </article>
   );
 }
 
-function ExpenseCardLine({ label, value, sales, strong }: { label: string; value: number; sales: number; strong?: boolean }) {
+function ExpenseCardLine({ label, value, sales, strong }: { label: string; value: number; sales: number | null; strong?: boolean }) {
   return (
     <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2 text-[10px] ${strong ? "font-bold text-slate-900" : "text-slate-600"}`}>
       <span className="truncate" title={label}>{label}</span>
@@ -853,9 +853,9 @@ function DesktopChannelRows({ row, open, onToggle }: { row: ChannelRow; open: bo
         <MoneyCell value={promotions} rate={rateOf(promotions, row.sales)} muted />
         <MoneyCell value={refundEtc} rate={rateOf(refundEtc, row.sales)} muted />
         <MoneyCell value={row.directAdCost} rate={rateOf(row.directAdCost, row.sales)} muted />
-        <td className={`px-3 py-3 text-right font-bold tabular-nums ${row.finalProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+        <td className={`px-3 py-3 text-right font-bold tabular-nums ${(row.finalProfit ?? 0) >= 0 ? "text-emerald-700" : "text-red-700"}`}>
           <div>{yen(row.finalProfit)}</div>
-          <div className="text-[11px]">{row.profitRate.toFixed(1)}%</div>
+          <div className="text-[11px]">{formatNullableRate(row.profitRate)}</div>
         </td>
         <td className="px-3 py-3 text-right">
           <button type="button" onClick={onToggle} className="inline-flex size-9 items-center justify-center rounded border border-slate-200 bg-white" title="内訳を見る">
@@ -877,8 +877,8 @@ function MobileChannel({ row, open, onToggle }: { row: ChannelRow; open: boolean
           <StatusText row={row} />
         </div>
         <div className="text-right">
-          <div className={`font-bold tabular-nums ${row.finalProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{yen(row.finalProfit)}</div>
-          <div className="text-xs text-slate-500">{row.profitRate.toFixed(1)}%</div>
+          <div className={`font-bold tabular-nums ${(row.finalProfit ?? 0) >= 0 ? "text-emerald-700" : "text-red-700"}`}>{yen(row.finalProfit)}</div>
+          <div className="text-xs text-slate-500">{formatNullableRate(row.profitRate)}</div>
         </div>
       </button>
       <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
@@ -940,16 +940,16 @@ function RateHeading({ label, rateLabel }: { label: string; rateLabel: string })
   );
 }
 
-function MoneyCell({ value, rate, muted }: { value: number; rate?: number | null; muted?: boolean }) {
+function MoneyCell({ value, rate, muted }: { value: number | null; rate?: number | null; muted?: boolean }) {
   return (
     <td className={`px-3 py-3 text-right tabular-nums ${muted ? "text-slate-500" : "font-semibold text-slate-900"}`}>
-      <div className="truncate" title={yen(value)}>{value ? yen(value) : "—"}</div>
+      <div className="truncate" title={yen(value)}>{yen(value)}</div>
       {rate != null && <div className="mt-0.5 text-[10px] font-medium text-slate-400">{formatRate(rate)}</div>}
     </td>
   );
 }
 
-function SmallValue({ label, value, rate }: { label: string; value: number; rate?: number | null }) {
+function SmallValue({ label, value, rate }: { label: string; value: number | null; rate?: number | null }) {
   return (
     <div className="min-w-0">
       <div className="truncate text-[11px] text-slate-500">{label}</div>
@@ -959,8 +959,8 @@ function SmallValue({ label, value, rate }: { label: string; value: number; rate
   );
 }
 
-function rateOf(value: number, sales: number) {
-  return sales > 0 ? (value / sales) * 100 : null;
+function rateOf(value: number | null, sales: number | null) {
+  return value !== null && sales !== null && sales > 0 ? (value / sales) * 100 : null;
 }
 
 function feeValue(summary: ComparisonPayload) {
@@ -994,18 +994,19 @@ function authoritativeAdCosts(summary: {
   };
 }
 
-function changeRate(current: number, comparison: number) {
-  return comparison > 0 ? (current - comparison) / comparison * 100 : null;
+function changeRate(current: number | null, comparison: number | null) {
+  return current !== null && comparison !== null && comparison > 0 ? (current - comparison) / comparison * 100 : null;
 }
 
-function metricComparison(current: number, previous: number, previousYear: number) {
+function metricComparison(current: number | null, previous: number | null, previousYear: number | null) {
   return {
     previous: changeRate(current, previous),
     previousYear: changeRate(current, previousYear),
   };
 }
 
-function formatRate(value: number) {
+function formatRate(value: number | null) {
+  if (value === null) return "—";
   return `${value.toFixed(1)}%`;
 }
 
@@ -1013,11 +1014,13 @@ function formatNullableRate(value: number | null) {
   return value == null ? "—" : formatRate(value);
 }
 
-function yen(value: number) {
+function yen(value: number | null) {
+  if (value === null) return "未取得";
   return `¥${Math.round(value || 0).toLocaleString("ja-JP")}`;
 }
 
-function signedYen(value: number) {
+function signedYen(value: number | null) {
+  if (value === null) return "未取得";
   if (!value) return "¥0";
   return `${value > 0 ? "+" : "−"}¥${Math.round(Math.abs(value)).toLocaleString("ja-JP")}`;
 }

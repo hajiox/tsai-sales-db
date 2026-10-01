@@ -1,5 +1,6 @@
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import { assertAnalysisPeriod } from "@/lib/web-sales-analysis/period";
+import { summarizeWebSalesChannel, sumWebSalesAmounts, getWebSalesSavedUnitCost, getWebSalesMissingAmountChannels, adjustWebSalesEcDeductions } from "@/lib/web-sales-amounts";
 
 const CHANNELS = ["amazon", "rakuten", "yahoo", "mercari", "base", "qoo10", "tiktok"] as const;
 type Channel = (typeof CHANNELS)[number];
@@ -32,10 +33,10 @@ type ProductMetric = {
   series: string;
   series_code: number | null;
   quantity: number;
-  sales: number;
-  product_cost: number;
-  product_profit_before_ec: number;
-  margin_rate_before_ec: number;
+  sales: number | null;
+  product_cost: number | null;
+  product_profit_before_ec: number | null;
+  margin_rate_before_ec: number | null;
   previous_month_quantity: number | null;
   previous_year_quantity: number | null;
   month_over_month_quantity_change: number | null;
@@ -58,10 +59,7 @@ export async function buildWebSalesAnalysisPacket(input: {
   const reportMonths = months.map((value) => `${value}-01`);
 
   const [salesResult, productsResult, settlementResult, adsResult, jobsResult] = await Promise.all([
-    supabase
-      .from("web_sales_summary")
-      .select("report_month,product_id,amazon_count,rakuten_count,yahoo_count,mercari_count,base_count,qoo10_count,tiktok_count,base_amount,unit_price,unit_profit_rate,unit_cost_ex_ec")
-      .in("report_month", reportMonths),
+    loadMonthlySales(supabase, reportMonths),
     supabase
       .from("products")
       .select("id,name,series,series_code,price,profit_rate,is_hidden"),
@@ -162,6 +160,8 @@ export async function buildWebSalesAnalysisPacket(input: {
       ],
     },
     metric_definitions: {
+      sales: "EC原本の商品別実売金額。送料・振込額・通常単価の再計算とは区別し、取得できない金額はnullとする",
+      average_unit_price: "EC原本の実売金額 / 販売個数。通常販売単価とは区別する",
       product_profit_before_ec: "売上 - 月次保存商品原価",
       ec_deductions: "返金 + 販売手数料 + 決済手数料 + 店舗負担値引き・クーポン・ポイント + 送料・その他費用 - その他入金",
       final_profit: "売上 - 月次保存商品原価 - EC控除 - 広告費",
@@ -179,9 +179,9 @@ export async function buildWebSalesAnalysisPacket(input: {
         sales_yoy_rate: isInterim ? null : rateChange(targetSummary.totals.sales, previousYearSummary.totals.sales),
         final_profit_mom_rate: isInterim ? null : rateChange(targetSummary.totals.final_profit, previousSummary.totals.final_profit),
         final_profit_yoy_rate: isInterim ? null : rateChange(targetSummary.totals.final_profit, previousYearSummary.totals.final_profit),
-        product_cost_rate_change_mom: isInterim ? null : round(targetSummary.totals.product_cost_rate - previousSummary.totals.product_cost_rate, 1),
-        ec_deduction_rate_change_mom: isInterim ? null : round(targetSummary.totals.ec_deduction_rate - previousSummary.totals.ec_deduction_rate, 1),
-        advertising_rate_change_mom: isInterim ? null : round(targetSummary.totals.advertising_rate - previousSummary.totals.advertising_rate, 1),
+        product_cost_rate_change_mom: isInterim ? null : round(subtract(targetSummary.totals.product_cost_rate, previousSummary.totals.product_cost_rate), 1),
+        ec_deduction_rate_change_mom: isInterim ? null : round(subtract(targetSummary.totals.ec_deduction_rate, previousSummary.totals.ec_deduction_rate), 1),
+        advertising_rate_change_mom: isInterim ? null : round(subtract(targetSummary.totals.advertising_rate, previousSummary.totals.advertising_rate), 1),
       },
     },
     monthly_trend: isInterim ? [] : trend.map(compactTrendMonth),
@@ -192,10 +192,10 @@ export async function buildWebSalesAnalysisPacket(input: {
         ...(isInterim ? compactInterimChannel(channel) : channel),
         previous_month: !isInterim && previous ? compactChannelComparison(previous) : null,
         previous_year: !isInterim && previousYear ? compactChannelComparison(previousYear) : null,
-        sales_mom_rate: isInterim ? null : rateChange(channel.sales, previous?.sales || 0),
-        sales_yoy_rate: isInterim ? null : rateChange(channel.sales, previousYear?.sales || 0),
-        final_profit_mom_rate: isInterim ? null : rateChange(channel.final_profit, previous?.final_profit || 0),
-        final_profit_yoy_rate: isInterim ? null : rateChange(channel.final_profit, previousYear?.final_profit || 0),
+        sales_mom_rate: isInterim ? null : rateChange(channel.sales, previous ? previous.sales : null),
+        sales_yoy_rate: isInterim ? null : rateChange(channel.sales, previousYear ? previousYear.sales : null),
+        final_profit_mom_rate: isInterim ? null : rateChange(channel.final_profit, previous ? previous.final_profit : null),
+        final_profit_yoy_rate: isInterim ? null : rateChange(channel.final_profit, previousYear ? previousYear.final_profit : null),
       };
     }),
     series_details: series.slice(0, 20),
@@ -203,6 +203,19 @@ export async function buildWebSalesAnalysisPacket(input: {
     advertising_performance: advertisingPerformance,
     data_quality: dataQuality,
   };
+}
+
+async function loadMonthlySales(supabase: ReturnType<typeof getWebSalesAutomationServiceClient>, reportMonths: string[]) {
+  const rows: Row[] = [];
+  for (let offset = 0; offset < 20000; offset += 1000) {
+    const result = await supabase.from("web_sales_summary")
+      .select("report_month,product_id,amazon_count,rakuten_count,yahoo_count,mercari_count,base_count,qoo10_count,tiktok_count,amazon_amount,rakuten_amount,yahoo_amount,mercari_amount,base_amount,qoo10_amount,tiktok_amount,unit_price,unit_profit_rate,unit_cost_ex_ec")
+      .in("report_month", reportMonths).order("report_month").order("product_id").range(offset, offset + 999);
+    if (result.error) return result;
+    rows.push(...(result.data || []) as Row[]);
+    if (result.data.length < 1000) return { data: rows, error: null };
+  }
+  throw new Error("月次販売データの取得上限を超えました");
 }
 
 function summarizeMonth(input: {
@@ -215,21 +228,7 @@ function summarizeMonth(input: {
   const settlementMap = new Map(input.settlements.map((row) => [String(row.channel), row]));
   const adTotals = sumAdvertising(input.adRows);
   const channels = CHANNELS.map((channel) => {
-    let quantity = 0;
-    let sales = 0;
-    let productCost = 0;
-    for (const row of input.salesRows) {
-      const count = number(row[COUNT_COLUMNS[channel]]);
-      if (count <= 0) continue;
-      const product = input.products.get(String(row.product_id));
-      const unitPrice = number(row.unit_price ?? product?.price);
-      const cost = row.unit_cost_ex_ec == null
-        ? unitPrice * (1 - number(row.unit_profit_rate ?? product?.profit_rate) / 100)
-        : number(row.unit_cost_ex_ec);
-      quantity += count;
-      sales += channel === "base" && number(row.base_amount) > 0 ? number(row.base_amount) : count * unitPrice;
-      productCost += count * cost;
-    }
+    const { quantity, sales, productCost, amountComplete, costComplete } = summarizeWebSalesChannel(input.salesRows, channel);
     const settlement = settlementMap.get(channel);
     const rawSummary = asRecord(settlement?.raw_summary);
     const refunds = number(settlement?.refunds);
@@ -241,21 +240,30 @@ function summarizeMonth(input: {
     const shippingCosts = number(settlement?.shipping_costs);
     const otherCosts = number(settlement?.other_costs);
     const otherCredits = number(settlement?.other_credits);
-    const ecDeductions = refunds + platformFees + paymentFees + sellerDiscounts
-      + sellerCoupons + sellerPoints + shippingCosts + otherCosts - otherCredits;
+    const deductionAdjustment = adjustWebSalesEcDeductions(channel,
+      refunds + platformFees + paymentFees + sellerDiscounts
+        + sellerCoupons + sellerPoints + shippingCosts + otherCosts - otherCredits,
+      sellerDiscounts);
+    const ecDeductions = deductionAdjustment.ecDeductions;
     const importedAd = channel === "amazon" ? adTotals.amazon
       : channel === "rakuten" ? adTotals.rakuten
         : channel === "yahoo" ? adTotals.yahoo : 0;
     const directAdCost = Math.max(importedAd, number(rawSummary.excluded_ad_costs));
-    const finalProfit = sales - productCost - ecDeductions - directAdCost;
+    const finalProfit = subtract(sales, productCost, ecDeductions, directAdCost);
     return {
       channel,
       label: CHANNEL_LABELS[channel],
       quantity: round(quantity),
       sales: round(sales),
+      amount_complete: amountComplete,
+      cost_complete: costComplete,
       product_cost: round(productCost),
       product_cost_rate: ratio(productCost, sales),
       ec_deductions: round(ecDeductions),
+      ...(deductionAdjustment.sellerDiscountsIncludedInSales != null ? {
+        seller_discounts_included_in_sales: round(deductionAdjustment.sellerDiscountsIncludedInSales),
+        ec_deduction_adjustment_note: deductionAdjustment.ecDeductionAdjustmentNote,
+      } : {}),
       ec_deduction_rate: ratio(ecDeductions, sales),
       direct_ad_cost: round(directAdCost),
       advertising_rate: ratio(directAdCost, sales),
@@ -279,15 +287,15 @@ function summarizeMonth(input: {
     };
   });
   const sharedAdCost = adTotals.google + adTotals.meta + adTotals.other;
-  const totals = channels.reduce((sum, row) => ({
+  const totals = channels.reduce<{quantity: number; sales: number | null; product_cost: number | null; ec_deductions: number; direct_ad_cost: number; final_profit: number | null}>((sum, row) => ({
     quantity: sum.quantity + row.quantity,
-    sales: sum.sales + row.sales,
-    product_cost: sum.product_cost + row.product_cost,
+    sales: add(sum.sales, row.sales),
+    product_cost: add(sum.product_cost, row.product_cost),
     ec_deductions: sum.ec_deductions + row.ec_deductions,
     direct_ad_cost: sum.direct_ad_cost + row.direct_ad_cost,
-    final_profit: sum.final_profit + row.final_profit,
+    final_profit: add(sum.final_profit, row.final_profit),
   }), { quantity: 0, sales: 0, product_cost: 0, ec_deductions: 0, direct_ad_cost: 0, final_profit: 0 });
-  totals.final_profit -= sharedAdCost;
+  totals.final_profit = subtract(totals.final_profit, sharedAdCost);
   const advertisingCost = totals.direct_ad_cost + sharedAdCost;
   return {
     month: input.month,
@@ -325,16 +333,9 @@ function buildProductMetrics(
       CHANNELS.map((channel) => [channel, round(number(row[COUNT_COLUMNS[channel]]))]),
     );
     const quantity = Object.values(channelQuantities).reduce((sum, value) => sum + value, 0);
-    const unitPrice = number(row.unit_price ?? product.price);
-    const unitCost = row.unit_cost_ex_ec == null
-      ? unitPrice * (1 - number(row.unit_profit_rate ?? product.profit_rate) / 100)
-      : number(row.unit_cost_ex_ec);
-    const baseSales = number(row.base_amount);
-    const sales = CHANNELS.reduce((sum, channel) => {
-      const count = channelQuantities[channel];
-      return sum + (channel === "base" && baseSales > 0 ? baseSales : count * unitPrice);
-    }, 0);
-    const productCost = quantity * unitCost;
+    const unitCost = getWebSalesSavedUnitCost(row);
+    const sales = sumWebSalesAmounts(row);
+    const productCost = quantity === 0 ? 0 : unitCost == null ? null : quantity * unitCost;
     const previousQuantity = comparisonsEnabled ? previous.get(productId) || 0 : null;
     const previousYearQuantity = comparisonsEnabled ? previousYear.get(productId) || 0 : null;
     return {
@@ -345,8 +346,8 @@ function buildProductMetrics(
       quantity: round(quantity),
       sales: round(sales),
       product_cost: round(productCost),
-      product_profit_before_ec: round(sales - productCost),
-      margin_rate_before_ec: ratio(sales - productCost, sales),
+      product_profit_before_ec: round(subtract(sales, productCost)),
+      margin_rate_before_ec: ratio(subtract(sales, productCost), sales),
       previous_month_quantity: previousQuantity == null ? null : round(previousQuantity),
       previous_year_quantity: previousYearQuantity == null ? null : round(previousYearQuantity),
       month_over_month_quantity_change: comparisonsEnabled ? rateChange(quantity, previousQuantity || 0) : null,
@@ -360,15 +361,15 @@ function selectImportantProducts(products: ProductMetric[]) {
   const selected = new Map<string, ProductMetric>();
   const add = (rows: ProductMetric[]) => rows.forEach((row) => selected.set(row.product_id, row));
   const active = products.filter((row) => row.quantity > 0);
-  add([...active].sort((a, b) => b.sales - a.sales).slice(0, 18));
+  add([...active].sort((a, b) => (b.sales ?? -Infinity) - (a.sales ?? -Infinity)).slice(0, 18));
   add([...active].sort((a, b) => (b.month_over_month_quantity_change ?? -Infinity) - (a.month_over_month_quantity_change ?? -Infinity)).slice(0, 10));
   add([...active].sort((a, b) => (a.month_over_month_quantity_change ?? Infinity) - (b.month_over_month_quantity_change ?? Infinity)).slice(0, 10));
-  add([...active].sort((a, b) => a.margin_rate_before_ec - b.margin_rate_before_ec).slice(0, 10));
+  add([...active].sort((a, b) => (a.margin_rate_before_ec ?? Infinity) - (b.margin_rate_before_ec ?? Infinity)).slice(0, 10));
   add(products
     .filter((row) => row.quantity === 0 && (row.previous_month_quantity || 0) > 0)
     .sort((a, b) => (b.previous_month_quantity || 0) - (a.previous_month_quantity || 0))
     .slice(0, 8));
-  return [...selected.values()].sort((a, b) => b.sales - a.sales).slice(0, 40);
+  return [...selected.values()].sort((a, b) => (b.sales ?? -Infinity) - (a.sales ?? -Infinity)).slice(0, 40);
 }
 
 function buildSeriesMetrics(products: ProductMetric[], comparisonsEnabled: boolean) {
@@ -389,9 +390,9 @@ function buildSeriesMetrics(products: ProductMetric[], comparisonsEnabled: boole
       product_count: 0,
     };
     current.quantity += product.quantity;
-    current.sales += product.sales;
-    current.product_cost += product.product_cost;
-    current.product_profit_before_ec += product.product_profit_before_ec;
+    current.sales = add(current.sales, product.sales);
+    current.product_cost = add(current.product_cost, product.product_cost);
+    current.product_profit_before_ec = add(current.product_profit_before_ec, product.product_profit_before_ec);
     current.previous_month_quantity = (current.previous_month_quantity || 0) + (product.previous_month_quantity || 0);
     current.previous_year_quantity = (current.previous_year_quantity || 0) + (product.previous_year_quantity || 0);
     current.product_count += 1;
@@ -408,7 +409,7 @@ function buildSeriesMetrics(products: ProductMetric[], comparisonsEnabled: boole
     previous_year_quantity: comparisonsEnabled ? round(row.previous_year_quantity || 0) : null,
     month_over_month_quantity_change: comparisonsEnabled ? rateChange(row.quantity, row.previous_month_quantity || 0) : null,
     year_over_year_quantity_change: comparisonsEnabled ? rateChange(row.quantity, row.previous_year_quantity || 0) : null,
-  })).sort((a, b) => b.sales - a.sales);
+  })).sort((a, b) => (b.sales ?? -Infinity) - (a.sales ?? -Infinity));
 }
 
 async function loadAdvertisingPerformance(
@@ -487,13 +488,14 @@ function buildDataQuality(input: {
     const settlement = settlementMap.get(channel);
     return {
       channel,
+      missing_actual_amount_products: input.salesRows.filter(row => getWebSalesMissingAmountChannels(row).includes(channel)).map(row => String(row.product_id)),
       sales_job: input.latestJobs.get(`web_sales_import:${channel}`)?.status || "not_started",
       settlement_job: input.isInterim ? "not_applicable" : input.latestJobs.get(`ec_profit_import:${channel}`)?.status || "not_started",
       settlement_coverage: input.isInterim ? "not_applicable" : settlement?.coverage_level || "missing",
       settlement_estimated: input.isInterim ? false : asRecord(settlement?.raw_summary).estimated === true,
     };
   });
-  const missingCosts = input.selectedProducts.filter((row) => row.quantity > 0 && row.product_cost <= 0).map((row) => row.name);
+  const missingCosts = input.selectedProducts.filter((row) => row.quantity > 0 && (row.product_cost == null || row.product_cost <= 0)).map((row) => row.name);
   return {
     report_month: input.month,
     analysis_type: input.isInterim ? "half_month" : "monthly",
@@ -555,6 +557,10 @@ function compactChannelComparison(row: ReturnType<typeof summarizeMonth>["channe
     advertising_rate: row.advertising_rate,
     final_profit: row.final_profit,
     final_profit_rate: row.final_profit_rate,
+    ...(row.seller_discounts_included_in_sales != null ? {
+      seller_discounts_included_in_sales: row.seller_discounts_included_in_sales,
+      ec_deduction_adjustment_note: row.ec_deduction_adjustment_note,
+    } : {}),
   };
 }
 
@@ -564,8 +570,8 @@ function compactInterimTotals(row: ReturnType<typeof summarizeMonth>["totals"]) 
     sales: row.sales,
     product_cost: row.product_cost,
     product_cost_rate: row.product_cost_rate,
-    product_profit_before_expenses: round(row.sales - row.product_cost),
-    product_profit_rate_before_expenses: ratio(row.sales - row.product_cost, row.sales),
+    product_profit_before_expenses: round(subtract(row.sales, row.product_cost)),
+    product_profit_rate_before_expenses: ratio(subtract(row.sales, row.product_cost), row.sales),
   };
 }
 
@@ -577,8 +583,8 @@ function compactInterimChannel(row: ReturnType<typeof summarizeMonth>["channels"
     sales: row.sales,
     product_cost: row.product_cost,
     product_cost_rate: row.product_cost_rate,
-    product_profit_before_expenses: round(row.sales - row.product_cost),
-    product_profit_rate_before_expenses: ratio(row.sales - row.product_cost, row.sales),
+    product_profit_before_expenses: round(subtract(row.sales, row.product_cost)),
+    product_profit_rate_before_expenses: ratio(subtract(row.sales, row.product_cost), row.sales),
   };
 }
 
@@ -591,16 +597,25 @@ function number(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function round(value: number, digits = 0) {
+function round(value: number, digits?: number): number;
+function round(value: number | null, digits?: number): number | null;
+function round(value: number | null, digits = 2) {
+  if (value == null) return null;
   const multiplier = 10 ** digits;
   return Math.round((value + Number.EPSILON) * multiplier) / multiplier;
 }
 
-function ratio(numerator: number, denominator: number) {
+function add(left: number | null, right: number | null): number | null { return left == null || right == null ? null : left + right; }
+function subtract(first: number | null, ...rest: (number | null)[]): number | null {
+  return first == null || rest.some(value => value == null) ? null : rest.reduce<number>((total, value) => total - value!, first);
+}
+function ratio(numerator: number | null, denominator: number | null) {
+  if (numerator == null || denominator == null) return null;
   return denominator === 0 ? 0 : round(numerator / denominator * 100, 1);
 }
 
-function rateChange(current: number, previous: number) {
+function rateChange(current: number | null, previous: number | null) {
+  if (current == null || previous == null) return null;
   if (previous === 0) return current === 0 ? 0 : null;
   return round((current - previous) / Math.abs(previous) * 100, 1);
 }

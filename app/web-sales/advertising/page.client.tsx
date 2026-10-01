@@ -24,6 +24,7 @@ import LpTrackingInlineTab from "./lp-tracking-tab"
 import RakutenSearchRequestTab from "./rakuten-search-request-tab"
 import EcProfitOverview from "./ec-profit-overview"
 import WebSalesCodexAnalysis from "@/components/web-sales-codex-analysis"
+import { sumWebSalesAmounts } from "@/lib/web-sales-amounts"
 
 // ===== 型定義 =====
 interface AssetGroupSummary {
@@ -145,7 +146,7 @@ export default function AdvertisingDashboard() {
     // プラットフォーム別広告費
     const [platformCosts, setPlatformCosts] = useState<PlatformCosts>({ google: 0, meta: 0, amazon: 0, rakuten: 0, yahoo: 0, other: 0 })
     const [seriesAdCosts, setSeriesAdCosts] = useState<AdCostRow[]>([])
-    const [seriesSalesMap, setSeriesSalesMap] = useState<Map<number, number>>(new Map())
+    const [seriesSalesMap, setSeriesSalesMap] = useState<Map<number, number | null>>(new Map())
 
     // AI分析
     const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -275,7 +276,7 @@ export default function AdvertisingDashboard() {
             // シリーズ別売上データ取得（web_sales_summary + products JOIN）
             const { data: salesData } = await supabase
                 .from('web_sales_summary')
-                .select('product_id, amazon_count, rakuten_count, yahoo_count, mercari_count, base_count, qoo10_count, tiktok_count, unit_price, base_amount')
+                .select('product_id, amazon_count, rakuten_count, yahoo_count, mercari_count, base_count, qoo10_count, tiktok_count, amazon_amount, rakuten_amount, yahoo_amount, mercari_amount, base_amount, qoo10_amount, tiktok_amount')
                 .eq('report_month', `${month}-01`)
             const { data: productList } = await supabase
                 .from('products')
@@ -284,13 +285,13 @@ export default function AdvertisingDashboard() {
             if (salesData && productList) {
                 const pidToSeries = new Map<string, number>()
                 productList.forEach((p: any) => pidToSeries.set(p.id, p.series_code))
-                const salesMap = new Map<number, number>()
+                const salesMap = new Map<number, number | null>()
                 salesData.forEach((row: any) => {
                     const sc = pidToSeries.get(row.product_id)
                     if (!sc) return
-                    const totalCount = (row.amazon_count || 0) + (row.rakuten_count || 0) + (row.yahoo_count || 0) + (row.mercari_count || 0) + (row.base_count || 0) + (row.qoo10_count || 0) + (row.tiktok_count || 0)
-                    const sales = totalCount * (row.unit_price || 0) + (row.base_amount || 0)
-                    salesMap.set(sc, (salesMap.get(sc) || 0) + sales)
+                    const sales = sumWebSalesAmounts(row)
+                    const previous = salesMap.get(sc)
+                    salesMap.set(sc, previous === null || sales === null ? null : (previous ?? 0) + sales)
                 })
                 setSeriesSalesMap(salesMap)
             }
@@ -860,13 +861,13 @@ export default function AdvertisingDashboard() {
                                     </thead>
                                     <tbody>
                                         {(() => {
-                                            let grandTotalSales = 0
+                                            let grandTotalSales: number | null = 0
                                             const rows = seriesAdCosts.sort((a, b) => ((b.google_cost || 0) + (b.meta_cost || 0) + (b.amazon_cost || 0) + (b.rakuten_cost || 0) + (b.yahoo_cost || 0) + (b.other_cost || 0)) - ((a.google_cost || 0) + (a.meta_cost || 0) + (a.amazon_cost || 0) + (a.rakuten_cost || 0) + (a.yahoo_cost || 0) + (a.other_cost || 0))).map(row => {
                                                 const total = (row.google_cost || 0) + (row.meta_cost || 0) + (row.amazon_cost || 0) + (row.rakuten_cost || 0) + (row.yahoo_cost || 0) + (row.other_cost || 0)
                                                 if (total === 0) return null
-                                                const sales = seriesSalesMap.get(row.series_code) || 0
-                                                grandTotalSales += sales
-                                                const adRatio = sales > 0 ? (total / sales * 100) : 0
+                                                const sales = seriesSalesMap.has(row.series_code) ? seriesSalesMap.get(row.series_code)! : 0
+                                                grandTotalSales = grandTotalSales === null || sales === null ? null : grandTotalSales + sales
+                                                const adRatio = sales !== null && sales > 0 ? (total / sales * 100) : 0
                                                 return (
                                                     <tr key={row.series_code} className="border-t hover:bg-gray-50">
                                                         <td className="px-5 py-2.5 text-sm font-medium">{seriesMap.get(row.series_code) || `シリーズ${row.series_code}`}</td>
@@ -877,13 +878,13 @@ export default function AdvertisingDashboard() {
                                                         <td className="text-right px-4 py-2.5 text-sm text-gray-400">{row.yahoo_cost > 0 ? formatCurrency(row.yahoo_cost) : '—'}</td>
                                                         <td className="text-right px-4 py-2.5 text-sm text-gray-400">{row.other_cost > 0 ? formatCurrency(row.other_cost) : '—'}</td>
                                                         <td className="text-right px-4 py-2.5 text-sm font-bold text-emerald-700">{formatCurrency(total)}</td>
-                                                        <td className="text-right px-4 py-2.5 text-sm font-semibold text-blue-700">{sales > 0 ? formatCurrency(sales) : '—'}</td>
-                                                        <td className={`text-right px-4 py-2.5 text-sm font-medium ${adRatio > 30 ? 'text-red-600' : adRatio > 15 ? 'text-amber-600' : 'text-green-600'}`}>{sales > 0 ? `${adRatio.toFixed(1)}%` : '—'}</td>
+                                                        <td className="text-right px-4 py-2.5 text-sm font-semibold text-blue-700">{sales === null ? '実売額未取得' : formatCurrency(sales)}</td>
+                                                        <td className={`text-right px-4 py-2.5 text-sm font-medium ${adRatio > 30 ? 'text-red-600' : adRatio > 15 ? 'text-amber-600' : 'text-green-600'}`}>{sales !== null && sales > 0 ? `${adRatio.toFixed(1)}%` : '—'}</td>
                                                     </tr>
                                                 )
                                             })
                                             const totalSalesAll = grandTotalSales
-                                            const totalAdRatio = totalSalesAll > 0 ? (totalPlatformCost / totalSalesAll * 100) : 0
+                                            const totalAdRatio = totalSalesAll !== null && totalSalesAll > 0 ? (totalPlatformCost / totalSalesAll * 100) : 0
                                             return (
                                                 <>
                                                     {rows}
@@ -896,8 +897,8 @@ export default function AdvertisingDashboard() {
                                                         <td className="text-right px-4 py-2.5 text-sm">{platformCosts.yahoo > 0 ? formatCurrency(platformCosts.yahoo) : '—'}</td>
                                                         <td className="text-right px-4 py-2.5 text-sm">{platformCosts.other > 0 ? formatCurrency(platformCosts.other) : '—'}</td>
                                                         <td className="text-right px-4 py-2.5 text-sm font-bold text-emerald-700">{formatCurrency(totalPlatformCost)}</td>
-                                                        <td className="text-right px-4 py-2.5 text-sm font-bold text-blue-700">{totalSalesAll > 0 ? formatCurrency(totalSalesAll) : '—'}</td>
-                                                        <td className={`text-right px-4 py-2.5 text-sm font-bold ${totalAdRatio > 30 ? 'text-red-600' : totalAdRatio > 15 ? 'text-amber-600' : 'text-green-600'}`}>{totalSalesAll > 0 ? `${totalAdRatio.toFixed(1)}%` : '—'}</td>
+                                                        <td className="text-right px-4 py-2.5 text-sm font-bold text-blue-700">{totalSalesAll === null ? '実売額未取得' : formatCurrency(totalSalesAll)}</td>
+                                                        <td className={`text-right px-4 py-2.5 text-sm font-bold ${totalAdRatio > 30 ? 'text-red-600' : totalAdRatio > 15 ? 'text-amber-600' : 'text-green-600'}`}>{totalSalesAll !== null && totalSalesAll > 0 ? `${totalAdRatio.toFixed(1)}%` : '—'}</td>
                                                     </tr>
                                                 </>
                                             )

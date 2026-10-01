@@ -136,6 +136,14 @@ export async function POST(request: NextRequest) {
           mercari_count: data.mercariCount,
           base_count: data.baseCount,
           qoo10_count: data.qoo10Count,
+          // This legacy combined CSV contains quantities, not EC actual amounts.
+          // Clear stale amounts instead of reusing them after quantities change.
+          amazon_amount: null,
+          rakuten_amount: null,
+          yahoo_amount: null,
+          mercari_amount: null,
+          base_amount: null,
+          qoo10_amount: null,
           report_date: reportMonth,
           ...(existingData ? {} : {
             unit_price: unitPriceMap.get(productId)?.unit_price || 0,

@@ -3,9 +3,17 @@
 
 import { useEffect, useState } from 'react';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
+import { WEB_SALES_CHANNELS, sumWebSalesAmounts } from '@/lib/web-sales-amounts';
 
 // Supabase RPC関数の戻り値型を明確に定義
 type SupabaseRpcResult = {
+  amazon_amount?: number | null;
+  rakuten_amount?: number | null;
+  yahoo_amount?: number | null;
+  mercari_amount?: number | null;
+  base_amount?: number | null;
+  qoo10_amount?: number | null;
+  tiktok_amount?: number | null;
   id: string;
   product_id: string;
   product_name: string;
@@ -23,6 +31,13 @@ type SupabaseRpcResult = {
 
 // フロント側で使用する型
 type Row = {
+  amazon_amount?: number | null;
+  rakuten_amount?: number | null;
+  yahoo_amount?: number | null;
+  mercari_amount?: number | null;
+  base_amount?: number | null;
+  qoo10_amount?: number | null;
+  tiktok_amount?: number | null;
   id: string | null;
   product_id: string;
   product_name: string;
@@ -87,16 +102,10 @@ const WebSalesInputView = () => {
     try {
       console.log(`Loading data for month: ${month}`);
       
-      const { data, error } = await supabase
-        .rpc('web_sales_full_month', { 
-          target_month: month 
-        })
-        .returns<SupabaseRpcResult[]>();
-
-      if (error) {
-        console.error('Supabase RPC Error:', error);
-        throw new Error(`Supabase RPC Error: ${error.message} (Code: ${error.code})`);
-      }
+      const response = await fetch(`/api/web-sales-data?month=${encodeURIComponent(month)}`, { cache: 'no-store' });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || '販売実績を取得できませんでした');
+      const data: SupabaseRpcResult[] = payload.data || [];
 
       console.log(`Received ${data?.length || 0} rows from RPC function`);
       
@@ -108,6 +117,7 @@ const WebSalesInputView = () => {
       const mapped: Row[] = data.map((item: SupabaseRpcResult, index: number) => {
         try {
           return {
+            ...Object.fromEntries(WEB_SALES_CHANNELS.map(channel => [`${channel}_amount`, item[`${channel}_amount`] ?? null])),
             id: item.id || null,
             product_id: String(item.product_id || ''),
             product_name: String(item.product_name || ''),
@@ -143,7 +153,7 @@ const WebSalesInputView = () => {
   const updateCount = (index: number, field: keyof Row, value: string) => {
     const numValue = parseInt(value) || 0;
     setRows(prev => prev.map((row, i) => 
-      i === index ? { ...row, [field]: numValue } : row
+      i === index ? { ...row, [field]: numValue, [String(field).replace(/_count$/, '_amount')]: Number(row[field] || 0) === numValue ? row[String(field).replace(/_count$/, '_amount') as keyof Row] ?? null : null } : row
     ));
   };
 
@@ -160,6 +170,7 @@ const WebSalesInputView = () => {
           const { error } = await supabase
             .from('web_sales_summary')
             .update({
+              ...Object.fromEntries(WEB_SALES_CHANNELS.map(channel => [`${channel}_amount`, row[`${channel}_amount`] ?? null])),
               amazon_count: row.amazon_count,
               rakuten_count: row.rakuten_count,
               yahoo_count: row.yahoo_count,
@@ -177,7 +188,9 @@ const WebSalesInputView = () => {
             .from('web_sales_summary')
             .insert({
               product_id: row.product_id,
+              report_month: reportDate,
               report_date: reportDate,
+              ...Object.fromEntries(WEB_SALES_CHANNELS.map(channel => [`${channel}_amount`, row[`${channel}_amount`] ?? null])),
               amazon_count: row.amazon_count,
               rakuten_count: row.rakuten_count,
               yahoo_count: row.yahoo_count,
@@ -281,10 +294,9 @@ const WebSalesInputView = () => {
 
   // 合計値を計算
   const grandTotal = rows.reduce((sum, row) => {
-    const totalCount = row.amazon_count + row.rakuten_count + row.yahoo_count + 
-                      row.mercari_count + row.base_count + row.qoo10_count + row.tiktok_count;
-    return sum + (totalCount * row.price);
-  }, 0);
+    const amount = sumWebSalesAmounts(row);
+    return sum === null || amount === null ? null : sum + amount;
+  }, 0 as number | null);
 
   const grandTotalCount = rows.reduce((sum, row) => {
     return sum + row.amazon_count + row.rakuten_count + row.yahoo_count + 
@@ -422,7 +434,7 @@ const WebSalesInputView = () => {
               <span className="font-medium">総販売数:</span> {grandTotalCount.toLocaleString()}個
             </div>
             <div>
-              <span className="font-medium">総売上:</span> ¥{grandTotal.toLocaleString()}
+              <span className="font-medium">総実売額:</span> {grandTotal === null ? '実売額未取得' : `¥${grandTotal.toLocaleString()}`}
             </div>
           </div>
         </div>
@@ -437,7 +449,7 @@ const WebSalesInputView = () => {
                 <th className="border px-1 py-1 text-left w-80">商品名</th>
                 <th className="border px-1 py-1 text-center w-12">シリーズ</th>
                 <th className="border px-1 py-1 text-center w-12">商品番号</th>
-                <th className="border px-1 py-1 text-right w-16">単価</th>
+                <th className="border px-1 py-1 text-right w-16">通常価格</th>
                 <th className="border px-1 py-1 text-center w-16">Amazon</th>
                 <th className="border px-1 py-1 text-center w-16">楽天</th>
                 <th className="border px-1 py-1 text-center w-16">Yahoo!</th>
@@ -467,7 +479,7 @@ const WebSalesInputView = () => {
                     r.base_count +
                     r.qoo10_count +
                     r.tiktok_count;
-                  const total_price = total_count * r.price;
+                  const total_price = sumWebSalesAmounts(r);
                   const rowColor = getSeriesColor(r.series_name);
 
                   return (
@@ -543,7 +555,8 @@ const WebSalesInputView = () => {
                         {total_count}
                       </td>
                       <td className="border px-1 py-0.5 text-right font-semibold">
-                        ¥{total_price.toLocaleString()}
+                        {total_price === null ? '実売額未取得' : `¥${total_price.toLocaleString()}`}
+                        {total_count > 0 && total_price !== null && <div className="text-[10px] font-normal text-gray-500">平均 ¥{(total_price / total_count).toLocaleString('ja-JP', { maximumFractionDigits: 2 })}</div>}
                       </td>
                       <td className="border px-1 py-0.5 text-center">
                         <button

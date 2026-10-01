@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { findBestMatchSimplified } from '@/lib/csvHelpers';
+import { actualSalesAmount } from '@/lib/web-sales-automation/csv-import';
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })(),
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
 
         for (const aggregatedProduct of aggregatedProducts) {
             const { productName, count } = aggregatedProduct;
+            const amount = actualSalesAmount(aggregatedProduct.amount);
 
             if (!isValidString(productName)) {
                 continue;
@@ -69,15 +71,16 @@ export async function POST(request: NextRequest) {
                     matchedProducts.push({
                         mercariTitle: productName,
                         quantity: count,
+                        amount,
                         productInfo: result.product,  // ← product オブジェクト全体
                         isLearned: result.matchType === 'learned'
                     });
                 } else {
-                    unmatchedProducts.push({ mercariTitle: productName, quantity: count });
+                    unmatchedProducts.push({ mercariTitle: productName, quantity: count, amount });
                 }
             } catch (error) {
                 console.error(`マッチング処理エラー (${productName}):`, error);
-                unmatchedProducts.push({ mercariTitle: productName, quantity: count });
+                unmatchedProducts.push({ mercariTitle: productName, quantity: count, amount });
             }
         }
 
@@ -95,6 +98,7 @@ export async function POST(request: NextRequest) {
             summary: {
                 totalProducts: matchedProducts.length + unmatchedProducts.length,
                 totalQuantity: processableQuantity + unmatchQuantity,
+                totalAmount: aggregatedProducts.reduce((sum: number, row: { amount: number }) => sum + actualSalesAmount(row.amount), 0),
                 processableQuantity,
                 blankTitleInfo: { count: 0, quantity: 0 }
             }

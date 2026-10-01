@@ -41,6 +41,13 @@ export async function POST(request: NextRequest) {
                     base_count: 0,
                     qoo10_count: 0,
                     tiktok_count: 0,
+                    amazon_amount: 0,
+                    rakuten_amount: 0,
+                    yahoo_amount: 0,
+                    mercari_amount: 0,
+                    base_amount: 0,
+                    qoo10_amount: 0,
+                    tiktok_amount: 0,
                 })
                 .eq('report_month', reportMonth)
                 .select('id')
@@ -89,7 +96,7 @@ export async function POST(request: NextRequest) {
         // サービスロールキーでRLSをバイパスして更新
         const { data, error, count } = await supabase
             .from('web_sales_summary')
-            .update({ [columnName]: 0 })
+            .update({ [columnName]: 0, [`${channel}_amount`]: 0 })
             .eq('report_month', reportMonth)
             .gt(columnName, 0)
             .select('id')

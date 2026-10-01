@@ -41,17 +41,22 @@ export default function WebSalesCharts({
 }: WebSalesChartsProps) {
   const [chartData, setChartData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchChartData = async () => {
       setIsLoading(true);
+      setError(null);
       try {
         // URLに月数パラメータを追加
         const response = await fetch(`/api/web-sales-chart-data?month=${month}&months=${periodMonths}`);
         const data = await response.json();
+        if (!response.ok || !Array.isArray(data)) throw new Error(data.error || '販売数量の推移を取得できませんでした');
         setChartData(data);
       } catch (error) {
         console.error('チャートデータ取得エラー:', error);
+        setChartData([]);
+        setError(error instanceof Error ? error.message : '推移を取得できませんでした');
       } finally {
         setIsLoading(false);
       }
@@ -88,7 +93,7 @@ export default function WebSalesCharts({
       tooltip: {
         callbacks: {
           label: function(context) {
-            return `総販売数: ${context.parsed.y.toLocaleString()}個`;
+            return `総販売数: ${(context.parsed.y ?? 0).toLocaleString()}個`;
           }
         }
       }
@@ -118,7 +123,7 @@ export default function WebSalesCharts({
         callbacks: {
           label: function(context) {
             const label = context.dataset.label || '';
-            return `${label}: ${context.parsed.y.toLocaleString()}個`;
+            return `${label}: ${(context.parsed.y ?? 0).toLocaleString()}個`;
           }
         }
       }
@@ -180,12 +185,13 @@ export default function WebSalesCharts({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {error && <p className="col-span-full text-sm text-amber-700">{error}</p>}
       <div className="p-4 border rounded-lg shadow bg-white">
-        <h2 className="text-lg font-semibold mb-4">📊 総売上推移 (過去{periodMonths}ヶ月)</h2>
+        <h2 className="text-lg font-semibold mb-4">📊 販売数量推移 (過去{periodMonths}ヶ月)</h2>
         <Bar options={totalSalesOptions} data={totalSalesData} />
       </div>
       <div className="p-4 border rounded-lg shadow bg-white">
-        <h2 className="text-lg font-semibold mb-4">📈 ECサイト別売上 (過去{periodMonths}ヶ月)</h2>
+        <h2 className="text-lg font-semibold mb-4">📈 ECサイト別販売数量 (過去{periodMonths}ヶ月)</h2>
         <Line options={channelSalesOptions} data={channelSalesData} />
       </div>
     </div>

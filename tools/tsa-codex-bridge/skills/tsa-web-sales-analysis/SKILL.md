@@ -39,6 +39,8 @@ Always fill `floor_staff_summary` in concise Japanese for staff on the NEW brand
 
 ## Business Rules
 
+- `sales` is the saved EC report amount, not catalog unit price multiplied by quantity. Average realized unit price is reported amount divided by quantity; it is not the catalog price.
+- A null sales/cost/rate means unconfirmed, not zero. Do not reconstruct missing revenue or compare a corrected actual month with a prior month whose actual revenue is unavailable. Quantity comparisons remain usable when complete.
 - Historical product cost is the monthly saved cost in the packet. Do not replace it with a current master price.
 - `final_profit = sales - product_cost - ec_deductions - advertising_cost`.
 - Marketplace-funded coupons or discounts are not TSA expenses. Do not deduct them again.

@@ -90,7 +90,7 @@ export default function TiktokCsvImportModal({
           productName: '',
           quantity: item.count,
           saleDate: item.saleDate || '',
-          amount: item.amount || 0,
+          amount: item.amount,
           isLearned: false
         })),
         ...learned.map((item: any) => ({
@@ -99,7 +99,7 @@ export default function TiktokCsvImportModal({
           productName: products.find(p => p.id === item.productId)?.name || '',
           quantity: item.count,
           saleDate: item.saleDate || '',
-          amount: item.amount || 0,
+          amount: item.amount,
           isLearned: false
         })),
       ];
@@ -216,13 +216,13 @@ export default function TiktokCsvImportModal({
         count: item.quantity,
         saleDate: item.saleDate || `${saleMonth}-01`,
         productId: item.productId,
-        amount: item.amount || 0
+        amount: item.amount
       }));
 
       const response = await fetch('/api/import/tiktok-confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items, expectedQuantity: allMappings.reduce((sum, item) => sum + item.quantity, 0), expectedAmount: allMappings.reduce((sum, item) => sum + item.amount, 0) }),
       });
 
       const result = await response.json();

@@ -13,10 +13,10 @@ export type ChannelCode = 'WEB' | 'WHOLESALE' | 'STORE' | 'SHOKU';
 
 export interface MonthlyKpiData {
   month: string; // "YYYY-MM-01"
-  actual: number; // 実績
+  actual: number | null; // 実績。WEBの実売額未取得はNULL
   target: number; // 目標
-  lastYear: number; // 前年実績
-  twoYearsAgo: number; // 前々年実績
+  lastYear: number | null; // 前年実績
+  twoYearsAgo: number | null; // 前々年実績
 }
 
 export interface KpiAnnualPlan {
@@ -104,7 +104,7 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
     ]);
 
     // Lookup Maps - Sales
-    const webMap = new Map(webRows.map(r => [r.month, Number(r.amount)]));
+    const webMap = new Map(webRows.map(r => [r.month, r.amount === null ? null : Number(r.amount)]));
     const wholesaleMap = new Map(wholesaleRows.map(r => [r.month, Number(r.amount)]));
     const storeMap = new Map(storeRows.map(r => [r.month, Number(r.amount)]));
     const shokuMap = new Map(shokuRows.map(r => [r.month, Number(r.amount)]));
@@ -140,7 +140,7 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
 
     const getAmount = (channel: ChannelCode, month: string) => {
       switch (channel) {
-        case 'WEB': return webMap.get(month) || 0;
+        case 'WEB': return webMap.has(month) ? webMap.get(month)! : 0;
         case 'WHOLESALE': return wholesaleMap.get(month) || 0;
         case 'STORE': return storeMap.get(month) || 0;
         case 'SHOKU': return shokuMap.get(month) || 0;
@@ -178,10 +178,10 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
       const channelData = channels.map(c => resultChannels[c][i]);
       return {
         month,
-        actual: channelData.reduce((sum, d) => sum + d.actual, 0),
+        actual: channelData.some(d => d.actual === null) ? null : channelData.reduce((sum, d) => sum + d.actual, 0),
         target: channelData.reduce((sum, d) => sum + d.target, 0),
-        lastYear: channelData.reduce((sum, d) => sum + d.lastYear, 0),
-        twoYearsAgo: channelData.reduce((sum, d) => sum + d.twoYearsAgo, 0),
+        lastYear: channelData.some(d => d.lastYear === null) ? null : channelData.reduce((sum, d) => sum + d.lastYear, 0),
+        twoYearsAgo: channelData.some(d => d.twoYearsAgo === null) ? null : channelData.reduce((sum, d) => sum + d.twoYearsAgo, 0),
       };
     });
 
@@ -248,7 +248,7 @@ export async function getAvailableKpiFiscalYears(currentFiscalYear: number): Pro
     const salesRows = [...webRows, ...wholesaleRows, ...storeRows, ...shokuRows];
 
     salesRows.forEach((row) => {
-      if (Number(row.amount) === 0) return;
+      if (row.amount !== null && Number(row.amount) === 0) return;
       const fiscalYear = getFiscalYearFromMonth(row.month);
       if (fiscalYear !== null) years.add(fiscalYear);
     });
@@ -296,7 +296,7 @@ async function fetchWebSalesRPC(start: string, end: string) {
     end_date: end
   });
   if (error) throw error;
-  return (data as { month: string, amount: number }[]) || [];
+  return (data as { month: string, amount: number | null }[]) || [];
 }
 
 async function fetchWholesaleSalesRPC(start: string, end: string) {

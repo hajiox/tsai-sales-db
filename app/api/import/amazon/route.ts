@@ -187,7 +187,10 @@ export async function POST(request: NextRequest) {
           .upsert({
             product_id: result.productId,
             report_month: currentMonth,
-            amazon_count: result.quantity
+            amazon_count: result.quantity,
+            // This legacy quantity-only path cannot preserve a prior actual
+            // amount after changing its count. Use the reviewed CSV screen.
+            amazon_amount: null
           }, {
             onConflict: 'product_id,report_month',
             ignoreDuplicates: false

@@ -56,14 +56,21 @@ export async function POST(request: Request) {
             yahoo_count: 0,
             mercari_count: 0,
             base_count: 0,
-            qoo10_count: 0
+            qoo10_count: 0,
+            amazon_amount: null,
+            rakuten_amount: null,
+            yahoo_amount: null,
+            mercari_amount: null,
+            base_amount: null,
+            qoo10_amount: null
           });
         }
 
         const data = aggregatedData.get(key);
 
         // 販売数を集約
-        for (const [ecSite, quantity] of Object.entries(result.salesData)) {
+        for (const [ecSite, rawQuantity] of Object.entries(result.salesData)) {
+          const quantity = Number(rawQuantity);
           const dbColumn = ecSiteMapping[ecSite];
           if (dbColumn && quantity > 0) {
             data[dbColumn] += quantity;

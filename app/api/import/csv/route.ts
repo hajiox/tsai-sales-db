@@ -240,6 +240,8 @@ export async function POST(req: NextRequest) {
          price: match?.price || item.price,
          similarity: match?.similarity || 0,
          quantity: quantity,
+         amount: null,
+         amountStatus: 'not_obtained',
          ecSite: ecSite,
          reportMonth: reportMonth
        });

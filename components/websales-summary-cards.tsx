@@ -19,8 +19,8 @@ const SITES = [
 // 型定義
 type Totals = Record<string, {
   count: number;
-  amount: number;
-  profit: number;
+  amount: number | null;
+  profit: number | null;
   platformFees: number;
   paymentFees: number;
   ecFees: number;
@@ -28,33 +28,33 @@ type Totals = Record<string, {
   promotions: number;
   refundEtc: number;
   adCost: number;
-  finalProfit: number;
+  finalProfit: number | null;
 }>
 type SeriesSummary = {
   seriesName: string;
   seriesCode: number;
   count: number;
-  sales: number;
-  profit: number;
-  ecFees: number;
-  ecDeductions: number;
-  adCost: number;
-  finalProfit: number;
+  sales: number | null;
+  profit: number | null;
+  ecFees: number | null;
+  ecDeductions: number | null;
+  adCost: number | null;
+  finalProfit: number | null;
 }
 type TrendData = {
   month_label: string;
-  sales: number;
-  profit: number;
+  sales: number | null;
+  profit: number | null;
   ad_cost: number;
-  final_profit: number;
+  final_profit: number | null;
 }
 type EcProfitSummary = {
   channels: Array<{
     channel: string;
     label: string;
     quantity: number;
-    sales: number;
-    productProfit: number;
+    sales: number | null;
+    productProfit: number | null;
     platformFees: number;
     paymentFees: number;
     sellerDiscounts: number;
@@ -66,21 +66,21 @@ type EcProfitSummary = {
     otherCredits: number;
     ecDeductions: number;
     directAdCost: number;
-    finalProfit: number;
+    finalProfit: number | null;
   }>;
   series: Array<{
     seriesName: string;
     seriesCode: number | null;
     count: number;
-    sales: number;
-    productProfit: number;
-    ecFees: number;
-    ecDeductions: number;
-    adCost: number;
-    finalProfit: number;
+    sales: number | null;
+    productProfit: number | null;
+    ecFees: number | null;
+    ecDeductions: number | null;
+    adCost: number | null;
+    finalProfit: number | null;
   }>;
   totals: {
-    sales: number;
+    sales: number | null;
     platformFees: number;
     paymentFees: number;
     sellerDiscounts: number;
@@ -92,7 +92,7 @@ type EcProfitSummary = {
     otherCredits: number;
     ecDeductions: number;
     adCost: number;
-    finalProfit: number;
+    finalProfit: number | null;
   };
   comparisons: {
     previousMonth: ComparisonSummary;
@@ -111,7 +111,7 @@ type WebSalesSummaryCardsProps = {
   refreshTrigger?: number;
   viewMode?: 'month' | 'period';
   periodMonths?: number;
-  onTargetDataReady?: (data: { target: number; sales: number }) => void;
+  onTargetDataReady?: (data: { target: number; sales: number | null }) => void;
 };
 
 export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode = 'month', periodMonths = 6, onTargetDataReady }: WebSalesSummaryCardsProps) {
@@ -120,7 +120,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
   const [seriesSummary, setSeriesSummary] = useState<SeriesSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [rpcTotalAdCost, setRpcTotalAdCost] = useState(0);
-  const [rpcTotalFinalProfit, setRpcTotalFinalProfit] = useState(0);
+  const [rpcTotalFinalProfit, setRpcTotalFinalProfit] = useState<number | null>(0);
   const [profitSummary, setProfitSummary] = useState<EcProfitSummary | null>(null);
   const [webTarget, setWebTarget] = useState(0);
   const [lastYearTotals, setLastYearTotals] = useState<Totals | null>(null);
@@ -165,10 +165,10 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
 
       const formattedData = data.map((d: any) => ({
         month_label: d.month_label,
-        sales: d.sales ?? d.series_amount ?? 0,
-        profit: d.profit_amount ?? 0,
+        sales: d.sales === null || d.series_amount === null ? null : d.sales ?? d.series_amount ?? 0,
+        profit: d.profit_amount ?? null,
         ad_cost: d.ad_cost ?? 0,
-        final_profit: d.final_profit ?? 0,
+        final_profit: d.sales === null || d.final_profit === null ? null : d.final_profit ?? 0,
       }));
 
       setTrendData(prev => ({ ...prev, [trendKey]: formattedData }));
@@ -193,6 +193,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
             body: JSON.stringify({ base_month: month, period_months: periodMonths })
           });
           const periodData = await res.json();
+          if (!res.ok || !periodData.totals) throw new Error(periodData.error || '期間実績を取得できませんでした');
           
           if (periodData.totals) {
             const siteTotals: Totals = {};
@@ -200,7 +201,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
               const ch = s.key;
               siteTotals[ch] = {
                 count: periodData.totals[ch]?.count ?? 0,
-                amount: periodData.totals[ch]?.amount ?? 0,
+                amount: periodData.totals[ch]?.amount === null ? null : periodData.totals[ch]?.amount ?? 0,
                 profit: 0, // 期間集計では現在未対応
                 platformFees: 0,
                 paymentFees: 0,
@@ -266,8 +267,8 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
             const refundEtc = (row?.refunds ?? 0) + (row?.shippingCosts ?? 0) + (row?.otherCosts ?? 0) - (row?.otherCredits ?? 0);
             siteTotals[s.key] = {
               count: row?.quantity ?? 0,
-              amount: row?.sales ?? 0,
-              profit: row?.productProfit ?? 0,
+              amount: row?.sales === null ? null : row?.sales ?? 0,
+              profit: row?.productProfit ?? null,
               platformFees: row?.platformFees ?? 0,
               paymentFees: row?.paymentFees ?? 0,
               ecFees: (row?.platformFees ?? 0) + (row?.paymentFees ?? 0),
@@ -275,11 +276,11 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
               promotions,
               refundEtc,
               adCost: row?.directAdCost ?? 0,
-              finalProfit: row?.finalProfit ?? 0,
+              finalProfit: row?.sales === null || row?.finalProfit === null ? null : row?.finalProfit ?? 0,
             };
           });
           setRpcTotalAdCost(profitPayload.totals.adCost ?? 0);
-          setRpcTotalFinalProfit(profitPayload.totals.finalProfit ?? 0);
+          setRpcTotalFinalProfit(profitPayload.totals.sales === null || profitPayload.totals.finalProfit === null ? null : profitPayload.totals.finalProfit ?? 0);
           setTotals(siteTotals);
 
           setLastYearTotals(comparisonToTotals(profitPayload.comparisons.previousYear));
@@ -305,6 +306,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
         setLastYearTotals(null);
         setSeriesSummary([]);
         setProfitSummary(null);
+        setRpcTotalFinalProfit(null);
       } finally {
         setLoading(false);
       }
@@ -314,6 +316,9 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
   }, [month, refreshTrigger, viewMode, periodMonths]);
 
   const formatNumber = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
+  const money = (n: number | null) => n === null ? '実売額未取得' : `¥${formatNumber(n)}`;
+  const expenseMoney = (n: number | null) => n === null ? '未確認' : `¥${formatNumber(n)}`;
+  const totalAmount = (values: Array<number | null>) => values.some(value => value === null) ? null : values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
 
   const handleMouseEnter = (item: HoveredItem, event: React.MouseEvent<HTMLDivElement>) => {
     setHoveredItem(item);
@@ -331,20 +336,20 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
   const handleMouseLeave = () => setHoveredItem(null);
 
   const grandTotalCount = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.count ?? 0), 0) : 0;
-  const grandTotalSales = totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.amount ?? 0), 0) : 0;
+  const grandTotalSales = totals ? totalAmount(SITES.map(s => totals[s.key]?.amount ?? null)) : 0;
   const grandTotalAdCost = viewMode === 'month'
     ? rpcTotalAdCost
     : (totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.adCost ?? 0), 0) : 0);
   const grandTotalFinalProfit = viewMode === 'month'
     ? rpcTotalFinalProfit
-    : (totals ? SITES.reduce((sum, s) => sum + (totals[s.key]?.finalProfit ?? 0), 0) : 0);
+    : (totals ? totalAmount(SITES.map(s => totals[s.key]?.finalProfit ?? null)) : 0);
   const grandTotalEcFees = profitSummary
     ? profitSummary.totals.platformFees + profitSummary.totals.paymentFees
     : 0;
   const grandTotalEcDeductions = profitSummary?.totals.ecDeductions ?? 0;
-  const grandTotalSalesLastYear = lastYearTotals ? SITES.reduce((sum, s) => sum + (lastYearTotals[s.key]?.amount ?? 0), 0) : 0;
+  const grandTotalSalesLastYear = lastYearTotals ? totalAmount(SITES.map(s => lastYearTotals[s.key]?.amount ?? null)) : 0;
   // 目標データを親コンポーネントに通知（前回値と比較して変化時のみ）
-  const prevTargetRef = useRef<{ target: number; sales: number }>({ target: 0, sales: 0 });
+  const prevTargetRef = useRef<{ target: number; sales: number | null }>({ target: 0, sales: 0 });
   useEffect(() => {
     if (onTargetDataReady && viewMode === 'month') {
       const prev = prevTargetRef.current;
@@ -378,7 +383,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
           <div>
             <CardHeader className="py-2 px-3"><CardTitle className="text-xs">総合計</CardTitle></CardHeader>
             <CardContent className="space-y-0.5 py-1 px-3">
-              <div className="text-xl font-bold">¥{formatNumber(grandTotalSales)}</div>
+              <div className="text-xl font-bold">{money(grandTotalSales)}</div>
               <div className="text-xs text-gray-600">{formatNumber(grandTotalCount)}個</div>
               {viewMode === 'month' && (
                 <>
@@ -386,12 +391,12 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
                   <div className="text-xs text-orange-700">EC控除計: ¥{formatNumber(grandTotalEcDeductions)}</div>
                   <div className="text-[10px] font-semibold text-orange-700">売上比 {formatPercent(grandTotalEcDeductions, grandTotalSales)}</div>
                   <div className="text-xs text-red-600">広告費: ¥{formatNumber(grandTotalAdCost)}</div>
-                  <div className="text-xs font-bold text-green-600">利益: ¥{formatNumber(grandTotalFinalProfit)}</div>
+                  <div className="text-xs font-bold text-green-600">利益: {grandTotalFinalProfit === null ? '利益未確定' : money(grandTotalFinalProfit)}</div>
                 </>
               )}
             </CardContent>
           </div>
-          {grandTotalSalesLastYear > 0 && (
+          {grandTotalSales !== null && grandTotalSalesLastYear !== null && grandTotalSalesLastYear > 0 && (
             <div className="px-3 pb-2">
               <div className="pt-1 mt-1 border-t border-gray-300">
                 <div className="text-[10px] text-gray-500">前年度売上: ¥{formatNumber(grandTotalSalesLastYear)}</div>
@@ -404,8 +409,8 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
         </Card>
 
         {SITES.map((s) => {
-          const currentSales = totals ? (totals[s.key]?.amount ?? 0) : 0;
-          const lySales = lastYearTotals ? (lastYearTotals[s.key]?.amount ?? 0) : 0;
+          const currentSales = totals ? totals[s.key]?.amount ?? null : 0;
+          const lySales = lastYearTotals ? lastYearTotals[s.key]?.amount ?? null : 0;
           
           return (
           <Card
@@ -417,7 +422,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
             <div>
               <CardHeader className="py-2 px-3"><CardTitle className="text-xs">{s.name}</CardTitle></CardHeader>
               <CardContent className="space-y-0.5 py-1 px-3">
-                <div className="text-base font-bold">¥{formatNumber(currentSales)}</div>
+                <div className="text-base font-bold">{money(currentSales)}</div>
                 <div className="text-[11px] text-gray-500">{totals ? formatNumber(totals[s.key]?.count ?? 0) : "-"}個</div>
                 {viewMode === 'month' && (
                   <>
@@ -429,12 +434,12 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
                       売上比 {totals ? formatPercent(totals[s.key]?.ecDeductions ?? 0, currentSales) : "-"}
                     </div>
                     <div className="text-[11px] text-red-600">広告: ¥{totals ? formatNumber(totals[s.key]?.adCost ?? 0) : "-"}</div>
-                    <div className="text-[11px] font-bold text-green-600">利益: ¥{totals ? formatNumber(totals[s.key]?.finalProfit ?? 0) : "-"}</div>
+                    <div className="text-[11px] font-bold text-green-600">利益: {totals?.[s.key]?.finalProfit == null ? '利益未確定' : money(totals[s.key].finalProfit)}</div>
                   </>
                 )}
               </CardContent>
             </div>
-            {lySales > 0 && (
+            {currentSales !== null && lySales !== null && lySales > 0 && (
               <div className="px-3 pb-2">
                 <div className={`pt-1 mt-1 border-t ${s.borderColor} opacity-60`}>
                   <div className="text-[10px] text-gray-500">前年売上: ¥{formatNumber(lySales)}</div>
@@ -463,14 +468,14 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
             >
               <h4 className="text-xs font-semibold truncate" title={series.seriesName}>{series.seriesName}</h4>
               <p className="text-sm font-bold">{formatNumber(series.count)}個</p>
-              <p className="text-xs text-gray-500">売上: ¥{formatNumber(series.sales)}</p>
+              <p className="text-xs text-gray-500">実売額: {money(series.sales)}</p>
               {viewMode === 'month' && (
                 <>
-                  <p className="text-[11px] text-amber-700">手数料(按分): ¥{formatNumber(series.ecFees)}</p>
-                  <p className="text-[11px] text-orange-700">EC控除(按分): ¥{formatNumber(series.ecDeductions)}</p>
+                  <p className="text-[11px] text-amber-700">手数料(按分): {expenseMoney(series.ecFees)}</p>
+                  <p className="text-[11px] text-orange-700">EC控除(按分): {expenseMoney(series.ecDeductions)}</p>
                   <p className="text-[10px] font-semibold text-orange-700">EC控除率: {formatPercent(series.ecDeductions, series.sales)}</p>
-                  <p className="text-xs text-red-600">広告: ¥{formatNumber(series.adCost)}</p>
-                  <p className="text-xs font-bold text-green-600">利益: ¥{formatNumber(series.finalProfit)}</p>
+                  <p className="text-xs text-red-600">広告: {expenseMoney(series.adCost)}</p>
+                  <p className="text-xs font-bold text-green-600">利益: {series.finalProfit === null ? '利益未確定' : money(series.finalProfit)}</p>
                 </>
               )}
             </div>
@@ -498,8 +503,8 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
           ) : trendData[currentTrendKey] && trendData[currentTrendKey].length > 0 ? (
             <div className="space-y-1.5">
               {trendData[currentTrendKey].map((trend, index) => {
-                const maxSales = Math.max(...trendData[currentTrendKey].map(t => t.sales));
-                const barWidth = maxSales > 0 ? (trend.sales / maxSales) * 100 : 0;
+                const maxSales = Math.max(...trendData[currentTrendKey].map(t => t.sales ?? 0));
+                const barWidth = maxSales > 0 && trend.sales !== null ? (trend.sales / maxSales) * 100 : 0;
 
                 return (
                   <div key={index} className="space-y-1">
@@ -512,12 +517,12 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
                         ></div>
                       </div>
                       <div className="text-right text-gray-800 font-mono text-xs">
-                        <span>¥{formatNumber(trend.sales)}</span>
+                        <span>{money(trend.sales)}</span>
                       </div>
                     </div>
                     <div className="text-xs pl-[100px] space-y-0.5">
                       <div className="text-gray-600">広告費: ¥{formatNumber(trend.ad_cost)}</div>
-                      <div className="text-green-600 font-semibold">利益: ¥{formatNumber(trend.final_profit)}</div>
+                      <div className="text-green-600 font-semibold">利益: {trend.final_profit === null ? '利益未確定' : money(trend.final_profit)}</div>
                     </div>
                   </div>
                 );
@@ -537,8 +542,8 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
 function emptySiteTotal(): Totals[string] {
   return {
     count: 0,
-    amount: 0,
-    profit: 0,
+    amount: null,
+    profit: null,
     platformFees: 0,
     paymentFees: 0,
     ecFees: 0,
@@ -546,7 +551,7 @@ function emptySiteTotal(): Totals[string] {
     promotions: 0,
     refundEtc: 0,
     adCost: 0,
-    finalProfit: 0,
+    finalProfit: null,
   };
 }
 
@@ -558,8 +563,8 @@ function comparisonToTotals(summary: ComparisonSummary | null | undefined): Tota
     const row = byChannel.get(site.key);
     result[site.key] = {
       count: row?.quantity ?? 0,
-      amount: row?.sales ?? 0,
-      profit: row?.productProfit ?? 0,
+      amount: row?.sales === null ? null : row?.sales ?? 0,
+      profit: row?.productProfit ?? null,
       platformFees: row?.platformFees ?? 0,
       paymentFees: row?.paymentFees ?? 0,
       ecFees: (row?.platformFees ?? 0) + (row?.paymentFees ?? 0),
@@ -567,12 +572,12 @@ function comparisonToTotals(summary: ComparisonSummary | null | undefined): Tota
       promotions: (row?.sellerDiscounts ?? 0) + (row?.sellerCoupons ?? 0) + (row?.sellerPoints ?? 0),
       refundEtc: (row?.refunds ?? 0) + (row?.shippingCosts ?? 0) + (row?.otherCosts ?? 0) - (row?.otherCredits ?? 0),
       adCost: row?.directAdCost ?? 0,
-      finalProfit: row?.finalProfit ?? 0,
+      finalProfit: row?.sales === null || row?.finalProfit === null ? null : row?.finalProfit ?? 0,
     };
   });
   return result;
 }
 
-function formatPercent(value: number, base: number) {
-  return base > 0 ? `${(value / base * 100).toFixed(1)}%` : '—';
+function formatPercent(value: number | null, base: number | null) {
+  return value !== null && base !== null && base > 0 ? `${(value / base * 100).toFixed(1)}%` : '—';
 }

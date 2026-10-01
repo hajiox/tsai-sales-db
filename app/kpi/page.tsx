@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import KpiPageClient from "@/components/kpi/KpiPageClient";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { sumKpiAmounts, kpiRatio } from "@/lib/kpi-amounts";
 // Helper to calculate current FY
 function getCurrentFiscalYear() {
   const now = new Date();
@@ -38,10 +39,10 @@ export default async function KpiPage({
   ).sort((a, b) => b - a);
 
   // Calculate annual summary metrics
-  const totalActual = data.total.reduce((sum, m) => sum + m.actual, 0);
+  const totalActual = sumKpiAmounts(data.total.map(m => m.actual));
   const totalTarget = data.total.reduce((sum, m) => sum + m.target, 0);
-  const totalLastYear = data.total.reduce((sum, m) => sum + m.lastYear, 0);
-  const totalTwoYearsAgo = data.total.reduce((sum, m) => sum + m.twoYearsAgo, 0);
+  const totalLastYear = sumKpiAmounts(data.total.map(m => m.lastYear));
+  const totalTwoYearsAgo = sumKpiAmounts(data.total.map(m => m.twoYearsAgo));
 
   // Elapsed month calculation for pace-adjusted achievement rate
   const now = new Date();
@@ -49,21 +50,21 @@ export default async function KpiPage({
 
   let elapsedMonthCount = 0;
   let elapsedTarget = 0;
-  let elapsedLastYear = 0;
+  let elapsedLastYear: number | null = 0;
   data.total.forEach(m => {
     if (m.month < currentYearMonth) {
       elapsedMonthCount++;
       elapsedTarget += m.target;
-      elapsedLastYear += m.lastYear;
+      elapsedLastYear = elapsedLastYear === null || m.lastYear === null ? null : elapsedLastYear + m.lastYear;
     }
   });
 
   const remainingMonths = 12 - elapsedMonthCount;
-  const achievementRate = elapsedTarget > 0 ? (totalActual / elapsedTarget) * 100 : 0;
-  const yoyGrowthIds = elapsedLastYear > 0 ? ((totalActual - elapsedLastYear) / elapsedLastYear) * 100 : 0;
+  const achievementRate = kpiRatio(totalActual, elapsedTarget);
+  const yoyGrowthIds = elapsedLastYear !== null && totalActual !== null ? elapsedLastYear > 0 ? ((totalActual - elapsedLastYear) / elapsedLastYear) * 100 : 0 : null;
   const fiscalStartYear = fiscalYear - 1;
   const fiscalPeriodLabel = `${fiscalStartYear}年8月 - ${fiscalYear}年7月`;
-  const completedMonthCount = data.total.filter((month) => month.actual > 0).length;
+  const completedMonthCount = data.total.filter((month) => month.actual !== null && month.actual > 0).length;
   const remainingInputMonths = Math.max(0, 12 - completedMonthCount);
   const progressPercent = Math.min(100, Math.max(0, (completedMonthCount / 12) * 100));
 

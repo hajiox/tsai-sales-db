@@ -48,6 +48,7 @@ export default function MercariCsvImportModal({
     productId: string;
     productName: string;
     quantity: number;
+    amount: number;
     isLearned?: boolean;
   }>>([]);
   const [savingMapping, setSavingMapping] = useState<string | null>(null);
@@ -74,6 +75,7 @@ export default function MercariCsvImportModal({
           productId: '',
           productName: '',
           quantity: u.quantity,
+          amount: u.amount,
           isLearned: false
         })),
         // productInfoがある場合とない場合の両方に対応
@@ -82,6 +84,7 @@ export default function MercariCsvImportModal({
           productId: m.productId || m.productInfo?.id || '',
           productName: m.productName || m.productInfo?.name || '',
           quantity: m.quantity,
+          amount: m.amount,
           isLearned: false
         })),
       ];
@@ -221,7 +224,8 @@ export default function MercariCsvImportModal({
             productInfo: {
               id: m.productId
             },
-            quantity: m.quantity
+            quantity: m.quantity,
+            amount: m.amount
           })),
           newMappings: [],
         };
@@ -237,7 +241,7 @@ export default function MercariCsvImportModal({
       const response = await fetch('/api/import/mercari-confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestData),
+        body: JSON.stringify({ ...requestData, expectedQuantity: parseResult.summary.totalQuantity, expectedAmount: parseResult.summary.totalAmount }),
       });
 
       const result = await response.json();

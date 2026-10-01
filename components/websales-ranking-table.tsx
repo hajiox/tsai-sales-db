@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useRef } from "react"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
+import { resolveWebSalesAmount, sumWebSalesAmounts } from "@/lib/web-sales-amounts"
 
 interface Props {
   month: string
@@ -12,13 +13,13 @@ interface Row {
   product_id: string
   product_name: string
   total_count: number
-  total_amount: number
+  total_amount: number | null
   channel_counts: Record<EcChannel, number>
-  channel_amounts: Record<EcChannel, number>
+  channel_amounts: Record<EcChannel, number | null>
 }
 
 type SortType = 'count' | 'amount';
-type TrendData = { month_label: string; sales: number; }
+type TrendData = { month_label: string; sales: number | null; }
 const EC_CHANNELS = ['amazon', 'rakuten', 'yahoo', 'mercari', 'base', 'qoo10', 'tiktok'] as const
 type EcChannel = typeof EC_CHANNELS[number]
 type RankingChannel = 'total' | EcChannel
@@ -58,14 +59,10 @@ export default function WebSalesRankingTable({ month }: Props) {
       setLoading(true)
 
       try {
-        const { data, error } = await supabase.rpc("web_sales_full_month", {
-          target_month: month
-        })
-
-        if (error) {
-          console.error("🚨 ランキングデータ取得エラー:", error)
-          return
-        }
+        const response = await fetch(`/api/web-sales-data?month=${encodeURIComponent(month)}`, { cache: 'no-store' })
+        const payload = await response.json()
+        if (!response.ok) throw new Error(payload.error || 'ランキングデータ取得失敗')
+        const data = payload.data || []
 
         if (!data || data.length === 0) {
           setOriginalData([])
@@ -78,17 +75,16 @@ export default function WebSalesRankingTable({ month }: Props) {
         const map = new Map<string, {
           id: string
           count: number
-          amount: number
+          amount: number | null
+          name: string
           channelCounts: Record<EcChannel, number>
-          channelAmounts: Record<EcChannel, number>
+          channelAmounts: Record<EcChannel, number | null>
         }>()
         const nameToId: Record<string, string> = {}
 
         data.forEach((row: any) => {
           const name = row.product_name || row.name || ""
           const id = row.product_id || ""
-          const price = typeof row.price === 'number' ? row.price :
-            (parseFloat(row.price) || 0)
 
           const channelCounts: Record<EcChannel, number> = {
             amazon: Number(row.amazon_count) || 0,
@@ -101,9 +97,10 @@ export default function WebSalesRankingTable({ month }: Props) {
           }
           const count = EC_CHANNELS.reduce((sum, channel) => sum + channelCounts[channel], 0)
 
-          if (!map.has(name)) {
-            map.set(name, {
+          if (!map.has(id)) {
+            map.set(id, {
               id,
+              name,
               count: 0,
               amount: 0,
               channelCounts: {
@@ -126,14 +123,15 @@ export default function WebSalesRankingTable({ month }: Props) {
               },
             })
           }
-          const entry = map.get(name)!
+          const entry = map.get(id)!
           entry.count += count
 
-          const itemAmount = count * price
-          entry.amount += itemAmount
+          const itemAmount = sumWebSalesAmounts(row)
+          entry.amount = entry.amount === null || itemAmount === null ? null : entry.amount + itemAmount
           for (const channel of EC_CHANNELS) {
             entry.channelCounts[channel] += channelCounts[channel]
-            entry.channelAmounts[channel] += channelCounts[channel] * price
+            const amount = resolveWebSalesAmount(row, channel)
+            entry.channelAmounts[channel] = entry.channelAmounts[channel] === null || amount === null ? null : entry.channelAmounts[channel]! + amount
           }
 
           if (id) nameToId[name] = id
@@ -141,9 +139,9 @@ export default function WebSalesRankingTable({ month }: Props) {
 
         setProductNameMap(nameToId)
 
-        const arr: Row[] = Array.from(map.entries()).map(([product_name, v]) => ({
+        const arr: Row[] = Array.from(map.values()).map((v) => ({
           product_id: v.id,
-          product_name,
+          product_name: v.name,
           total_count: v.count,
           total_amount: v.amount,
           channel_counts: v.channelCounts,
@@ -172,12 +170,12 @@ export default function WebSalesRankingTable({ month }: Props) {
 
   const sortAndSetData = (data: Row[], sortType: SortType, channel: RankingChannel) => {
     const desc = [...data]
-      .filter(row => getMetric(row, channel, 'count') > 0)
-      .sort((a, b) => getMetric(b, channel, sortType) - getMetric(a, channel, sortType))
+      .filter(row => (getMetric(row, channel, 'count') ?? 0) > 0 && (sortType !== 'amount' || getMetric(row, channel, sortType) !== null))
+      .sort((a, b) => (getMetric(b, channel, sortType) ?? 0) - (getMetric(a, channel, sortType) ?? 0))
 
     const asc = [...data]
-      .filter(row => getMetric(row, channel, 'count') > 0)
-      .sort((a, b) => getMetric(a, channel, sortType) - getMetric(b, channel, sortType))
+      .filter(row => (getMetric(row, channel, 'count') ?? 0) > 0 && (sortType !== 'amount' || getMetric(row, channel, sortType) !== null))
+      .sort((a, b) => (getMetric(a, channel, sortType) ?? 0) - (getMetric(b, channel, sortType) ?? 0))
 
     setBestRows(desc.slice(0, 10))
     setWorstRows(asc.slice(0, 10))
@@ -299,7 +297,7 @@ export default function WebSalesRankingTable({ month }: Props) {
                     {f(channel === 'total' ? r.total_count : r.channel_counts[channel])}
                   </td>
                   <td className="border px-1 py-1 text-xs">
-                    ¥{f(Math.round(channel === 'total' ? r.total_amount : r.channel_amounts[channel]))}
+                    {getMetric(r, channel, 'amount') === null ? '実売額未取得' : `¥${f(Math.round(getMetric(r, channel, 'amount')!))}`}
                   </td>
                 </tr>
               ))
@@ -323,6 +321,7 @@ export default function WebSalesRankingTable({ month }: Props) {
         <div>
           <h2 className="text-lg font-bold text-slate-900">売上TOP10サマリー</h2>
           <p className="mt-1 text-xs text-slate-500">総合またはEC別の商品ランキング</p>
+          {originalData.some(row => getMetric(row, activeChannel, 'amount') === null) && <p className="mt-1 text-xs text-amber-700">実売額未取得の商品があります。金額順では未取得の商品を除外しています。</p>}
         </div>
         <div className="flex items-center gap-2 text-sm">
           <span className="text-gray-600">並び順</span>
@@ -400,8 +399,8 @@ export default function WebSalesRankingTable({ month }: Props) {
           ) : trendData[hoveredProductId] && trendData[hoveredProductId].length > 0 ? (
             <div className="space-y-1.5">
               {trendData[hoveredProductId].map((trend, index) => {
-                const maxSales = Math.max(...trendData[hoveredProductId].map(t => t.sales))
-                const barWidth = maxSales > 0 ? (trend.sales / maxSales) * 100 : 0
+                const maxSales = Math.max(...trendData[hoveredProductId].map(t => t.sales ?? 0))
+                const barWidth = maxSales > 0 && trend.sales !== null ? (trend.sales / maxSales) * 100 : 0
 
                 return (
                   <div key={index} className="flex items-center justify-between text-xs">
@@ -413,7 +412,7 @@ export default function WebSalesRankingTable({ month }: Props) {
                       ></div>
                     </div>
                     <span className="w-20 text-right text-gray-800 font-mono">
-                      ¥{f(trend.sales)}
+                      {trend.sales === null ? '実売額未取得' : `¥${f(trend.sales)}`}
                     </span>
                   </div>
                 )

@@ -17,8 +17,6 @@ export async function GET(request: NextRequest) {
     
     console.log(`【修正v4】Chart data requested for month: ${month}, showing: ${monthsToShow} months`);
 
-    // ダミーデータを準備（APIエラー時のフォールバック用）
-    const dummyData = generateDummyData(month, monthsToShow);
 
     try {
       // 新しいデータベース関数を呼び出し（これらは最初に呼び出す）
@@ -76,7 +74,7 @@ export async function GET(request: NextRequest) {
 
       if (functionError) {
         console.error('Function error:', functionError);
-        return NextResponse.json(dummyData);
+        return NextResponse.json({ error: '販売数量の推移を取得できませんでした' }, { status: 500 });
       }
 
       console.log(`【修正v5】Function returned:`, functionData?.length || 0, 'records');
@@ -117,62 +115,10 @@ export async function GET(request: NextRequest) {
       
     } catch (dbError) {
       console.error('Database error:', dbError);
-      return NextResponse.json(dummyData);
+      return NextResponse.json({ error: '販売数量の推移を取得できませんでした' }, { status: 500 });
     }
   } catch (error) {
     console.error('API error:', error);
-    const dummyData = generateDummyData(
-      new Date().toISOString().slice(0, 7), 
-      6
-    );
-    return NextResponse.json(dummyData);
+    return NextResponse.json({ error: '販売数量の推移を取得できませんでした' }, { status: 500 });
   }
-}
-
-// ダミーデータ生成関数も年跨ぎ対応
-function generateDummyData(baseMonth: string, months: number) {
-  const result = [];
-  const [year, month] = baseMonth.split('-').map(n => parseInt(n));
-  
-  // 開始月の計算（年跨ぎ対応）
-  let startYear = year;
-  let startMonth = month - (months - 1);
-  
-  while (startMonth <= 0) {
-    startMonth += 12;
-    startYear -= 1;
-  }
-  
-  // 月データを順番に生成
-  let currentYear = startYear;
-  let currentMonth = startMonth;
-  
-  for (let i = 0; i < months; i++) {
-    const monthStr = `${currentYear}年${currentMonth}月`;
-    
-    result.push({
-      month: monthStr,
-      amazon: Math.floor(Math.random() * 2000),
-      rakuten: Math.floor(Math.random() * 2000),
-      yahoo: Math.floor(Math.random() * 2000),
-      mercari: Math.floor(Math.random() * 200),
-      base: Math.floor(Math.random() * 100),
-      qoo10: Math.floor(Math.random() * 50),
-      total: 0
-    });
-    
-    // 次の月に進む
-    currentMonth += 1;
-    if (currentMonth > 12) {
-      currentMonth = 1;
-      currentYear += 1;
-    }
-  }
-  
-  // 合計を計算
-  result.forEach(item => {
-    item.total = item.amazon + item.rakuten + item.yahoo + item.mercari + item.base + item.qoo10;
-  });
-  
-  return result;
 }

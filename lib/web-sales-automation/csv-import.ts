@@ -34,27 +34,54 @@ export type ParsedWebSalesCsv = {
   quantityTotal: number;
 };
 
+export type ReportedSalesRow = {
+  name: string;
+  quantity: number;
+  amount: number;
+  occurredAt: string | null;
+};
+
+// Shared by the screen's manual import and the authenticated automation route.
+// Header names, not fixed column positions, determine the official amounts.
+export function parseReportedWebSalesCsv(channel: WebSalesChannel, csvText: string): ReportedSalesRow[] {
+  return readRows(channel, csvText).flatMap((row, index) => {
+    const fields = channelFields(channel, row);
+    const name = clean(fields.name);
+    if (channel === "base" && (name.includes("クーポン") || name.startsWith("割引"))) return [];
+    const quantity = salesQuantity(fields.quantity, index + HEADER_ROWS[channel] + 2);
+    if (quantity === 0) {
+      rejectZeroQuantityAmount(fields, index + HEADER_ROWS[channel] + 2);
+      return [];
+    }
+    if (!name) throw new Error(`CSV ${index + HEADER_ROWS[channel] + 2}行目の商品名がありません`);
+    return [{ name, quantity, amount: actualSalesAmount(fields.amount, index + HEADER_ROWS[channel] + 2), occurredAt: normalizeDate(fields.occurredAt) }];
+  });
+}
+
+function readRows(channel: WebSalesChannel, csvText: string): CsvRow[] {
+  const matrix = parse(csvText.replace(/^\uFEFF/, ""), {
+    columns: false, skip_empty_lines: true, relax_column_count: true,
+    relax_quotes: true, trim: true,
+  }) as string[][];
+  const headerRow = HEADER_ROWS[channel];
+  const header = (matrix[headerRow] || []).map(clean);
+  if (header.length === 0) throw new Error("CSVヘッダーが見つかりません");
+  const nameColumn = channel === "amazon" ? "タイトル" : "商品名";
+  const quantityColumn = channel === "amazon" ? "注文された商品点数" : channel === "rakuten" ? "売上個数" : channel === "yahoo" ? "注文点数合計" : "数量";
+  if (!header.includes(nameColumn) || !header.includes(quantityColumn)) {
+    throw new Error("公式の商品名・販売個数の列がありません。対象ECの売上帳票を確認してください");
+  }
+  return matrix.slice(headerRow + 1)
+    .filter((values) => values.some((value) => clean(value)))
+    .map((values) => Object.fromEntries(header.map((name, index) => [name, clean(values[index])])));
+}
+
 export function parsePreparedWebSalesCsv(
   channel: WebSalesChannel,
   csvText: string,
   period: SyncPeriod,
 ): ParsedWebSalesCsv {
-  const matrix = parse(csvText.replace(/^\uFEFF/, ""), {
-    columns: false,
-    skip_empty_lines: true,
-    relax_column_count: true,
-    relax_quotes: true,
-    trim: true,
-  }) as string[][];
-  const headerRow = HEADER_ROWS[channel];
-  const header = (matrix[headerRow] || []).map(clean);
-  if (header.length === 0) throw new Error("CSVヘッダーが見つかりません");
-
-  const rows = matrix.slice(headerRow + 1)
-    .filter((values) => values.some((value) => clean(value)))
-    .map((values) => Object.fromEntries(
-      header.map((name, index) => [name, clean(values[index])]),
-    ));
+  const rows = readRows(channel, csvText);
   const snapshotId = `${channel}:${period.startDate}:${period.endDate}`;
   const items = rows
     .map((row, index) => normalizeRow(channel, row, index, snapshotId, period))
@@ -75,9 +102,14 @@ function normalizeRow(
   period: SyncPeriod,
 ): NormalizedSalesItem | null {
   const fields = channelFields(channel, row);
-  const quantity = numberValue(fields.quantity);
   const name = clean(fields.name);
-  if (quantity <= 0 || !name) return null;
+  if (channel === "base" && (name.includes("クーポン") || name.startsWith("割引"))) return null;
+  const quantity = salesQuantity(fields.quantity, index + HEADER_ROWS[channel] + 2);
+  if (quantity === 0) {
+    rejectZeroQuantityAmount(fields, index + HEADER_ROWS[channel] + 2);
+    return null;
+  }
+  if (!name) throw new Error(`CSV ${index + HEADER_ROWS[channel] + 2}行目の商品名がありません`);
   const externalProductKey = clean(fields.productKey) || `name:${normalizeLookup(name)}`;
   const externalOrderId = clean(fields.orderId) || snapshotId;
   const externalLineId = clean(fields.lineId) || `${externalProductKey}:${index + 1}`;
@@ -89,7 +121,7 @@ function normalizeRow(
     externalProductName: name,
     occurredAt: normalizeDate(fields.occurredAt) || `${period.reportMonth}T00:00:00+09:00`,
     quantity,
-    amount: Math.round(numberValue(fields.amount)),
+    amount: actualSalesAmount(fields.amount, index + HEADER_ROWS[channel] + 2),
     sourceStatus: clean(fields.status) || "reported",
     rawData: {
       source_row: index + HEADER_ROWS[channel] + 2,
@@ -149,7 +181,9 @@ function channelFields(channel: WebSalesChannel, row: CsvRow): ChannelFields {
         productKey: first(row, "販売者商品コード", "商品番号"),
         name: first(row, "商品名"),
         quantity: first(row, "数量"),
-        amount: first(row, "購入者決済金額", "注文金額", "販売価格", "販売単価"),
+        // The prepared official-API CSV puts merchandise line_amount in this
+        // column. A catalog/unit price is not an actual merchandise total.
+        amount: first(row, "商品売上金額", "購入者決済金額"),
         orderId: first(row, "注文番号"),
         lineId: first(row, "カート番号", "配送番号") || `${first(row, "注文番号")}:${first(row, "商品番号")}`,
         occurredAt: first(row, "注文日"),
@@ -160,7 +194,9 @@ function channelFields(channel: WebSalesChannel, row: CsvRow): ChannelFields {
         productKey: first(row, "SKU ID", "出品者SKU"),
         name: first(row, "商品名"),
         quantity: first(row, "数量"),
-        amount: first(row, "注文金額"),
+        // Order payment can repeat across SKUs and includes shipping/platform
+        // discounts. Use the merchandise subtotal less seller-funded discounts.
+        amount: first(row, "商品売上金額") || tiktokMerchandiseAmount(row),
         orderId: first(row, "注文ID"),
         lineId: `${first(row, "注文ID")}:${first(row, "SKU ID", "出品者SKU")}`,
         occurredAt: first(row, "注文の支払い日時"),
@@ -181,9 +217,33 @@ function clean(value: unknown) {
   return String(value ?? "").replace(/^\uFEFF/, "").trim();
 }
 
-function numberValue(value: unknown) {
-  const parsed = Number.parseFloat(clean(value).replace(/[^\d.-]/g, ""));
-  return Number.isFinite(parsed) ? parsed : 0;
+function salesQuantity(value: unknown, sourceRow: number) {
+  const input = clean(value).replace(/,/g, "");
+  if (!/^\d+$/.test(input) || !Number.isSafeInteger(Number(input))) {
+    throw new Error(`CSV ${sourceRow}行目の販売個数が不正です`);
+  }
+  return Number(input);
+}
+
+function rejectZeroQuantityAmount(fields: ChannelFields, sourceRow: number) {
+  if (clean(fields.amount) && actualSalesAmount(fields.amount, sourceRow) !== 0) {
+    throw new Error(`CSV ${sourceRow}行目は販売個数0の非0金額です。売上補正として確認してください`);
+  }
+}
+
+export function actualSalesAmount(value: unknown, sourceRow = 0) {
+  const input = clean(value).replace(/^[¥￥]\s*/, "").replace(/\s*(円|JPY)$/i, "").replace(/,/g, "");
+  if (!/^[+-]?\d+(?:\.\d+)?$/.test(input) || !Number.isFinite(Number(input))) {
+    throw new Error(`CSV ${sourceRow}行目の商品売上金額が未取得または不正です。通常単価からの推計は行いません`);
+  }
+  return Number(input);
+}
+
+function tiktokMerchandiseAmount(row: CsvRow) {
+  const subtotal = first(row, "SKU小計（割引前）");
+  const sellerDiscount = first(row, "セラーSKU割引");
+  if (!subtotal || !sellerDiscount) return "";
+  return String(actualSalesAmount(subtotal) - actualSalesAmount(sellerDiscount));
 }
 
 function normalizeLookup(value: unknown) {

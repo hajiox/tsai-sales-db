@@ -22,7 +22,7 @@ export function createFinanceLoader(db: SupabaseClient) {
   }
   async function sources(month: string) {
     const [sales, products, mappings, ads, settlements, jobs] = await Promise.all([
-      all("web_sales_summary", "id,product_id,unit_price,unit_cost_ex_ec,amazon_count,rakuten_count,yahoo_count,base_count,mercari_count,qoo10_count,tiktok_count,base_amount", month),
+      all("web_sales_summary", "id,product_id,unit_price,unit_profit_rate,unit_cost_ex_ec,amazon_count,rakuten_count,yahoo_count,base_count,mercari_count,qoo10_count,tiktok_count,amazon_amount,rakuten_amount,yahoo_amount,mercari_amount,base_amount,qoo10_amount,tiktok_amount", month),
       all("products", "id,series_code"),
       all("web_sales_external_mappings", "channel,external_product_key,product_id", undefined, "external_product_key"),
       all("advertising_costs", "id,series_code,google_cost,meta_cost,other_cost,amazon_cost,rakuten_cost,yahoo_cost", month),

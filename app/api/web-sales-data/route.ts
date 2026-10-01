@@ -3,15 +3,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getProductUnitPrice } from '@/lib/unitPriceHelper'
+import { WEB_SALES_CHANNELS, sumWebSalesAmounts, getWebSalesMissingAmountChannels } from '@/lib/web-sales-amounts'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
+  const month = new URL(request.url).searchParams.get('month')
   try {
-    const { searchParams } = new URL(request.url)
-    const month = searchParams.get('month')
 
     console.log('🔍 WEB-SALES-DATA API ver.9 - 受信パラメータ:', { month, url: request.url })
 
-    if (!month) {
+    if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
       return NextResponse.json({ error: 'monthパラメータが必要です' }, { status: 400 })
     }
 
@@ -33,13 +35,36 @@ export async function GET(request: NextRequest) {
 
     console.log('✅ レスポンス準備完了:', { dataCount: data?.length || 0 })
 
-    return NextResponse.json({ data: data || [] })
+    const summaryRows: Record<string, any>[] = []
+    for (let offset = 0; ; offset += 1000) {
+      const result = await supabase.from('web_sales_summary').select('*')
+        .eq('report_month', `${month}-01`).order('product_id').range(offset, offset + 999)
+      if (result.error) throw result.error
+      summaryRows.push(...(result.data || []))
+      if ((result.data?.length || 0) < 1000) break
+    }
+    const byProduct = new Map(summaryRows.map(row => [row.product_id, row]))
+    const normalPrices = new Map<string, number>()
+    for (let offset = 0; ; offset += 1000) {
+      const result = await supabase.from('products').select('id,price').order('id').range(offset, offset + 999)
+      if (result.error) throw result.error
+      for (const product of result.data || []) normalPrices.set(product.id, Number(product.price || 0))
+      if ((result.data?.length || 0) < 1000) break
+    }
+    const enriched = (data || []).map((row: Record<string, any>) => {
+      const summary = byProduct.get(row.product_id)
+      const amounts = Object.fromEntries(WEB_SALES_CHANNELS.map(channel => [`${channel}_amount`, summary?.[`${channel}_amount`] ?? null]))
+      const counts = Object.fromEntries(WEB_SALES_CHANNELS.map(channel => [`${channel}_count`, summary?.[`${channel}_count`] ?? row[`${channel}_count`] ?? 0]))
+      const result: Record<string, any> = { ...row, ...counts, ...amounts, price: normalPrices.get(row.product_id) ?? row.price, unit_price: summary?.unit_price, unit_profit_rate: summary?.unit_profit_rate, unit_cost_ex_ec: summary?.unit_cost_ex_ec ?? null }
+      return { ...result, total_amount: sumWebSalesAmounts(result), missing_amount_channels: getWebSalesMissingAmountChannels(result) }
+    })
+    return NextResponse.json({ data: enriched })
   } catch (error) {
     console.error('🚨 API全体エラー:', error)
     return NextResponse.json({
       error: 'データの取得に失敗しました',
       details: error instanceof Error ? error.message : '不明なエラー',
-      month: searchParams.get('month')
+      month
     }, { status: 500 })
   }
 }
@@ -47,7 +72,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { product_id, report_month, site, count } = body
+    const { product_id, report_month, site, count, amount } = body
 
     console.log('📝 PUT要求:', { product_id, report_month, site, count })
 
@@ -59,7 +84,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // サイト名のバリデーション
-    const validSites = ['amazon', 'rakuten', 'yahoo', 'mercari', 'base', 'qoo10']
+    const validSites: readonly string[] = WEB_SALES_CHANNELS
     if (!validSites.includes(site)) {
       return NextResponse.json({
         success: false,
@@ -68,8 +93,8 @@ export async function PUT(request: NextRequest) {
     }
 
     // 数値のバリデーション
-    const numericCount = parseInt(count, 10)
-    if (isNaN(numericCount) || numericCount < 0) {
+    const numericCount = Number(count)
+    if (count == null || typeof count === 'boolean' || String(count).trim() === '' || !Number.isSafeInteger(numericCount) || numericCount < 0 || !/^\d{4}-(0[1-9]|1[0-2])$/.test(report_month)) {
       return NextResponse.json({
         success: false,
         error: '販売数は0以上の整数である必要があります'
@@ -77,6 +102,11 @@ export async function PUT(request: NextRequest) {
     }
 
     const columnName = `${site}_count`
+    const amountColumn = `${site}_amount`
+    const numericAmount = amount === undefined || amount === null ? null : Number(amount)
+    if (numericAmount !== null && (typeof amount === 'boolean' || String(amount).trim() === '' || !Number.isFinite(numericAmount) || numericAmount < 0 || (numericCount === 0 && numericAmount !== 0))) {
+      return NextResponse.json({ success: false, error: '実売額は0以上の金額である必要があります' }, { status: 400 })
+    }
     const targetDate = `${report_month}-01`
 
     // まず既存のレコードを確認
@@ -97,7 +127,7 @@ export async function PUT(request: NextRequest) {
       // 既存レコードがある場合は更新
       const { data, error } = await supabase
         .from('web_sales_summary')
-        .update({ [columnName]: numericCount })
+        .update({ [columnName]: numericCount, [amountColumn]: amount !== undefined ? numericAmount : Number(existingData[columnName] || 0) === numericCount ? existingData[amountColumn] : null })
         .eq('product_id', product_id)
         .eq('report_month', targetDate)
         .select()
@@ -119,9 +149,11 @@ export async function PUT(request: NextRequest) {
         mercari_count: 0,
         base_count: 0,
         qoo10_count: 0,
+        tiktok_count: 0,
         unit_price: unitPrice.unit_price,
         unit_profit_rate: unitPrice.unit_profit_rate,
-        [columnName]: numericCount
+        [columnName]: numericCount,
+        [amountColumn]: numericAmount
       }
 
       const { data, error } = await supabase
@@ -190,13 +222,15 @@ export async function DELETE(request: NextRequest) {
 
 // ECチャネル別削除処理
 async function handleChannelDelete(targetDate: string, channel: string, month: string) {
+  if (!(WEB_SALES_CHANNELS as readonly string[]).includes(channel)) return NextResponse.json({ success: false, error: '無効なサイト名です' }, { status: 400 });
   const channelNames = {
     amazon: 'Amazon',
     rakuten: '楽天',
     yahoo: 'Yahoo',
     mercari: 'メルカリ',
     base: 'BASE',
-    qoo10: 'Qoo10'
+    qoo10: 'Qoo10',
+    tiktok: 'TikTok'
   };
 
   const columnName = `${channel}_count`;
@@ -221,7 +255,7 @@ async function handleChannelDelete(targetDate: string, channel: string, month: s
   }
 
   const affectedCount = beforeData?.length || 0;
-  const totalQuantity = beforeData?.reduce((sum, item) => sum + (item[columnName] || 0), 0) || 0;
+  const totalQuantity = beforeData?.reduce((sum, item) => sum + (Number((item as any)[columnName]) || 0), 0) || 0;
 
   console.log('🔍 削除前データ:', { affectedCount, totalQuantity });
 
@@ -237,7 +271,7 @@ async function handleChannelDelete(targetDate: string, channel: string, month: s
   // 該当チャネルのカウントを0に更新（NULLではなく0に設定）
   const { error: updateError } = await supabase
     .from('web_sales_summary')
-    .update({ [columnName]: 0 })
+    .update({ [columnName]: 0, [`${channel}_amount`]: null })
     .eq('report_month', targetDate)
     .not(columnName, 'is', null)
     .gt(columnName, 0);

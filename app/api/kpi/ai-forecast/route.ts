@@ -9,6 +9,13 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
     try {
         const { fiscalYear, monthlyData } = await req.json();
+        const recordedRows = [
+            ...(Array.isArray(monthlyData?.total) ? monthlyData.total : []),
+            ...(Array.isArray(monthlyData?.channels?.WEB) ? monthlyData.channels.WEB : []),
+        ];
+        if (recordedRows.some(row => row.actual === null || row.lastYear === null)) {
+            return NextResponse.json({ ok: false, error: "WEB実売額が未取得の月があります。公式金額を取り込んでから売上予測を実行してください" }, { status: 400 });
+        }
 
         const geminiKey = process.env.GEMINI_API_KEY;
         if (!geminiKey) {

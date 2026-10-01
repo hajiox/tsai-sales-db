@@ -4,6 +4,7 @@ import { getBulkProductUnitPrices } from "@/lib/unitPriceHelper";
 import { hasPackConflict } from "@/lib/sales-price-reconciliation";
 import { getChannelConfigStatus } from "./config";
 import { fetchChannelSales } from "./connectors";
+import { ActualSalesAmountUnavailableError } from "./actual-sales-policy";
 import { compactText } from "./http";
 import type {
   ChannelSyncResult,
@@ -89,10 +90,11 @@ export async function runChannelSync(
     return { runId, channel, ...outcome };
   } catch (error) {
     const message = error instanceof Error ? error.message : "自動同期に失敗しました";
+    const status = error instanceof ActualSalesAmountUnavailableError ? "needs_review" : "failed";
     await supabase
       .from("web_sales_sync_runs")
       .update({
-        status: "failed",
+        status,
         error_message: message.slice(0, 4000),
         completed_at: new Date().toISOString(),
       })
@@ -100,7 +102,7 @@ export async function runChannelSync(
     return {
       runId,
       channel,
-      status: "failed",
+      status,
       itemCount: 0,
       quantityTotal: 0,
       matchedCount: 0,
@@ -225,7 +227,7 @@ async function finalizeRun(
     externalProductName: item.external_product_name,
     occurredAt: item.occurred_at,
     quantity: Number(item.quantity) || 0,
-    amount: Number(item.amount) || 0,
+    amount: requireActualSalesAmount(item.amount),
     sourceStatus: item.source_status,
     rawData: item.raw_data || {},
   }));
@@ -471,7 +473,7 @@ async function replaceMonthlyChannelSummary(
     return {
       product_id: productId,
       quantity: roundQuantity(value.quantity),
-      amount: Math.round(value.amount),
+      amount: requireActualSalesAmount(value.amount),
       unit_price: unit.unit_price,
       unit_profit_rate: unit.unit_profit_rate,
     };
@@ -494,7 +496,7 @@ function deduplicateItems(items: NormalizedSalesItem[]) {
       externalProductKey: compactText(original.externalProductKey) || "unknown-product",
       externalProductName: compactText(original.externalProductName),
       quantity: Number(original.quantity) || 0,
-      amount: Number(original.amount) || 0,
+      amount: requireActualSalesAmount(original.amount),
     };
     if (item.quantity <= 0) continue;
     const key = `${item.externalOrderId}\u0000${item.externalLineId}`;
@@ -523,6 +525,13 @@ function normalizeLookup(value: unknown) {
 
 function roundQuantity(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+function requireActualSalesAmount(value: unknown): number {
+  if (value == null || value === "" || typeof value === "boolean" || !Number.isFinite(Number(value))) {
+    throw new Error("公式の商品売上金額が未取得または不正です。月次集計を更新できません");
+  }
+  return Number(value);
 }
 
 export function getWebSalesAutomationServiceClient() {

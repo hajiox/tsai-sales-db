@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { sumWebSalesAmounts } from '@/lib/web-sales-amounts';
 
 // モデル指定
 const GEMINI_MODEL = "gemini-2.5-flash";
@@ -68,14 +69,14 @@ export async function POST(req: Request) {
 
     // 1. 直近3ヶ月の販売データ取得 (get_period_sales_data)
     // DB関数が内部で '-01' を追加するため、"YYYY-MM" 形式で渡す
-    const { data: periodSalesData, error: periodError } = await supabase.rpc('get_period_sales_data', {
-      start_month: startMonth3,
-      end_month: targetMonth
-    });
-
-    if (periodError) {
-      console.error('期間データ取得エラー:', periodError);
-      throw new Error(`期間データの取得に失敗: ${periodError.message}`);
+    const periodSalesData: Record<string, any>[] = [];
+    for (let offset = 0; ; offset += 1000) {
+      const result = await supabase.from('web_sales_summary').select('*')
+        .gte('report_month', `${startMonth3}-01`).lte('report_month', `${targetMonth}-01`)
+        .order('report_month').order('product_id').range(offset, offset + 999);
+      if (result.error) throw new Error(`期間データの取得に失敗: ${result.error.message}`);
+      periodSalesData.push(...(result.data || []));
+      if ((result.data?.length || 0) < 1000) break;
     }
 
     // 2. 商品マスタ取得（シリーズ情報付与用）
@@ -172,7 +173,7 @@ function organize3ItemsAnalysis(
   // 「直近に偏っているか」などを簡易分析できるようにする。
 
   // シリーズごとの集計
-  const seriesPeriodStats: Record<string, { count: number, sales: number, products: Set<string> }> = {};
+  const seriesPeriodStats: Record<string, { count: number, sales: number | null, products: Set<string> }> = {};
 
   periodSalesData?.forEach(sale => {
     const product = productsMap.get(sale.product_id);
@@ -183,11 +184,12 @@ function organize3ItemsAnalysis(
       seriesPeriodStats[seriesName] = { count: 0, sales: 0, products: new Set() };
     }
 
-    const count = sale.total_count || 0;
-    const price = product.price || 0;
+    const count = ['amazon', 'rakuten', 'yahoo', 'mercari', 'base', 'qoo10', 'tiktok'].reduce((sum, channel) => sum + Number(sale[`${channel}_count`] || 0), 0);
+    const amount = sumWebSalesAmounts(sale);
 
     seriesPeriodStats[seriesName].count += count;
-    seriesPeriodStats[seriesName].sales += count * price;
+    const previous = seriesPeriodStats[seriesName].sales;
+    seriesPeriodStats[seriesName].sales = previous === null || amount === null ? null : previous + amount;
     seriesPeriodStats[seriesName].products.add(product.name);
   });
 
@@ -205,7 +207,7 @@ function organize3ItemsAnalysis(
       seriesName: curr.series_name,
       current: { count: curr.series_count, amount: curr.series_amount },
       prev: prev ? { count: prev.series_count, amount: prev.series_amount } : null,
-      growthRate: prev && prev.series_amount > 0 ?
+      growthRate: curr.series_amount !== null && prev && prev.series_amount > 0 ?
         Math.round(((curr.series_amount - prev.series_amount) / prev.series_amount) * 100) : null
     };
   }) || [];
@@ -253,6 +255,7 @@ function generate3ItemsPrompt(data: any): string {
 ${JSON.stringify(data.monthStatus, null, 2)}
 
 【重要ルール】
+- 売上金額はEC原本の実売額です。nullは実売額未取得であり、0円や通常単価×数量に置き換えないでください。未取得の期間やシリーズの金額比較は保留してください。
 - WEB販売管理システムは原則として15日頃と月初の月2回データを取り込みます。
 - 対象月が途中データの場合、前月・前年同月の月末確定値と単純比較して「半減」「急落」「危機的」と断定しないでください。
 - 対象月が途中データの場合、必ず「15日取り込み時点の途中経過」または「月初から月中までの途中経過」と明記してください。

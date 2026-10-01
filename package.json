@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test:web-sales-amounts": "node scripts/test-web-sales-amounts.cjs",
+    "test:web-sales-actual-import": "node scripts/test-web-sales-actual-import.cjs",
+    "test:web-sales-ui-amounts": "node scripts/test-web-sales-ui-amounts.cjs",
+    "test:web-sales-actual-migration": "node scripts/apply-web-sales-actual-amount-migrations.cjs",
+    "apply:web-sales-actual-migration": "node scripts/apply-web-sales-actual-amount-migrations.cjs --apply",
     "test:web-sales-abcd-finance": "node scripts/test-web-sales-abcd-finance.cjs",
     "test:web-sales-abcd-monthly": "node scripts/test-web-sales-abcd-monthly.cjs",
     "test:web-sales-abcd": "node --experimental-strip-types scripts/test-web-sales-abcd.mjs",

@@ -1,5 +1,4 @@
-// /components/web-sales-editable-table.tsx ver.67 (単価スナップショット方式)
-// 履歴モード削除・各月に保存されたunit_priceで自動計算
+// 販売数量と原本実売額を別々に管理する。
 
 "use client"
 
@@ -217,6 +216,10 @@ export default function WebSalesEditableTable({
       }
 
       if (existingRecord) {
+        // 数量を手修正した場合、原本実売額との対応が失われるため未取得に戻す。
+        if (Number(existingRecord[field] || 0) !== newValue) {
+          updateData[field.replace(/_count$/, '_amount')] = null
+        }
         const { error: updateError } = await supabase
           .from('web_sales_summary')
           .update(updateData)
@@ -257,7 +260,8 @@ export default function WebSalesEditableTable({
       setData((prevData) =>
         prevData.map((item) => {
           if (item.product_id === itemId) {
-            return { ...item, [field]: newValue }
+            const amountField = field.replace(/_count$/, '_amount')
+            return { ...item, [field]: newValue, [amountField]: Number(item[field as keyof WebSalesData] || 0) === newValue ? item[amountField as keyof WebSalesData] ?? null : null }
           }
           return item
         })

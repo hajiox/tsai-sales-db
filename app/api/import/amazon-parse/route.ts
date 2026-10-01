@@ -1,89 +1,63 @@
-// /app/api/import/amazon-parse/route.ts ver.12 (件数表示修正版)
-import { NextRequest, NextResponse } from 'next/server';
-import { parse } from 'csv-parse/sync';
-import { createClient } from '@supabase/supabase-js';
-import { findBestMatchSimplified } from '@/lib/csvHelpers';
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { findBestMatchSimplified } from "@/lib/csvHelpers";
+import { parseReportedWebSalesCsv } from "@/lib/web-sales-automation/csv-import";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })(), process.env.SUPABASE_SERVICE_ROLE_KEY ?? (() => { throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set"); })());
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })(),
+  process.env.SUPABASE_SERVICE_ROLE_KEY ?? (() => { throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set"); })(),
+);
 
-const toNumber = (raw: string | number): number => { return Number(raw?.toString().replace(/[,，\s]/g, '').trim() || 0); };
-
-function parseCsvWithHeader(text: string): any[] {
-  return parse(text, { columns: true, skip_empty_lines: true, delimiter: ',', quote: '"', relax_column_count: true, trim: true, });
-}
-
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    console.log('🔍 Amazon CSV解析開始 - ver.12');
-
-    const form = await req.formData();
-    const file = form.get('file') as File;
-    if (!file) { return NextResponse.json({ ok: false, error: 'CSV が選択されていません' }, { status: 400 }); }
-
+    const form = await request.formData();
+    const file = form.get("file");
+    if (!(file instanceof File)) return NextResponse.json({ success: false, ok: false, error: "CSVが選択されていません" }, { status: 400 });
     const csvText = await file.text();
-    const records = parseCsvWithHeader(csvText);
-
-    const { data: products, error: prodErr } = await supabase.from('products').select('*').eq('is_hidden', false);
-    if (prodErr) throw prodErr;
-
-    const { data: learns, error: learnErr } = await supabase.from('amazon_product_mapping').select('amazon_title, product_id');
-    if (learnErr) throw new Error(`Amazonの学習データ取得に失敗: ${learnErr.message}`);
-
-    console.log('📚 学習データ数:', learns?.length);
-
-    const matchedProductIdsThisTime = new Set<string>();
-
-    const matched: { productId: string; productName: string; qty: number; amazonTitle: string, matchType: string }[] = [];
-    const unmatched: { amazonTitle: string; qty: number }[] = [];
-    let blankTitleCount = 0;
-    let blankTitleQty = 0;
-
-    for (const record of records) {
-      const title = (record['タイトル'] || '').trim();
-      const qty = toNumber(record['注文された商品点数']);
-
-      if (!title) { blankTitleCount++; blankTitleQty += qty; continue; }
-      if (!qty) continue;
-
-      const result = findBestMatchSimplified(
-        title,
-        products ?? [],
-        learns ?? [],
-        matchedProductIdsThisTime,
-        'amazon'
-      );
-
+    if (!csvText) return NextResponse.json({ success: false, ok: false, error: "CSVデータがありません" }, { status: 400 });
+    const rows = parseReportedWebSalesCsv("amazon", csvText);
+    const [{ data: products, error: productError }, { data: learns, error: learnError }] = await Promise.all([
+      supabase.from("products").select("*").eq("is_hidden", false),
+      supabase.from("amazon_product_mapping").select("amazon_title,product_id"),
+    ]);
+    if (productError) throw new Error("商品マスターの取得に失敗しました");
+    if (learnError) throw new Error("商品紐付けの取得に失敗しました");
+    const matchedProductIds = new Set<string>();
+    const matchedProducts: Array<Record<string, any>> = [];
+    const unmatchedProducts: Array<Record<string, any>> = [];
+    for (const row of rows) {
+      const result = findBestMatchSimplified(row.name, products || [], learns || [], matchedProductIds, "amazon");
+      const source = { amazonTitle: row.name, quantity: row.quantity, amount: row.amount };
       if (result) {
-        const hit = result.product;
-        matched.push({ productId: hit.id, productName: hit.name, amazonTitle: title, qty, matchType: result.matchType });
+        matchedProducts.push({
+          ...source, productInfo: result.product, productId: result.product.id,
+          productName: result.product.name, matchType: result.matchType,
+          isLearned: result.matchType === "learned",
+        });
       } else {
-        unmatched.push({ amazonTitle: title, qty });
+        unmatchedProducts.push(source);
       }
     }
-
-    const matchedQty = matched.reduce((s, r) => s + r.qty, 0);
-    const unmatchedQty = unmatched.reduce((s, r) => s + r.qty, 0);
-
+    const matchedQuantity = matchedProducts.reduce((sum, row) => sum + row.quantity, 0);
+    const totalQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
+    const summary = {
+      totalProducts: rows.length, totalQuantity, processableQuantity: matchedQuantity,
+      totalAmount: rows.reduce((sum, row) => sum + row.amount, 0),
+      processableAmount: matchedProducts.reduce((sum, row) => sum + row.amount, 0),
+      matchedCount: matchedProducts.length, unmatchedCount: unmatchedProducts.length,
+      learnedMatchCount: matchedProducts.filter(row => row.isLearned).length,
+      blankTitleInfo: { count: 0, quantity: 0 },
+      csvTotalQty: totalQuantity, matchedQty: matchedQuantity,
+      unmatchedQty: totalQuantity - matchedQuantity,
+    };
     return NextResponse.json({
-      ok: true,
-      summary: {
-        // ★★★★★★★【重要修正】この1行を追加しました ★★★★★★★
-        totalProducts: matched.length + unmatched.length,
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        matchedRows: matched.length,
-        unmatchedRows: unmatched.length,
-        csvTotalQty: matchedQty + unmatchedQty + blankTitleQty,
-        matchedQty,
-        unmatchedQty,
-        blankTitleInfo: blankTitleCount > 0 ? { count: blankTitleCount, quantity: blankTitleQty } : null
-      },
-      matched,
-      unmatched,
+      success: true, ok: true, summary, matchedProducts, unmatchedProducts,
+      matched: matchedProducts.map(row => ({ ...row, qty: row.quantity })),
+      unmatched: unmatchedProducts.map(row => ({ ...row, qty: row.quantity })),
     });
-  } catch (err) {
-    console.error('❌ Amazon CSV 解析エラー:', err);
-    return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 },);
+  } catch (error) {
+    return NextResponse.json({ success: false, ok: false, error: error instanceof Error ? error.message : "CSVの解析に失敗しました" }, { status: 400 });
   }
 }

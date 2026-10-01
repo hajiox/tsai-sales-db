@@ -23,6 +23,7 @@ import {
 } from "@/lib/google-ads-import-policy";
 import { isCodexBridgeAuthorized, normalizeWorkerId } from "@/lib/web-sales-codex/server";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
+import { resolveWebSalesAmount } from "@/lib/web-sales-amounts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -241,7 +242,7 @@ async function getBaseSalesWeights(
 ): Promise<Map<number, number>> {
   const { data: salesRows, error: salesError } = await supabase
     .from("web_sales_summary")
-    .select("product_id,base_count,unit_price")
+    .select("product_id,base_count,base_amount")
     .eq("report_month", `${month}-01`)
     .gt("base_count", 0);
   if (salesError) throw salesError;
@@ -261,7 +262,8 @@ async function getBaseSalesWeights(
   const weights = new Map<number, number>();
   for (const row of salesRows || []) {
     const seriesCode = seriesByProduct.get(String(row.product_id || "")) || 0;
-    const revenue = Math.max(0, Number(row.base_count || 0)) * Math.max(0, Number(row.unit_price || 0));
+    const revenue = resolveWebSalesAmount(row, "base");
+    if (revenue === null) throw new Error("BASEの実売額が未取得のため広告費を売上比で按分できません。先に対象月の売上原本を取り込んでください。");
     if (seriesCode <= 0 || revenue <= 0) continue;
     weights.set(seriesCode, (weights.get(seriesCode) || 0) + revenue);
   }

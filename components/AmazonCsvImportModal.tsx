@@ -20,6 +20,7 @@ interface MatchedProduct {
   productId: string;
   productName: string;
   quantity: number;
+    amount: number;
 }
 
 interface AmazonCsvImportModalProps {
@@ -55,6 +56,7 @@ export default function AmazonCsvImportModal({
     productId: string;
     productName: string;
     quantity: number;
+    amount: number;
     isLearned?: boolean;
   }>>([]);
   const [savingMapping, setSavingMapping] = useState<string | null>(null);
@@ -82,6 +84,7 @@ export default function AmazonCsvImportModal({
           productId: '',
           productName: '',
           quantity: u.quantity,
+          amount: u.amount,
           isLearned: false
         })),
         ...matched.map((m: MatchedProduct) => ({ ...m, isLearned: false })),
@@ -130,11 +133,13 @@ export default function AmazonCsvImportModal({
           amazonTitle: item.amazonTitle,
           productId: item.productId,
           productName: item.productName,
-          quantity: item.qty
+          quantity: item.qty,
+          amount: item.amount
         })) || [],
         unmatchedProducts: result.unmatched?.map((item: any) => ({
           amazonTitle: item.amazonTitle,
-          quantity: item.qty
+          quantity: item.qty,
+          amount: item.amount
         })) || [],
         summary: {
           ...result.summary,
@@ -226,7 +231,7 @@ export default function AmazonCsvImportModal({
       const response = await fetch('/api/import/amazon-confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestData),
+        body: JSON.stringify({ ...requestData, expectedQuantity: parseResult.summary.csvTotalQuantity, expectedAmount: parseResult.summary.totalAmount }),
       });
 
       const result = await response.json();

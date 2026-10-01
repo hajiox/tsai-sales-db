@@ -10,17 +10,23 @@ import { Plus } from "lucide-react";
 import KpiTargetModal from "./KpiTargetModal";
 import KpiAnnualGoalSummary from "./KpiAnnualGoalSummary";
 import { KpiSummary, ChannelCode, updateKpiEntry } from "@/app/kpi/actions";
-import { formatCurrency, formatPercent } from '@/lib/utils';
+import { formatCurrency as formatKnownCurrency, formatPercent as formatKnownPercent } from '@/lib/utils';
+import { sumKpiAmounts, kpiRatio, formatKpiAmount } from '@/lib/kpi-amounts';
+
+function formatCurrency(value: number | null) { return value === null ? '実売額未取得' : formatKnownCurrency(value); }
+function formatPercent(value: number | null) { return value === null ? '—' : formatKnownPercent(value); }
 
 // Achievement rate color helper
-function getRateStyle(rate: number, actual?: number): string {
+function getRateStyle(rate: number | null, actual?: number | null): string {
+    if (rate === null || actual === null) return '';
     if (actual !== undefined && actual === 0) return '';
     if (rate >= 100) return 'text-green-600 font-bold';
     if (rate >= 90) return 'text-blue-600 font-bold';
     if (rate < 80) return 'text-red-600 font-bold';
     return '';
 }
-function RateCell({ rate, hasTarget, showWarning = true }: { rate: number; hasTarget: boolean; showWarning?: boolean }) {
+function RateCell({ rate, hasTarget, showWarning = true }: { rate: number | null; hasTarget: boolean; showWarning?: boolean }) {
+    if (rate === null) return <span>実売額未取得</span>;
     if (!hasTarget) return <span>-</span>;
     return (
         <div className="flex flex-col items-end">
@@ -36,16 +42,16 @@ function EditableCell({
     type,
     onSave
 }: {
-    value: number,
+    value: number | null,
     type: 'currency' | 'number',
     onSave: (val: number) => Promise<void>
 }) {
     const [isEditing, setIsEditing] = useState(false);
-    const [localValue, setLocalValue] = useState(value.toString());
+    const [localValue, setLocalValue] = useState(value?.toString() ?? '');
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
-        setLocalValue(value.toString());
+        setLocalValue(value?.toString() ?? '');
     }, [value]);
 
     const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -53,14 +59,14 @@ function EditableCell({
             await save();
         } else if (e.key === 'Escape') {
             setIsEditing(false);
-            setLocalValue(value.toString());
+            setLocalValue(value?.toString() ?? '');
         }
     };
 
     const save = async () => {
         const newVal = parseFloat(localValue);
         if (isNaN(newVal)) {
-            setLocalValue(value.toString());
+            setLocalValue(value?.toString() ?? '');
             setIsEditing(false);
             return;
         }
@@ -77,7 +83,7 @@ function EditableCell({
         } catch (error) {
             console.error('Failed to save', error);
             // Revert on error
-            setLocalValue(value.toString());
+            setLocalValue(value?.toString() ?? '');
         } finally {
             setIsLoading(false);
         }
@@ -104,7 +110,7 @@ function EditableCell({
             onClick={() => setIsEditing(true)}
             className={`cursor-pointer hover:bg-gray-100 p-1 rounded text-right ${isLoading ? 'opacity-50' : ''}`}
         >
-            {type === 'currency' ? value.toLocaleString() : value}
+            {value === null ? '実売額未取得' : type === 'currency' ? value.toLocaleString() : value}
         </div>
     );
 }
@@ -114,16 +120,16 @@ interface KpiPageClientProps {
     availableFiscalYears: number[];
     data: KpiSummary;
     summaryMetrics: {
-        totalActual: number;
+        totalActual: number | null;
         totalTarget: number;
-        totalLastYear: number;
-        totalTwoYearsAgo: number;
-        achievementRate: number;
-        yoyGrowthIds: number;
+        totalLastYear: number | null;
+        totalTwoYearsAgo: number | null;
+        achievementRate: number | null;
+        yoyGrowthIds: number | null;
         elapsedMonthCount: number;
         remainingMonths: number;
         elapsedTarget: number;
-        elapsedLastYear: number;
+        elapsedLastYear: number | null;
     };
 }
 
@@ -282,8 +288,8 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-gray-600">{formatCurrency(summaryMetrics.totalLastYear)}</div>
-                            <p className={`text-xs font-semibold mt-1 ${summaryMetrics.totalLastYear > 0 ? ((summaryMetrics.totalActual / summaryMetrics.totalLastYear) * 100 >= 100 ? 'text-green-600' : 'text-red-600') : 'text-muted-foreground'}`}>
-                                前年度対比: {summaryMetrics.totalLastYear > 0 ? formatPercent((summaryMetrics.totalActual / summaryMetrics.totalLastYear) * 100) : '-'}
+                            <p className={`text-xs font-semibold mt-1 ${(summaryMetrics.totalLastYear ?? 0) > 0 ? ((kpiRatio(summaryMetrics.totalActual, summaryMetrics.totalLastYear) ?? 0) >= 100 ? 'text-green-600' : 'text-red-600') : 'text-muted-foreground'}`}>
+                                前年度対比: {(summaryMetrics.totalLastYear ?? 0) > 0 ? formatPercent(kpiRatio(summaryMetrics.totalActual, summaryMetrics.totalLastYear)) : '-'}
                             </p>
                             <p className="text-xs text-muted-foreground">
                                 前々年: {formatCurrency(summaryMetrics.totalTwoYearsAgo)}
@@ -296,7 +302,7 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                             <span className="text-muted-foreground text-xs">{summaryMetrics.elapsedMonthCount}/12ヶ月経過</span>
                         </CardHeader>
                         <CardContent>
-                            <div className={`text-2xl font-bold ${summaryMetrics.achievementRate >= 100 ? 'text-green-600' : 'text-yellow-600'}`}>
+                            <div className={`text-2xl font-bold ${(summaryMetrics.achievementRate ?? 0) >= 100 ? 'text-green-600' : 'text-yellow-600'}`}>
                                 {formatPercent(summaryMetrics.achievementRate)}
                             </div>
                             <p className="text-xs text-muted-foreground">
@@ -310,8 +316,8 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                             <span className="text-muted-foreground text-xs">{summaryMetrics.elapsedMonthCount}/12ヶ月経過</span>
                         </CardHeader>
                         <CardContent>
-                            <div className={`text-2xl font-bold ${summaryMetrics.yoyGrowthIds >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {summaryMetrics.yoyGrowthIds > 0 ? '+' : ''}{formatPercent(summaryMetrics.yoyGrowthIds)}
+                            <div className={`text-2xl font-bold ${(summaryMetrics.yoyGrowthIds ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {(summaryMetrics.yoyGrowthIds ?? 0) > 0 ? '+' : ''}{formatPercent(summaryMetrics.yoyGrowthIds)}
                             </div>
                             <p className="text-xs text-muted-foreground">
                                 前年同期実績: {formatCurrency(summaryMetrics.elapsedLastYear)}
@@ -395,9 +401,9 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                                     const rowData = data.channels[channel];
 
                                     // Totals
-                                    const totalActual = rowData.reduce((sum, r) => sum + r.actual, 0);
+                                    const totalActual = sumKpiAmounts(rowData.map(r => r.actual));
                                     const totalTarget = rowData.reduce((sum, r) => sum + r.target, 0);
-                                    const totalLastYear = rowData.reduce((sum, r) => sum + r.lastYear, 0);
+                                    const totalLastYear = sumKpiAmounts(rowData.map(r => r.lastYear));
 
                                     return (
                                         <React.Fragment key={channel}>
@@ -413,11 +419,11 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                                                 <td className="p-2 border-r text-gray-500 text-xs text-right">前年度実績</td>
                                                 {rowData.map(r => (
                                                     <td key={`ly-${r.month}`} className="p-2 text-right border-l tabular-nums text-gray-500">
-                                                        {r.lastYear.toLocaleString()}
+                                                        {formatKpiAmount(r.lastYear)}
                                                     </td>
                                                 ))}
                                                 <td className="p-2 text-right border-l tabular-nums font-medium text-gray-500">
-                                                    {totalLastYear.toLocaleString()}
+                                                    {formatKpiAmount(totalLastYear)}
                                                 </td>
                                             </tr>
 
@@ -451,7 +457,7 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                                                     </td>
                                                 ))}
                                                 <td className="p-2 text-right border-l tabular-nums font-bold text-amber-900">
-                                                    {totalActual.toLocaleString()}
+                                                    {formatKpiAmount(totalActual)}
                                                 </td>
                                             </tr>
 
@@ -459,15 +465,15 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                                             <tr className="hover:bg-gray-50/30">
                                                 <td className="p-2 border-r text-xs text-right">目標達成率 (%)</td>
                                                 {rowData.map(r => {
-                                                    const rate = r.target > 0 ? (r.actual / r.target) * 100 : 0;
+                                                    const rate = kpiRatio(r.actual, r.target);
                                                     return (
                                                         <td key={`rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(rate, r.actual)}`}>
-                                                            <RateCell rate={rate} hasTarget={r.target > 0} showWarning={r.actual > 0} />
+                                                            <RateCell rate={rate} hasTarget={r.target > 0} showWarning={(r.actual ?? 0) > 0} />
                                                         </td>
                                                     );
                                                 })}
                                                 {(() => {
-                                                    const totalRate = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
+                                                    const totalRate = kpiRatio(totalActual, totalTarget);
                                                     return (
                                                         <td className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(totalRate)}`}>
                                                             <RateCell rate={totalRate} hasTarget={totalTarget > 0} showWarning={false} />
@@ -480,16 +486,16 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                                             <tr className="border-b-2 border-gray-300 hover:bg-gray-50/30">
                                                 <td className="p-2 border-r text-xs text-right">前年度対比 (%)</td>
                                                 {rowData.map(r => {
-                                                    const rate = r.lastYear > 0 ? (r.actual / r.lastYear) * 100 : 0;
+                                                    const rate = kpiRatio(r.actual, r.lastYear);
                                                     // Only show if actual > 0 (to avoid 0% when data not yet in)
                                                     return (
                                                         <td key={`yoy-${r.month}`} className="p-2 text-right border-l tabular-nums text-xs">
-                                                            {r.lastYear > 0 ? formatPercent(rate) : '-'}
+                                                            {(r.lastYear ?? 0) > 0 ? formatPercent(rate) : '-'}
                                                         </td>
                                                     );
                                                 })}
                                                 <td className="p-2 text-right border-l tabular-nums text-xs font-bold">
-                                                    {totalLastYear > 0 ? formatPercent((totalActual / totalLastYear) * 100) : '-'}
+                                                    {(totalLastYear ?? 0) > 0 ? formatPercent(kpiRatio(totalActual, totalLastYear)) : '-'}
                                                 </td>
                                             </tr>
                                         </React.Fragment>
@@ -499,9 +505,9 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                                 {/* Grand Total Block */}
                                 {(() => {
                                     const totalRowData = data.total;
-                                    const grandTotalActual = totalRowData.reduce((sum, r) => sum + r.actual, 0);
+                                    const grandTotalActual = sumKpiAmounts(totalRowData.map(r => r.actual));
                                     const grandTotalTarget = totalRowData.reduce((sum, r) => sum + r.target, 0);
-                                    const grandTotalLastYear = totalRowData.reduce((sum, r) => sum + r.lastYear, 0);
+                                    const grandTotalLastYear = sumKpiAmounts(totalRowData.map(r => r.lastYear));
 
                                     return (
                                         <React.Fragment key="total">
@@ -515,11 +521,11 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                                                 <td className="p-2 border-r text-gray-500 text-xs text-right">前年度実績</td>
                                                 {totalRowData.map(r => (
                                                     <td key={`total-ly-${r.month}`} className="p-2 text-right border-l tabular-nums text-gray-500 font-medium">
-                                                        {r.lastYear.toLocaleString()}
+                                                        {formatKpiAmount(r.lastYear)}
                                                     </td>
                                                 ))}
                                                 <td className="p-2 text-right border-l tabular-nums font-bold text-gray-500">
-                                                    {grandTotalLastYear.toLocaleString()}
+                                                    {formatKpiAmount(grandTotalLastYear)}
                                                 </td>
                                             </tr>
                                             {/* 2. Target */}
@@ -539,26 +545,26 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                                                 <td className="p-2 border-r font-bold text-right text-amber-900">実績</td>
                                                 {totalRowData.map(r => (
                                                     <td key={`total-actual-${r.month}`} className="p-2 text-right border-l tabular-nums font-bold text-sm text-amber-900">
-                                                        {r.actual.toLocaleString()}
+                                                        {formatKpiAmount(r.actual)}
                                                     </td>
                                                 ))}
                                                 <td className="p-2 text-right border-l tabular-nums font-bold text-sm text-amber-900">
-                                                    {grandTotalActual.toLocaleString()}
+                                                    {formatKpiAmount(grandTotalActual)}
                                                 </td>
                                             </tr>
                                             {/* 4. Rate */}
                                             <tr className="bg-gray-50/50">
                                                 <td className="p-2 border-r text-xs text-right">目標達成率 (%)</td>
                                                 {totalRowData.map(r => {
-                                                    const rate = r.target > 0 ? (r.actual / r.target) * 100 : 0;
+                                                    const rate = kpiRatio(r.actual, r.target);
                                                     return (
                                                         <td key={`total-rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(rate, r.actual)}`}>
-                                                            <RateCell rate={rate} hasTarget={r.target > 0} showWarning={r.actual > 0} />
+                                                            <RateCell rate={rate} hasTarget={r.target > 0} showWarning={(r.actual ?? 0) > 0} />
                                                         </td>
                                                     );
                                                 })}
                                                 {(() => {
-                                                    const grandRate = grandTotalTarget > 0 ? (grandTotalActual / grandTotalTarget) * 100 : 0;
+                                                    const grandRate = kpiRatio(grandTotalActual, grandTotalTarget);
                                                     return (
                                                         <td className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(grandRate)}`}>
                                                             <RateCell rate={grandRate} hasTarget={grandTotalTarget > 0} showWarning={false} />
@@ -570,15 +576,15 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                                             <tr className="border-b-4 border-double border-gray-400 bg-gray-50/50">
                                                 <td className="p-2 border-r text-xs text-right">前年度対比 (%)</td>
                                                 {totalRowData.map(r => {
-                                                    const rate = r.lastYear > 0 ? (r.actual / r.lastYear) * 100 : 0;
+                                                    const rate = kpiRatio(r.actual, r.lastYear);
                                                     return (
                                                         <td key={`total-yoy-${r.month}`} className="p-2 text-right border-l tabular-nums text-xs">
-                                                            {r.lastYear > 0 ? formatPercent(rate) : '-'}
+                                                            {(r.lastYear ?? 0) > 0 ? formatPercent(rate) : '-'}
                                                         </td>
                                                     );
                                                 })}
                                                 <td className="p-2 text-right border-l tabular-nums text-xs font-bold">
-                                                    {grandTotalLastYear > 0 ? formatPercent((grandTotalActual / grandTotalLastYear) * 100) : '-'}
+                                                    {(grandTotalLastYear ?? 0) > 0 ? formatPercent(kpiRatio(grandTotalActual, grandTotalLastYear)) : '-'}
                                                 </td>
                                             </tr>
                                         </React.Fragment>
@@ -614,7 +620,7 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                                         <td className="p-2 border-r text-gray-500 text-xs bg-gray-50/30 text-right">前年度実績</td>
                                         {data.salesActivity.map(r => (
                                             <td key={`sa-ly-${r.month}`} className="p-2 text-right border-l tabular-nums text-gray-500">
-                                                {r.lastYear > 0 ? r.lastYear : '-'}
+                                                {(r.lastYear ?? 0) > 0 ? r.lastYear : '-'}
                                             </td>
                                         ))}
                                         <td className="p-2 text-right font-medium border-l bg-gray-50/30 tabular-nums text-gray-500">
@@ -657,10 +663,10 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                                     <tr className="hover:bg-gray-50/50">
                                         <td className="p-2 text-xs border-r bg-gray-50/30 text-right">目標達成率 (%)</td>
                                         {data.salesActivity.map(r => {
-                                            const rate = r.target > 0 ? (r.actual / r.target) * 100 : 0;
+                                            const rate = kpiRatio(r.actual, r.target);
                                             return (
                                                 <td key={`rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(rate, r.actual)}`}>
-                                                    <RateCell rate={rate} hasTarget={r.target > 0} showWarning={r.actual > 0} />
+                                                    <RateCell rate={rate} hasTarget={r.target > 0} showWarning={(r.actual ?? 0) > 0} />
                                                 </td>
                                             );
                                         })}
@@ -681,10 +687,10 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                                     <tr className="hover:bg-gray-50/30 border-t">
                                         <td className="p-2 text-xs border-r bg-gray-50/30 text-right">前年度対比 (%)</td>
                                         {data.salesActivity.map(r => {
-                                            const rate = r.lastYear > 0 ? (r.actual / r.lastYear) * 100 : 0;
+                                            const rate = kpiRatio(r.actual, r.lastYear);
                                             return (
                                                 <td key={`sa-yoy-${r.month}`} className="p-2 text-right border-l tabular-nums text-xs">
-                                                    {r.lastYear > 0 ? formatPercent(rate) : '-'}
+                                                    {(r.lastYear ?? 0) > 0 ? formatPercent(rate) : '-'}
                                                 </td>
                                             );
                                         })}
@@ -727,7 +733,7 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                                         <td className="p-2 border-r bg-gray-50/30 text-right">前年度実績</td>
                                         {data.manufacturing.map(r => (
                                             <td key={`man-ly-${r.month}`} className="p-2 text-right border-l tabular-nums">
-                                                {r.lastYear.toLocaleString()}
+                                                {formatKpiAmount(r.lastYear)}
                                             </td>
                                         ))}
                                         <td className="p-2 text-right border-l tabular-nums">
@@ -770,10 +776,10 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                                     <tr className="hover:bg-gray-50/50">
                                         <td className="p-2 text-xs border-r bg-gray-50/30 text-right">目標達成率 (%)</td>
                                         {data.manufacturing.map(r => {
-                                            const rate = r.target > 0 ? (r.actual / r.target) * 100 : 0;
+                                            const rate = kpiRatio(r.actual, r.target);
                                             return (
                                                 <td key={`man-rate-${r.month}`} className={`p-2 text-right border-l tabular-nums text-xs ${getRateStyle(rate, r.actual)}`}>
-                                                    <RateCell rate={rate} hasTarget={r.target > 0} showWarning={r.actual > 0} />
+                                                    <RateCell rate={rate} hasTarget={r.target > 0} showWarning={(r.actual ?? 0) > 0} />
                                                 </td>
                                             );
                                         })}
@@ -794,10 +800,10 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                                     <tr className="hover:bg-gray-50/50">
                                         <td className="p-2 text-xs border-r bg-gray-50/30 text-right">前年度対比 (%)</td>
                                         {data.manufacturing.map(r => {
-                                            const rate = r.lastYear > 0 ? (r.actual / r.lastYear) * 100 : 0;
+                                            const rate = kpiRatio(r.actual, r.lastYear);
                                             return (
                                                 <td key={`man-yoy-${r.month}`} className="p-2 text-right border-l tabular-nums text-xs">
-                                                    {r.actual > 0 && r.lastYear > 0 ? formatPercent(rate) : '-'}
+                                                    {(r.actual ?? 0) > 0 && (r.lastYear ?? 0) > 0 ? formatPercent(rate) : '-'}
                                                 </td>
                                             );
                                         })}
@@ -830,8 +836,8 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                         const td = "p-1.5 border border-gray-300 text-right tabular-nums text-[11px]";
 
                         const renderRows = (label: string, bgClass: string, rows: typeof data.total, yearData: typeof data.total) => {
-                            const sub = (fn: (r: typeof rows[0]) => number) => rows.reduce((s, r) => s + fn(r), 0);
-                            const yr = (fn: (r: typeof yearData[0]) => number) => yearData.reduce((s, r) => s + fn(r), 0);
+                            const sub = (fn: (r: typeof rows[0]) => number | null) => sumKpiAmounts(rows.map(fn));
+                            const yr = (fn: (r: typeof yearData[0]) => number | null) => sumKpiAmounts(yearData.map(fn));
                             const subA = sub(r => r.actual), subT = sub(r => r.target), subL = sub(r => r.lastYear);
                             const yrA = yr(r => r.actual), yrT = yr(r => r.target), yrL = yr(r => r.lastYear);
                             return (
@@ -839,33 +845,33 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                                     <tr><td colSpan={colCount} className={`p-1.5 border border-gray-400 font-bold text-[12px] text-white ${bgClass}`}>{label}</td></tr>
                                     <tr className="text-gray-600">
                                         <td className={`${td} text-[10px]`}>前年度</td>
-                                        {rows.map(r => <td key={`ly-${label}-${r.month}`} className={td}>{r.lastYear.toLocaleString()}</td>)}
-                                        <td className={`${td} bg-gray-50 font-medium`}>{subL.toLocaleString()}</td>
-                                        {showYearTotal && <td className={`${td} bg-gray-100 font-bold`}>{yrL.toLocaleString()}</td>}
+                                        {rows.map(r => <td key={`ly-${label}-${r.month}`} className={td}>{formatKpiAmount(r.lastYear)}</td>)}
+                                        <td className={`${td} bg-gray-50 font-medium`}>{formatKpiAmount(subL)}</td>
+                                        {showYearTotal && <td className={`${td} bg-gray-100 font-bold`}>{formatKpiAmount(yrL)}</td>}
                                     </tr>
                                     <tr className="text-blue-700">
                                         <td className={`${td} text-[10px]`}>目標</td>
                                         {rows.map(r => <td key={`tg-${label}-${r.month}`} className={td}>{r.target.toLocaleString()}</td>)}
-                                        <td className={`${td} bg-gray-50 font-medium`}>{subT.toLocaleString()}</td>
-                                        {showYearTotal && <td className={`${td} bg-gray-100 font-bold`}>{yrT.toLocaleString()}</td>}
+                                        <td className={`${td} bg-gray-50 font-medium`}>{formatKpiAmount(subT)}</td>
+                                        {showYearTotal && <td className={`${td} bg-gray-100 font-bold`}>{formatKpiAmount(yrT)}</td>}
                                     </tr>
                                     <tr style={{ backgroundColor: '#fffbeb' }}>
                                         <td className={`${td} text-[10px] font-bold`}>実績</td>
-                                        {rows.map(r => <td key={`ac-${label}-${r.month}`} className={`${td} font-bold`}>{r.actual.toLocaleString()}</td>)}
-                                        <td className={`${td} bg-gray-50 font-bold`}>{subA.toLocaleString()}</td>
-                                        {showYearTotal && <td className={`${td} bg-gray-100 font-bold`}>{yrA.toLocaleString()}</td>}
+                                        {rows.map(r => <td key={`ac-${label}-${r.month}`} className={`${td} font-bold`}>{formatKpiAmount(r.actual)}</td>)}
+                                        <td className={`${td} bg-gray-50 font-bold`}>{formatKpiAmount(subA)}</td>
+                                        {showYearTotal && <td className={`${td} bg-gray-100 font-bold`}>{formatKpiAmount(yrA)}</td>}
                                     </tr>
                                     <tr>
                                         <td className={`${td} text-[9px]`}>達成率</td>
-                                        {rows.map(r => { const rt = r.target > 0 ? (r.actual / r.target) * 100 : 0; return <td key={`rt-${label}-${r.month}`} className={`${td} text-[10px] ${getRateStyle(rt, r.actual)}`}>{r.target > 0 ? formatPercent(rt) : '-'}</td> })}
-                                        {(() => { const rt = subT > 0 ? (subA / subT) * 100 : 0; return <td className={`${td} bg-gray-50 text-[10px] ${getRateStyle(rt)}`}>{subT > 0 ? formatPercent(rt) : '-'}</td> })()}
-                                        {showYearTotal && (() => { const rt = yrT > 0 ? (yrA / yrT) * 100 : 0; return <td className={`${td} bg-gray-100 text-[10px] ${getRateStyle(rt)}`}>{yrT > 0 ? formatPercent(rt) : '-'}</td> })()}
+                                        {rows.map(r => { const rt = kpiRatio(r.actual, r.target); return <td key={`rt-${label}-${r.month}`} className={`${td} text-[10px] ${getRateStyle(rt, r.actual)}`}>{r.target > 0 ? formatPercent(rt) : '-'}</td> })}
+                                        {(() => { const rt = kpiRatio(subA, subT); return <td className={`${td} bg-gray-50 text-[10px] ${getRateStyle(rt)}`}>{(subT ?? 0) > 0 ? formatPercent(rt) : '-'}</td> })()}
+                                        {showYearTotal && (() => { const rt = kpiRatio(yrA, yrT); return <td className={`${td} bg-gray-100 text-[10px] ${getRateStyle(rt)}`}>{(yrT ?? 0) > 0 ? formatPercent(rt) : '-'}</td> })()}
                                     </tr>
                                     <tr>
                                         <td className={`${td} text-[9px]`}>前年比</td>
-                                        {rows.map(r => { const rt = r.lastYear > 0 ? (r.actual / r.lastYear) * 100 : 0; return <td key={`yoy-${label}-${r.month}`} className={`${td} text-[10px]`}>{r.actual > 0 && r.lastYear > 0 ? formatPercent(rt) : '-'}</td> })}
-                                        {(() => { const rt = subL > 0 ? (subA / subL) * 100 : 0; return <td className={`${td} bg-gray-50 text-[10px]`}>{subA > 0 && subL > 0 ? formatPercent(rt) : '-'}</td> })()}
-                                        {showYearTotal && (() => { const rt = yrL > 0 ? (yrA / yrL) * 100 : 0; return <td className={`${td} bg-gray-100 text-[10px]`}>{yrA > 0 && yrL > 0 ? formatPercent(rt) : '-'}</td> })()}
+                                        {rows.map(r => { const rt = kpiRatio(r.actual, r.lastYear); return <td key={`yoy-${label}-${r.month}`} className={`${td} text-[10px]`}>{(r.actual ?? 0) > 0 && (r.lastYear ?? 0) > 0 ? formatPercent(rt) : '-'}</td> })}
+                                        {(() => { const rt = kpiRatio(subA, subL); return <td className={`${td} bg-gray-50 text-[10px]`}>{(subA ?? 0) > 0 && (subL ?? 0) > 0 ? formatPercent(rt) : '-'}</td> })()}
+                                        {showYearTotal && (() => { const rt = kpiRatio(yrA, yrL); return <td className={`${td} bg-gray-100 text-[10px]`}>{(yrA ?? 0) > 0 && (yrL ?? 0) > 0 ? formatPercent(rt) : '-'}</td> })()}
                                     </tr>
                                 </React.Fragment>
                             );
@@ -902,9 +908,9 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                         const td = "p-1.5 border border-gray-300 text-right tabular-nums text-[11px]";
                         const halfData = monthIndices.map(i => dataRows[i]);
                         const subT = halfData.reduce((s, r) => s + r.target, 0);
-                        const subA = halfData.reduce((s, r) => s + r.actual, 0);
+                        const subA = sumKpiAmounts(halfData.map(r => r.actual));
                         const yrT = dataRows.reduce((s, r) => s + r.target, 0);
-                        const yrA = dataRows.reduce((s, r) => s + r.actual, 0);
+                        const yrA = sumKpiAmounts(dataRows.map(r => r.actual));
                         const months = monthIndices.map(i => data.months[i]);
                         return (
                             <div className="mt-4">
@@ -922,14 +928,14 @@ export default function KpiPageClient({ fiscalYear, availableFiscalYears, data, 
                                         <tr className="text-blue-700">
                                             <td className={`${td} text-[10px]`}>目標</td>
                                             {halfData.map(r => <td key={`st-${r.month}`} className={td}>{r.target.toLocaleString()}</td>)}
-                                            <td className={`${td} bg-gray-50 font-medium`}>{subT.toLocaleString()}</td>
-                                            {showYearTotal && <td className={`${td} bg-gray-100 font-bold`}>{yrT.toLocaleString()}</td>}
+                                            <td className={`${td} bg-gray-50 font-medium`}>{formatKpiAmount(subT)}</td>
+                                            {showYearTotal && <td className={`${td} bg-gray-100 font-bold`}>{formatKpiAmount(yrT)}</td>}
                                         </tr>
                                         <tr style={{ backgroundColor: '#fffbeb' }}>
                                             <td className={`${td} text-[10px] font-bold`}>実績</td>
-                                            {halfData.map(r => <td key={`sa-${r.month}`} className={`${td} font-bold`}>{r.actual.toLocaleString()}</td>)}
-                                            <td className={`${td} bg-gray-50 font-bold`}>{subA.toLocaleString()}</td>
-                                            {showYearTotal && <td className={`${td} bg-gray-100 font-bold`}>{yrA.toLocaleString()}</td>}
+                                            {halfData.map(r => <td key={`sa-${r.month}`} className={`${td} font-bold`}>{formatKpiAmount(r.actual)}</td>)}
+                                            <td className={`${td} bg-gray-50 font-bold`}>{formatKpiAmount(subA)}</td>
+                                            {showYearTotal && <td className={`${td} bg-gray-100 font-bold`}>{formatKpiAmount(yrA)}</td>}
                                         </tr>
                                     </tbody>
                                 </table>

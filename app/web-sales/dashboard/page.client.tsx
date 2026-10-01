@@ -55,7 +55,7 @@ function WebSalesDashboardContent() {
   const [isAdCostModalOpen, setIsAdCostModalOpen] = useState(false);
   const [targetData, setTargetData] = useState<{
     target: number;
-    sales: number;
+    sales: number | null;
   }>({ target: 0, sales: 0 });
 
   const handleMonthChange = useCallback(
@@ -114,7 +114,6 @@ function WebSalesDashboardContent() {
         const { data, error } = await supabase
           .from("products")
           .select("id, name, price, series, series_code, product_code")
-          .eq("is_hidden", false)
           .order("series_code")
           .order("product_code");
 
@@ -167,8 +166,8 @@ function WebSalesDashboardContent() {
           return;
         }
 
-        const combinedData = productsData.map((product) => {
-          const salesItem = salesData?.find((s) => s.product_id === product.id);
+        const combinedData = productsData.filter((product: any) => !product.is_hidden || salesData?.some((row: any) => row.product_id === product.id && ['amazon', 'rakuten', 'yahoo', 'mercari', 'base', 'qoo10', 'tiktok'].some(channel => Number(row[`${channel}_count`] || 0) > 0))).map((product: any) => {
+          const salesItem = salesData?.find((s: any) => s.product_id === product.id);
 
           return {
             product_id: product.id,
@@ -182,6 +181,16 @@ function WebSalesDashboardContent() {
             base_count: salesItem?.base_count || 0,
             qoo10_count: salesItem?.qoo10_count || 0,
             tiktok_count: salesItem?.tiktok_count || 0,
+            amazon_amount: salesItem?.amazon_amount ?? null,
+            rakuten_amount: salesItem?.rakuten_amount ?? null,
+            yahoo_amount: salesItem?.yahoo_amount ?? null,
+            mercari_amount: salesItem?.mercari_amount ?? null,
+            base_amount: salesItem?.base_amount ?? null,
+            qoo10_amount: salesItem?.qoo10_amount ?? null,
+            tiktok_amount: salesItem?.tiktok_amount ?? null,
+            unit_price: salesItem?.unit_price,
+            unit_profit_rate: salesItem?.unit_profit_rate,
+            unit_cost_ex_ec: salesItem?.unit_cost_ex_ec ?? null,
             name: product.name,
             series: product.series,
             series_code: product.series_code,
@@ -339,6 +348,7 @@ function WebSalesDashboardContent() {
 
           {viewMode === "month" &&
             targetData.target > 0 &&
+            targetData.sales !== null &&
             (() => {
               const rate =
                 Math.round((targetData.sales / targetData.target) * 1000) / 10;
@@ -503,6 +513,7 @@ function WebSalesDashboardContent() {
               {/* 目標達成メーター */}
               {viewMode === "month" &&
                 targetData.target > 0 &&
+                targetData.sales !== null &&
                 (() => {
                   const rate =
                     Math.round((targetData.sales / targetData.target) * 1000) /

@@ -65,7 +65,10 @@ export async function acquireQoo10OfficialSales({
       if (!(quantity > 0) || !productName) {
         throw new Error(`Qoo10公式注文${clean(order.external_order_id)}の明細${index + 1}が不完全です`);
       }
-      const lineAmount = number(item.line_amount) || number(item.unit_price) * quantity;
+      if (item.line_amount == null || item.line_amount === "" || !Number.isFinite(Number(item.line_amount))) {
+        throw new Error("Qoo10公式の商品別金額が未取得です。販売単価からの推計は行いません");
+      }
+      const lineAmount = Number(item.line_amount);
       rows.push({
         shippingStatus: "配送完了",
         orderNumber: clean(order.external_order_id),
@@ -74,9 +77,9 @@ export async function acquireQoo10OfficialSales({
         productName,
         quantity,
         sellerProductCode: clean(item.sku),
-        buyerPaymentAmount: Math.round(lineAmount),
+        buyerPaymentAmount: lineAmount,
       });
-      totalAmount += Math.round(lineAmount);
+      totalAmount += lineAmount;
     }
   }
 

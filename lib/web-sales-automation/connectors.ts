@@ -4,6 +4,7 @@ import { XMLParser } from "fast-xml-parser";
 import { addDays } from "./date";
 import { requireEnv } from "./config";
 import { compactText, fetchJson, numberValue, sleep } from "./http";
+import { requireReportedAmount } from "./actual-sales-policy";
 import type {
   ChannelFetchResult,
   NormalizedSalesItem,
@@ -138,7 +139,7 @@ async function fetchAmazonSales(period: SyncPeriod): Promise<ChannelFetchResult>
       externalProductName: compactText(row.title || row.productName || key),
       occurredAt: null,
       quantity: numberValue(sales.unitsOrdered),
-      amount: numberValue(sales.orderedProductSales?.amount),
+      amount: numberValue(sales.unitsOrdered) > 0 ? requireReportedAmount("amazon", sales.orderedProductSales?.amount) : 0,
       sourceStatus: "reported",
       rawData: row,
     };
@@ -206,7 +207,6 @@ async function fetchRakutenSales(period: SyncPeriod): Promise<ChannelFetchResult
             sku.variantId || item.manageNumber || item.itemNumber || item.itemId,
           );
           const quantity = numberValue(item.units || item.quantity);
-          const unitPrice = numberValue(item.price || item.unitPrice);
           if (quantity <= 0) continue;
           items.push({
             externalOrderId: orderNumber,
@@ -215,7 +215,7 @@ async function fetchRakutenSales(period: SyncPeriod): Promise<ChannelFetchResult
             externalProductName: compactText(item.itemName || item.productName),
             occurredAt: orderedAt,
             quantity,
-            amount: numberValue(item.itemPrice) || unitPrice * quantity,
+            amount: requireReportedAmount("rakuten", item.line_amount),
             sourceStatus: compactText(order.orderProgress) || null,
             rawData: item,
           });
@@ -288,7 +288,7 @@ async function fetchYahooSales(period: SyncPeriod): Promise<ChannelFetchResult> 
           externalProductName: compactText(item.ItemTitle),
           occurredAt: compactText(order.OrderTime) || null,
           quantity,
-          amount: numberValue(item.UnitPrice) * quantity,
+          amount: requireReportedAmount("yahoo", item.line_amount),
           sourceStatus: compactText(order.OrderStatus) || null,
           rawData: item,
         });
@@ -347,7 +347,7 @@ async function fetchMercariSales(period: SyncPeriod): Promise<ChannelFetchResult
           externalProductName: compactText(product.name),
           occurredAt: compactText(order.createdAt) || null,
           quantity,
-          amount: numberValue(product.unitPrice) * quantity,
+          amount: requireReportedAmount("mercari", product.line_amount),
           sourceStatus: compactText(order.status) || null,
           rawData: product,
         });
@@ -417,7 +417,7 @@ async function fetchBaseSales(period: SyncPeriod): Promise<ChannelFetchResult> {
         externalProductName: compactText(item.title),
         occurredAt: unixTimeToIso(order.ordered || header.ordered),
         quantity,
-        amount: numberValue(item.item_total || item.total) || numberValue(item.price) * quantity,
+        amount: requireReportedAmount("base", item.item_total),
         sourceStatus: compactText(item.status || order.dispatch_status) || null,
         rawData: item,
       });
@@ -464,9 +464,7 @@ async function fetchQoo10Sales(period: SyncPeriod): Promise<ChannelFetchResult> 
     const key = compactText(
       row.SellerItemCode || row.sellerItemCode || row.OptionCode || row.ItemCode || row.ItemNo,
     );
-    const amount = numberValue(row.Total || row.total || row.OrderPrice || row.orderPrice)
-      || numberValue(row.SellPrice || row.sellPrice) * quantity;
-    if (amount <= 0) continue;
+    const amount = requireReportedAmount("qoo10", row.line_amount);
     items.push({
       externalOrderId: orderId,
       externalLineId: compactText(row.CartNo || row.cartNo || row.PackNo) || orderId,
@@ -553,9 +551,7 @@ async function fetchTiktokSales(period: SyncPeriod): Promise<ChannelFetchResult>
         const key = compactText(
           line.seller_sku || line.sku_id || line.id || line.product_id,
         );
-        const amount = numberValue(
-          line.sale_price?.amount || line.original_price?.amount || line.price?.amount || line.sku_subtotal_after_discount,
-        );
+        const amount = requireReportedAmount("tiktok", line.line_amount);
         items.push({
           externalOrderId: compactText(order.id),
           externalLineId: compactText(line.id || line.sku_id) || `${key}:${index}`,
@@ -563,7 +559,7 @@ async function fetchTiktokSales(period: SyncPeriod): Promise<ChannelFetchResult>
           externalProductName: compactText(line.product_name || line.display_status || line.name),
           occurredAt: unixTimeToIso(order.create_time),
           quantity,
-          amount: amount * quantity,
+          amount,
           sourceStatus: compactText(order.status) || null,
           rawData: line,
         });

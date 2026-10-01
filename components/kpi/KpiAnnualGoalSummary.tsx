@@ -1,17 +1,21 @@
 import { Factory, Target, TrendingUp, Users } from "lucide-react";
 
 import type { ChannelCode, KpiSummary } from "@/app/kpi/actions";
+import { sumKpiAmounts, kpiRatio } from "@/lib/kpi-amounts";
 
 type Props = {
   fiscalYear: number;
   data: KpiSummary;
 };
 
-function totalOf(rows: Array<{ actual: number; target: number; lastYear: number }>, key: "actual" | "target" | "lastYear") {
-  return rows.reduce((sum, row) => sum + row[key], 0);
+function totalOf(rows: Array<{ actual: number | null; target: number; lastYear: number | null }>, key: "target"): number;
+function totalOf(rows: Array<{ actual: number | null; target: number; lastYear: number | null }>, key: "actual" | "lastYear"): number | null;
+function totalOf(rows: Array<{ actual: number | null; target: number; lastYear: number | null }>, key: "actual" | "target" | "lastYear") {
+  return sumKpiAmounts(rows.map(row => row[key]));
 }
 
-function compactYen(value: number) {
+function compactYen(value: number | null) {
+  if (value === null) return '実売額未取得';
   if (value >= 100_000_000) {
     return `${(value / 100_000_000).toFixed(2).replace(/\.?0+$/, "")}億円`;
   }
@@ -25,7 +29,8 @@ function compactCount(value: number, unit: string) {
   return `${value.toLocaleString("ja-JP")}${unit}`;
 }
 
-function growthLabel(target: number, baseline: number) {
+function growthLabel(target: number, baseline: number | null) {
+  if (baseline === null) return '比較実売額未取得';
   if (baseline <= 0) return "比較実績なし";
   const growth = ((target / baseline) - 1) * 100;
   return `前年度比 ${growth >= 0 ? "+" : ""}${growth.toFixed(1)}%`;
@@ -37,11 +42,11 @@ export default function KpiAnnualGoalSummary({ fiscalYear, data }: Props) {
 
   if (annualTarget <= 0) return null;
 
-  const annualActual = channelCodes.reduce((sum, code) => sum + totalOf(data.channels[code], "actual"), 0);
-  const annualBaseline = channelCodes.reduce((sum, code) => sum + totalOf(data.channels[code], "lastYear"), 0);
-  const twoYearsAgo = data.total.reduce((sum, row) => sum + row.twoYearsAgo, 0);
-  const priorGrowth = twoYearsAgo > 0 ? ((annualBaseline / twoYearsAgo) - 1) * 100 : null;
-  const targetGrowth = annualBaseline > 0 ? ((annualTarget / annualBaseline) - 1) * 100 : null;
+  const annualActual = sumKpiAmounts(channelCodes.map(code => totalOf(data.channels[code], "actual")));
+  const annualBaseline = sumKpiAmounts(channelCodes.map(code => totalOf(data.channels[code], "lastYear")));
+  const twoYearsAgo = sumKpiAmounts(data.total.map(row => row.twoYearsAgo));
+  const priorGrowth = twoYearsAgo !== null && annualBaseline !== null && twoYearsAgo > 0 ? ((annualBaseline / twoYearsAgo) - 1) * 100 : null;
+  const targetGrowth = annualBaseline !== null && annualBaseline > 0 ? ((annualTarget / annualBaseline) - 1) * 100 : null;
 
   const webTarget = totalOf(data.channels.WEB, "target");
   const webBaseline = totalOf(data.channels.WEB, "lastYear");
@@ -49,11 +54,12 @@ export default function KpiAnnualGoalSummary({ fiscalYear, data }: Props) {
   const wholesaleBaseline = totalOf(data.channels.WHOLESALE, "lastYear");
   const storeTarget = totalOf(data.channels.STORE, "target");
   const shokuTarget = totalOf(data.channels.SHOKU, "target");
-  const storeBaseline = totalOf(data.channels.STORE, "lastYear") + totalOf(data.channels.SHOKU, "lastYear");
+  const storeBaseline = sumKpiAmounts([totalOf(data.channels.STORE, "lastYear"), totalOf(data.channels.SHOKU, "lastYear")]);
   const manufacturingTarget = data.manufacturing.reduce((sum, row) => sum + row.target, 0);
   const manufacturingBaseline = data.manufacturing.reduce((sum, row) => sum + row.lastYear, 0);
   const acquisitionTarget = data.salesActivity.reduce((sum, row) => sum + row.target, 0);
-  const progress = annualTarget > 0 ? Math.min(100, (annualActual / annualTarget) * 100) : 0;
+  const progressRate = kpiRatio(annualActual, annualTarget);
+  const progress = progressRate === null ? null : Math.min(100, progressRate);
 
   return (
     <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm print:hidden" aria-labelledby="annual-goal-heading">
@@ -75,11 +81,11 @@ export default function KpiAnnualGoalSummary({ fiscalYear, data }: Props) {
           <p className="text-xs font-medium text-slate-500">全社売上目標</p>
           <p className="mt-1 text-3xl font-bold text-slate-950">{compactYen(annualTarget)}</p>
           <p className="mt-1 text-sm font-semibold text-emerald-700">{growthLabel(annualTarget, annualBaseline)}</p>
-          <div className="mt-4 h-2 overflow-hidden rounded bg-slate-100" role="progressbar" aria-label="年度売上目標の達成率" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}>
+          {progress !== null && <div className="mt-4 h-2 overflow-hidden rounded bg-slate-100" role="progressbar" aria-label="年度売上目標の達成率" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}>
             <div className="h-full bg-emerald-500" style={{ width: `${progress}%` }} />
-          </div>
+          </div>}
           <p className="mt-1 text-xs text-slate-500">
-            現在 {compactYen(annualActual)} / {progress.toFixed(1)}%
+            現在 {compactYen(annualActual)} / {progress === null ? '達成率未確定' : `${progress.toFixed(1)}%`}
           </p>
         </div>
 

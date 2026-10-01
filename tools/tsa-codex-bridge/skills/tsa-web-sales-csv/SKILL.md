@@ -73,7 +73,7 @@ node "$env:USERPROFILE\.codex\skills\tsa-web-sales-csv\scripts\validate-csv.mjs"
 
 9. Archive both the original and `import_file` when they differ. For Qoo10, also archive the sanitized official-API evidence JSON. It contains counts and totals only, never credentials or customer data.
 10. Import only `import_file` into the matching TSA channel and report month.
-11. Verify the CSV total quantity, TSA imported quantity, channel, and report month.
+11. Verify the CSV total quantity and original reported product-sales amount against TSA's saved channel quantity and actual amount for the same single report month. Missing amounts require `needs_review`; never estimate from catalog prices. An explicit reported zero remains zero.
 
 ## Status Rules
 

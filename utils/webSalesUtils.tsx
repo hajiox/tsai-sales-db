@@ -1,10 +1,11 @@
 // /utils/webSalesUtils.tsx ver.2 (TikTok対応版)
 
 import { WebSalesData } from "@/types/db"
+import { sumWebSalesAmounts } from "@/lib/web-sales-amounts"
 
 export const calculateTotalAllECSites = (
   filteredItems: WebSalesData[],
-  productMap: Map<string, any>
+  _productMap?: Map<string, any>
 ) => {
   return filteredItems.reduce((totalSum, item) => {
     const totalCount =
@@ -16,15 +17,13 @@ export const calculateTotalAllECSites = (
       (item.qoo10_count || 0) +
       (item.tiktok_count || 0)
 
-    // unit_price (スナップショット単価) → price → productMap の順でフォールバック
-    const price = item.price || productMap.get(item.product_id)?.price || 0
-    const amount = totalCount * price
+    const amount = sumWebSalesAmounts(item)
 
     return {
       totalCount: totalSum.totalCount + totalCount,
-      totalAmount: totalSum.totalAmount + amount
+      totalAmount: totalSum.totalAmount === null || amount === null ? null : totalSum.totalAmount + amount
     }
-  }, { totalCount: 0, totalAmount: 0 })
+  }, { totalCount: 0, totalAmount: 0 as number | null })
 }
 
 export const sortWebSalesData = (data: WebSalesData[]) => {

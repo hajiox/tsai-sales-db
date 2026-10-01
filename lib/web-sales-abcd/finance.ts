@@ -1,4 +1,5 @@
 import type { ImportInput, Rank } from "./model";
+import { resolveWebSalesAmount, getWebSalesSavedUnitCost, WEB_SALES_CHANNELS, adjustWebSalesEcDeductions } from "../web-sales-amounts";
 
 export const FINANCE_RULE = "abcd-profit-1";
 export const FINANCE_LABELS = {
@@ -23,7 +24,7 @@ export type FinanceAnalysis = {
   rule: string; calculatedAt: string; items: FinanceItem[]; salesThreshold: number | null;
   marginThreshold: number | null; counts: Record<FinanceRank, number>; notes: string[];
 };
-const channels = ["amazon", "rakuten", "yahoo", "base", "mercari", "qoo10", "tiktok"];
+const channels = WEB_SALES_CHANNELS;
 const deductions = ["refunds", "platform_fees", "payment_fees", "seller_discounts", "seller_coupons", "seller_points", "shipping_costs", "other_costs"];
 const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
 function number(value: unknown): number | null {
@@ -62,7 +63,7 @@ export function financeAction(rank: FinanceRank, trafficRank?: Rank) {
 export function analyzeFinance(input: ImportInput, data: FinanceSources, trafficRanks: Map<string, Rank> = new Map(), calculatedAt = new Date().toISOString()): FinanceAnalysis {
   const notes = [
     "収益評価は月次販売集計の売上・保存原価を使用。アクセス分析の売上・購入実績とは集計範囲が異なる場合があります。",
-    "売上は保存単価×販売点数（BASEは保存済み売上金額）。商品別費用は実測ではなく売上構成比による推計です。",
+    "売上はEC原本の保存実売金額。通常単価で再計算しません。商品別費用は実測ではなく売上構成比による推計です。",
     "EC費用は同じEC内、直接広告費は同じEC・シリーズ内、Google・Meta等の共通広告費は同じシリーズの全EC売上で配分します。広告費は精算書と広告集計の大きい方を採用し二重控除しません。",
     "収益A/B/C/Dは売上中央値と加重平均利益率で分類。利益率基準の下限は0%。赤字は別表示。費用一部・未取得・売上0・新商品・欠品・同一商品への複数掲載は判定保留です。",
   ];
@@ -92,9 +93,7 @@ export function analyzeFinance(input: ImportInput, data: FinanceSources, traffic
     const code = series(products.get(id)?.series_code);
     for (const channel of channels) {
       const qty = number(row[`${channel}_count`]); if (qty == null || qty === 0) continue;
-      const price = number(row.unit_price);
-      const baseAmount = number(row.base_amount);
-      const sales = channel === "base" && baseAmount != null && baseAmount > 0 ? baseAmount : price == null ? null : qty * price;
+      const sales = resolveWebSalesAmount(row, channel);
       if (sales == null) { unknownChannels.add(channel); unknownSeries.add(code); continue; }
       revenue.set(`${channel}:${id}`, sales);
       channelRevenue.set(channel, (channelRevenue.get(channel) ?? 0) + sales);
@@ -107,7 +106,10 @@ export function analyzeFinance(input: ImportInput, data: FinanceSources, traffic
   const raw = (settlement?.raw_summary ?? {}) as Row;
   const feeValues = deductions.map(k => number(settlement?.[k]));
   const credits = number(settlement?.other_credits);
-  const feeTotal = feeValues.every(v => v != null) && credits != null ? sum(feeValues as number[]) - credits : null;
+  const rawFeeTotal = feeValues.every(v => v != null) && credits != null ? sum(feeValues as number[]) - credits : null;
+  const deductionAdjustment = adjustWebSalesEcDeductions(ch, rawFeeTotal, number(settlement?.seller_discounts));
+  const feeTotal = deductionAdjustment.ecDeductions;
+  if (deductionAdjustment.ecDeductionAdjustmentNote) notes.push(deductionAdjustment.ecDeductionAdjustmentNote);
   const feeComplete = settlement?.coverage_level === "complete" || raw.estimated === true;
   if (raw.estimated === true) notes.push("このECの精算費用自体が過去実績等に基づく概算です。公式確定額に更新されると収益評価も再計算されます。");
   else if (settlement && !feeComplete) notes.push("このECの精算費用は一部取得です。表示利益は未取得費用を含まない参考額で、収益A〜D・赤字の確定判定には使用しません。");
@@ -143,9 +145,9 @@ export function analyzeFinance(input: ImportInput, data: FinanceSources, traffic
     const qty = number(row?.[`${ch}_count`]);
     const code = series(products.get(id)?.series_code);
     result.sales = qty === 0 ? 0 : revenue.get(`${ch}:${id}`) ?? null;
-    const cost = number(row?.unit_cost_ex_ec);
+    const cost = row ? getWebSalesSavedUnitCost(row) : null;
     result.productCost = cost != null && qty != null ? cost * qty : null;
-    if (result.sales == null || result.productCost == null) { result.reason = "当月の販売点数・保存単価・EC手数料を除いた保存原価が未取得"; return result; }
+    if (result.sales == null || result.productCost == null) { result.reason = "当月の販売点数・実売金額・EC手数料を除いた保存原価が未取得"; return result; }
     if (unknownChannels.has(ch) || unknownSeries.has(code)) { result.reason = "配分対象に売上未取得の商品があり、費用の構成比を確定できません"; return result; }
     const salesShare = totalSales > 0 ? result.sales / totalSales : 0;
     result.ecCosts = feeTotal != null && totalSales > 0 ? feeTotal * salesShare : null;

@@ -8,6 +8,7 @@ import { Plus, Trash2, Edit, EyeOff, Link2, ChevronRight, ChevronDown, ChevronsU
 import ProductAddModal from "./ProductAddModal"
 import ProductEditModal from "./ProductEditModal"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
+import { sumWebSalesAmounts, resolveWebSalesAmount, getWebSalesAverageUnitPrice, getWebSalesSavedUnitCost, type WebSalesChannel } from "@/lib/web-sales-amounts"
 
 interface WebSalesDataTableProps {
   filteredItems: WebSalesData[]
@@ -19,17 +20,17 @@ interface WebSalesDataTableProps {
   getProductSeriesCode?: (productId: string) => number
   getProductSeries?: (productId: string) => string
   getProductProductCode?: (productId: string) => number
-  onEdit: (productId: string, ecSite: string) => void
+  onEdit: (productId: string, ecSite: string, value: number) => void
   onSave: (productId: string, ecSite: string) => void
   onEditValueChange: (value: string) => void
-  onCancel: () => void
+  onCancel: (productId: string, ecSite: string) => void
   productMaster?: any[]
   onRefresh?: () => void
   onChannelDelete?: (channel: string) => void
   month?: string
 }
 
-type TrendData = { month_label: string; sales: number; }
+type TrendData = { month_label: string; sales: number | null; }
 type SiteTrendData = { month_label: string; count: number; }
 type AdCostData = { series_code: number; total_ad_cost: number; }
 
@@ -570,20 +571,26 @@ export default function WebSalesDataTable({
   }
 
   // シリーズ別小計を計算
+  const formatActualAmount = (value: number | null) => value === null ? '実売額未取得' : `¥${formatNumber(value)}`
+  const getProductActualProfit = (row: WebSalesData, quantity: number, amount: number | null) => {
+    if (amount === null) return null
+    if (quantity === 0) return 0
+    const unitCost = getWebSalesSavedUnitCost(row)
+    if (unitCost === null) return null
+    return Math.round(amount - quantity * unitCost)
+  }
   const getSeriesSubtotals = (items: WebSalesData[]) => {
     const siteCounts: Record<string, number> = {}
     sites.forEach(site => { siteCounts[site.key] = 0 })
     let totalCount = 0
-    let totalAmount = 0
-    let totalProfit = 0
+    let totalAmount: number | null = 0
+    let totalProfit: number | null = 0
 
     // シリーズの広告費は1回だけ取得（商品ごとに加算しない）
     const seriesCode = items.length > 0 && getProductSeriesCode ? getProductSeriesCode(items[0].product_id) : 0
     const seriesAdCost = adCostData.find(item => item.series_code === seriesCode)?.total_ad_cost || 0
 
     items.forEach(row => {
-      const price = getProductPrice(row.product_id)
-      const profitRate = getProductProfitRate ? getProductProfitRate(row.product_id) : 0
       let rowTotal = 0
 
       sites.forEach(site => {
@@ -593,13 +600,13 @@ export default function WebSalesDataTable({
       })
 
       totalCount += rowTotal
-      const amount = rowTotal * price
-      totalAmount += amount
-      const profitAmount = Math.round(amount * (profitRate / 100))
-      totalProfit += profitAmount
+      const amount = sumWebSalesAmounts(row)
+      totalAmount = totalAmount === null || amount === null ? null : totalAmount + amount
+      const profitAmount = getProductActualProfit(row, rowTotal, amount)
+      totalProfit = totalProfit === null || profitAmount === null ? null : totalProfit + profitAmount
     })
 
-    return { siteCounts, totalCount, totalAmount, totalAdCost: seriesAdCost, totalProfit: totalProfit - seriesAdCost }
+    return { siteCounts, totalCount, totalAmount, totalAdCost: seriesAdCost, totalProfit: totalProfit === null ? null : totalProfit - seriesAdCost }
   }
 
   return (
@@ -681,7 +688,7 @@ export default function WebSalesDataTable({
                   </span>
                   <span className="flex-none text-right">
                     <span className="block text-sm font-bold text-slate-900">{subtotals.totalCount.toLocaleString('ja-JP')}個</span>
-                    <span className="block text-xs text-slate-500">¥{formatNumber(subtotals.totalAmount)}</span>
+                    <span className="block text-xs text-slate-500">{formatActualAmount(subtotals.totalAmount)}</span>
                   </span>
                 </button>
 
@@ -692,8 +699,8 @@ export default function WebSalesDataTable({
                   </div>
                   <div className="bg-white px-3 py-2">
                     <span className="block text-slate-500">最終利益</span>
-                    <strong className={`mt-0.5 block ${subtotals.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                      ¥{formatNumber(subtotals.totalProfit)}
+                    <strong className={`mt-0.5 block ${(subtotals.totalProfit ?? 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {subtotals.totalProfit === null ? '利益未確定' : formatActualAmount(subtotals.totalProfit)}
                     </strong>
                   </div>
                 </div>
@@ -705,8 +712,8 @@ export default function WebSalesDataTable({
                       const profitRate = getProductProfitRate ? getProductProfitRate(row.product_id) : 0
                       const productCode = getProductProductCode ? getProductProductCode(row.product_id) : (row.product_code || 0)
                       const totalCount = sites.reduce((sum, site) => sum + ((row as any)[site.key] || 0), 0)
-                      const totalAmount = totalCount * price
-                      const profitAmount = Math.round(totalAmount * (profitRate / 100))
+                      const totalAmount = sumWebSalesAmounts(row)
+                      const profitAmount = getProductActualProfit(row, totalCount, totalAmount)
                       const selectedSiteKey = hoveredSiteCell?.startsWith(`${row.product_id}-`)
                         ? hoveredSiteCell.slice(row.product_id.length + 1)
                         : null
@@ -772,7 +779,7 @@ export default function WebSalesDataTable({
                                   {trendData[row.product_id].map((trend, index) => (
                                     <div key={index} className="flex items-center justify-between gap-3 text-xs">
                                       <span className="text-slate-500">{trend.month_label}</span>
-                                      <strong className="text-slate-800">¥{formatNumber(trend.sales)}</strong>
+                                      <strong className="text-slate-800">{formatActualAmount(trend.sales)}</strong>
                                     </div>
                                   ))}
                                 </div>
@@ -784,20 +791,21 @@ export default function WebSalesDataTable({
 
                           <div className="grid grid-cols-2 gap-2">
                             <div className="rounded-md bg-slate-50 px-3 py-2">
-                              <span className="block text-xs text-slate-500">価格</span>
+                              <span className="block text-xs text-slate-500">通常価格（マスター）</span>
                               <strong className="text-sm text-slate-900">¥{formatNumber(price)}</strong>
                             </div>
                             <div className="rounded-md bg-slate-50 px-3 py-2">
-                              <span className="block text-xs text-slate-500">利益率</span>
+                              <span className="block text-xs text-slate-500">標準利益率（マスター）</span>
                               <strong className="text-sm text-slate-900">{profitRate}%</strong>
                             </div>
                             <div className="rounded-md bg-slate-50 px-3 py-2">
                               <span className="block text-xs text-slate-500">合計</span>
-                              <strong className="text-sm text-slate-900">{totalCount.toLocaleString('ja-JP')}個 / ¥{formatNumber(totalAmount)}</strong>
+                              <strong className="text-sm text-slate-900">{totalCount.toLocaleString('ja-JP')}個 / {formatActualAmount(totalAmount)}</strong>
+                              {totalCount > 0 && totalAmount !== null && <span className="block text-xs text-slate-500">平均実売単価 ¥{formatNumber(totalAmount / totalCount)}</span>}
                             </div>
                             <div className="rounded-md bg-slate-50 px-3 py-2">
                               <span className="block text-xs text-slate-500">利益</span>
-                              <strong className={`text-sm ${profitAmount >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>¥{formatNumber(profitAmount)}</strong>
+                              <strong className={`text-sm ${(profitAmount ?? 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{profitAmount === null ? '利益未確定' : formatActualAmount(profitAmount)}</strong>
                             </div>
                           </div>
 
@@ -837,19 +845,21 @@ export default function WebSalesDataTable({
                                       />
                                       <div className="grid grid-cols-2 gap-1">
                                         <button type="button" onClick={() => onSave(row.product_id, site.key)} className="min-h-10 rounded bg-emerald-600 text-sm font-semibold text-white">保存</button>
-                                        <button type="button" onClick={onCancel} className="min-h-10 rounded border border-slate-300 bg-white text-sm font-semibold text-slate-700">取消</button>
+                                        <button type="button" onClick={() => onCancel(row.product_id, site.key)} className="min-h-10 rounded border border-slate-300 bg-white text-sm font-semibold text-slate-700">取消</button>
                                       </div>
                                     </div>
                                   ) : (
                                     <button
                                       type="button"
-                                      onClick={() => onEdit(row.product_id, site.key)}
+                                      onClick={() => onEdit(row.product_id, site.key, count)}
                                       className="min-h-11 w-full rounded bg-white/80 px-3 text-center text-base font-bold text-slate-900"
                                       aria-label={`${site.label}の販売数${count}を編集`}
                                     >
                                       {count}
                                     </button>
                                   )}
+                                  <div className="mt-1 text-[10px] text-slate-600">{formatActualAmount(resolveWebSalesAmount(row, site.key.replace('_count', '') as WebSalesChannel))}</div>
+                                  {count > 0 && getWebSalesAverageUnitPrice(row, site.key.replace('_count', '') as WebSalesChannel) !== null && <div className="text-[10px] text-slate-500">平均実売単価 ¥{formatNumber(getWebSalesAverageUnitPrice(row, site.key.replace('_count', '') as WebSalesChannel)!)}</div>}
                                 </div>
                               )
                             })}
@@ -911,10 +921,10 @@ export default function WebSalesDataTable({
                   商品名
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
-                  価格
+                  通常価格
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap">
-                  利益率
+                  標準利益率
                 </th>
                 {sites.map(site => (
                   <th key={site.key} className={`px-4 py-3 text-center text-xs font-semibold text-gray-700 tracking-wider whitespace-nowrap ${site.bgColor}`}>
@@ -979,13 +989,13 @@ export default function WebSalesDataTable({
                           {subtotals.totalCount}
                         </td>
                         <td className="px-4 py-3 text-center text-sm font-bold text-slate-800">
-                          ¥{formatNumber(subtotals.totalAmount)}
+                          {formatActualAmount(subtotals.totalAmount)}
                         </td>
                         <td className="px-4 py-3 text-center text-sm font-semibold text-red-600">
                           ¥{formatNumber(subtotals.totalAdCost)}
                         </td>
-                        <td className={`px-4 py-3 text-center text-sm font-bold ${subtotals.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          ¥{formatNumber(subtotals.totalProfit)}
+                        <td className={`px-4 py-3 text-center text-sm font-bold ${(subtotals.totalProfit ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {subtotals.totalProfit === null ? '利益未確定' : formatActualAmount(subtotals.totalProfit)}
                         </td>
                         <td className="px-4 py-3"></td>
                       </tr>
@@ -997,8 +1007,8 @@ export default function WebSalesDataTable({
                         const productCode = getProductProductCode ? getProductProductCode(row.product_id) : (row.product_code || 0)
 
                         const totalCount = sites.reduce((sum, site) => sum + ((row as any)[site.key] || 0), 0)
-                        const totalAmount = totalCount * price
-                        const profitAmount = Math.round(totalAmount * (profitRate / 100))
+                        const totalAmount = sumWebSalesAmounts(row)
+                        const profitAmount = getProductActualProfit(row, totalCount, totalAmount)
 
                         const isDragTarget = dragOverProductId === row.product_id && dragProductId !== row.product_id
 
@@ -1073,15 +1083,17 @@ export default function WebSalesDataTable({
                                       <button onClick={() => onSave(row.product_id, site.key)} className="text-green-600 hover:text-green-800 text-sm">
                                         ✓
                                       </button>
-                                      <button onClick={onCancel} className="text-red-600 hover:text-red-800 text-sm">
+                                      <button onClick={() => onCancel(row.product_id, site.key)} className="text-red-600 hover:text-red-800 text-sm">
                                         ✗
                                       </button>
                                     </div>
                                   ) : (
-                                    <span onClick={() => onEdit(row.product_id, site.key)}>
+                                    <span onClick={() => onEdit(row.product_id, site.key, count)}>
                                       {count}
                                     </span>
                                   )}
+                                  <div className="mt-1 text-[10px] text-slate-600">{formatActualAmount(resolveWebSalesAmount(row, site.key.replace('_count', '') as WebSalesChannel))}</div>
+                                  {count > 0 && getWebSalesAverageUnitPrice(row, site.key.replace('_count', '') as WebSalesChannel) !== null && <div className="text-[10px] text-slate-500">平均 ¥{formatNumber(getWebSalesAverageUnitPrice(row, site.key.replace('_count', '') as WebSalesChannel)!)}</div>}
                                 </td>
                               )
                             })}
@@ -1089,14 +1101,15 @@ export default function WebSalesDataTable({
                               {totalCount}
                             </td>
                             <td className="px-4 py-4 text-center font-semibold">
-                              ¥{formatNumber(totalAmount)}
+                              {formatActualAmount(totalAmount)}
+                              {totalCount > 0 && totalAmount !== null && <div className="text-[10px] font-normal text-gray-500">平均 ¥{formatNumber(totalAmount / totalCount)}</div>}
                             </td>
                             <td className="px-4 py-4 text-center text-gray-400 text-sm">
                               -
                             </td>
-                            <td className={`px-4 py-4 text-center font-semibold ${profitAmount >= 0 ? 'text-green-600' : 'text-red-600'
+                            <td className={`px-4 py-4 text-center font-semibold ${(profitAmount ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
                               }`}>
-                              ¥{formatNumber(profitAmount)}
+                              {profitAmount === null ? '利益未確定' : formatActualAmount(profitAmount)}
                             </td>
                             <td className="px-4 py-4 text-center">
                               <div className="flex items-center justify-center gap-1">
@@ -1158,8 +1171,8 @@ export default function WebSalesDataTable({
           ) : trendData[hoveredProductId] && trendData[hoveredProductId].length > 0 ? (
             <div className="space-y-1.5">
               {trendData[hoveredProductId].map((trend, index) => {
-                const maxSales = Math.max(...trendData[hoveredProductId].map(t => t.sales))
-                const barWidth = maxSales > 0 ? (trend.sales / maxSales) * 100 : 0
+                const maxSales = Math.max(...trendData[hoveredProductId].map(t => t.sales ?? 0))
+                const barWidth = maxSales > 0 && trend.sales !== null ? (trend.sales / maxSales) * 100 : 0
 
                 return (
                   <div key={index} className="flex items-center justify-between text-xs">
@@ -1171,7 +1184,7 @@ export default function WebSalesDataTable({
                       ></div>
                     </div>
                     <span className="w-20 text-right text-gray-800 font-mono">
-                      ¥{formatNumber(trend.sales)}
+                      {formatActualAmount(trend.sales)}
                     </span>
                   </div>
                 )

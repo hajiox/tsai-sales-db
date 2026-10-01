@@ -4,6 +4,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import { isQoo10SettledDetailUnavailable } from "@/lib/web-sales-codex/ec-profit-retry";
 import { selectEffectiveFinanceJob } from "@/lib/web-sales-codex/finance-job-state";
+import { resolveWebSalesAmount, getWebSalesSavedUnitCost, summarizeWebSalesChannel, adjustWebSalesEcDeductions } from "@/lib/web-sales-amounts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,9 +45,9 @@ const countColumn: Record<Channel, string> = {
 
 type Totals = {
   quantity: number;
-  sales: number;
-  productCost: number;
-  productProfit: number;
+  sales: number | null;
+  productCost: number | null;
+  productProfit: number | null;
   refunds: number;
   platformFees: number;
   paymentFees: number;
@@ -59,7 +60,7 @@ type Totals = {
   marketplaceFundedDiscounts: number;
   ecDeductions: number;
   directAdCost: number;
-  finalProfit: number;
+  finalProfit: number | null;
 };
 
 export async function GET(request: Request) {
@@ -82,7 +83,7 @@ export async function GET(request: Request) {
     const [salesResult, productsResult, settlementResult, adsResult, jobsResult] = await Promise.all([
       supabase
         .from("web_sales_summary")
-        .select("report_month,product_id,amazon_count,rakuten_count,yahoo_count,mercari_count,base_count,qoo10_count,tiktok_count,base_amount,unit_price,unit_profit_rate,unit_cost_ex_ec")
+        .select("report_month,product_id,amazon_count,rakuten_count,yahoo_count,mercari_count,base_count,qoo10_count,tiktok_count,amazon_amount,rakuten_amount,yahoo_amount,mercari_amount,base_amount,qoo10_amount,tiktok_amount,unit_price,unit_profit_rate,unit_cost_ex_ec")
         .in("report_month", reportMonths),
       supabase.from("products").select("id,price,profit_rate,series_code,series"),
       supabase.from("ec_profit_monthly").select("*").in("report_month", reportMonths),
@@ -123,24 +124,7 @@ export async function GET(request: Request) {
     }
 
     const channels = CHANNELS.map((channel) => {
-      let quantity = 0;
-      let sales = 0;
-      let productCost = 0;
-      for (const row of currentSales) {
-        const count = number((row as Record<string, unknown>)[countColumn[channel]]);
-        if (count <= 0) continue;
-        const fallback = products.get(String(row.product_id));
-        const unitPrice = number(row.unit_price ?? fallback?.price);
-        const unitProfitRate = number(row.unit_profit_rate ?? fallback?.profit_rate);
-        const frozenCost = row.unit_cost_ex_ec == null
-          ? unitPrice * (1 - unitProfitRate / 100)
-          : number(row.unit_cost_ex_ec);
-        quantity += count;
-        sales += channel === "base" && number(row.base_amount) > 0
-          ? number(row.base_amount)
-          : count * unitPrice;
-        productCost += count * frozenCost;
-      }
+      const { quantity, sales, productCost, amountComplete, costComplete } = summarizeWebSalesChannel(currentSales, channel);
 
       const settlement = settlements.get(channel);
       const settlementJob = latestJobs.get(`ec_profit_import:${channel}`);
@@ -153,8 +137,11 @@ export async function GET(request: Request) {
       const shippingCosts = number(settlement?.shipping_costs);
       const otherCosts = number(settlement?.other_costs);
       const otherCredits = number(settlement?.other_credits);
-      const ecDeductions = refunds + platformFees + paymentFees + sellerDiscounts
-        + sellerCoupons + sellerPoints + shippingCosts + otherCosts - otherCredits;
+      const deductionAdjustment = adjustWebSalesEcDeductions(channel,
+        refunds + platformFees + paymentFees + sellerDiscounts
+          + sellerCoupons + sellerPoints + shippingCosts + otherCosts - otherCredits,
+        sellerDiscounts);
+      const ecDeductions = deductionAdjustment.ecDeductions;
       const importedAdCost = channel === "amazon"
         ? adTotals.amazon
         : channel === "rakuten"
@@ -180,11 +167,10 @@ export async function GET(request: Request) {
       const displayedReason = isEstimate
         ? `${String(settlement?.notes || "概算値を表示しています")} 公式取得状況: ${estimateCompatibleOfficialReason}`.trim()
         : officialReason;
-      const productProfit = sales - productCost;
-      // TSA sales use the saved full unit price, so marketplace-funded coupons
-      // are already represented in sales. Keep the reimbursement visible for
-      // reconciliation, but do not add it to profit a second time.
-      const finalProfit = productProfit - ecDeductions - directAdCost;
+      const productProfit = subtract(sales, productCost);
+      // Preserve the EC report's merchandise amount. Platform funded discounts
+      // remain reconciliation evidence, not a second addition to revenue.
+      const finalProfit = subtract(productProfit, ecDeductions, directAdCost);
       const reportedGross = number(settlement?.gross_sales);
       const adjustedReportedGross = reportedGross + marketplaceFundedDiscounts;
       const settlementComplete = settlement?.coverage_level === "complete";
@@ -196,6 +182,9 @@ export async function GET(request: Request) {
         label: CHANNEL_LABELS[channel],
         quantity: round(quantity),
         sales: round(sales),
+        amountComplete,
+        costComplete,
+        missingAmountChannels: amountComplete ? [] : [channel],
         productCost: round(productCost),
         productProfit: round(productProfit),
         refunds: round(refunds),
@@ -209,16 +198,20 @@ export async function GET(request: Request) {
         otherCredits: round(otherCredits),
         marketplaceFundedDiscounts: round(marketplaceFundedDiscounts),
         ecDeductions: round(ecDeductions),
+        ...(deductionAdjustment.sellerDiscountsIncludedInSales != null ? {
+          sellerDiscountsIncludedInSales: round(deductionAdjustment.sellerDiscountsIncludedInSales),
+          ecDeductionAdjustmentNote: deductionAdjustment.ecDeductionAdjustmentNote,
+        } : {}),
         directAdCost: round(directAdCost),
         adCostSource: settlementAdCost > importedAdCost ? "settlement" : "advertising_import",
         isEstimate,
         estimateBasis: typeof rawSummary.estimate_basis === "string" ? rawSummary.estimate_basis : null,
         estimateBasisMonths: Array.isArray(rawSummary.estimate_basis_months) ? rawSummary.estimate_basis_months : [],
         finalProfit: round(finalProfit),
-        profitRate: sales > 0 ? round(finalProfit / sales * 100, 1) : 0,
+        profitRate: sales != null && sales > 0 && finalProfit != null ? round(finalProfit / sales * 100, 1) : null,
         reportedGross: round(reportedGross),
         adjustedReportedGross: round(adjustedReportedGross),
-        reconciliationDifference: settlement ? round(adjustedReportedGross - sales) : null,
+        reconciliationDifference: settlement ? round(subtract(adjustedReportedGross, sales)) : null,
         netPayout: settlement?.net_payout == null ? null : round(number(settlement.net_payout)),
         reportBasis: settlement?.report_basis || null,
         coverageLevel: settlement?.coverage_level || null,
@@ -238,29 +231,8 @@ export async function GET(request: Request) {
     });
 
     const sharedAdCost = adTotals.google + adTotals.meta + adTotals.other;
-    const totals = channels.reduce<Totals>((sum, row) => {
-      for (const key of Object.keys(sum) as (keyof Totals)[]) sum[key] += number(row[key]);
-      return sum;
-    }, {
-      quantity: 0,
-      sales: 0,
-      productCost: 0,
-      productProfit: 0,
-      refunds: 0,
-      platformFees: 0,
-      paymentFees: 0,
-      sellerDiscounts: 0,
-      sellerCoupons: 0,
-      sellerPoints: 0,
-      shippingCosts: 0,
-      otherCosts: 0,
-      otherCredits: 0,
-      marketplaceFundedDiscounts: 0,
-      ecDeductions: 0,
-      directAdCost: 0,
-      finalProfit: 0,
-    });
-    totals.finalProfit -= sharedAdCost;
+    const totals = aggregateTotals(channels);
+    totals.finalProfit = subtract(totals.finalProfit, sharedAdCost);
     const totalAdCost = totals.directAdCost + sharedAdCost;
     const previousMonthSummary = summarizeMonth(previousMonth, allSales, products, allSettlements, allAds);
     const previousYearSummary = summarizeMonth(previousYearMonth, allSales, products, allSettlements, allAds);
@@ -284,13 +256,15 @@ export async function GET(request: Request) {
         ...mapRounded(totals),
         adCost: round(totalAdCost),
         sharedAdCost: round(sharedAdCost),
-        profitRate: totals.sales > 0 ? round(totals.finalProfit / totals.sales * 100, 1) : 0,
+        amountComplete: channels.every(row => row.amountComplete),
+        missingAmountChannels: channels.filter(row => !row.amountComplete).map(row => row.channel),
+        profitRate: totals.sales != null && totals.sales > 0 && totals.finalProfit != null ? round(totals.finalProfit / totals.sales * 100, 1) : null,
         reportedGross: round(channels.reduce((sum, row) => sum + row.reportedGross, 0)),
         adjustedReportedGross: round(channels.reduce((sum, row) => sum + row.adjustedReportedGross, 0)),
         netPayout: round(channels.reduce((sum, row) => sum + number(row.netPayout), 0)),
       },
       completeness: {
-        isFinal: missingChannels.length === 0,
+        isFinal: missingChannels.length === 0 && channels.every(row => row.amountComplete && row.costComplete),
         completedSettlements: CHANNELS.length - missingChannels.length,
         estimatedSettlements: estimatedSettlements.length,
         totalSettlements: CHANNELS.length,
@@ -318,6 +292,7 @@ export async function GET(request: Request) {
         previousYear: previousYearSummary,
       },
       calculation: {
+        salesBasis: "EC原本の商品別実売金額。通常価格から再計算しない",
         formula: "売上 - 商品原価 - EC控除 - 広告費",
         productCostBasis: "月次保存原価（Amazon手数料などEC控除を除外）",
         sharedAds: "Google・Meta・その他広告は総合利益でのみ控除",
@@ -411,12 +386,15 @@ function number(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function round(value: number, digits = 0) {
+function round(value: number, digits?: number): number;
+function round(value: number | null, digits?: number): number | null;
+function round(value: number | null, digits = 2) {
+  if (value == null) return null;
   const multiplier = 10 ** digits;
   return Math.round((value + Number.EPSILON) * multiplier) / multiplier;
 }
 
-function mapRounded<T extends Record<string, number>>(value: T): T {
+function mapRounded<T extends Record<string, number | null>>(value: T): T {
   return Object.fromEntries(Object.entries(value).map(([key, amount]) => [key, round(amount)])) as T;
 }
 
@@ -433,9 +411,9 @@ type FinancialChannel = {
   channel: Channel;
   label: string;
   quantity: number;
-  sales: number;
-  productCost: number;
-  productProfit: number;
+  sales: number | null;
+  productCost: number | null;
+  productProfit: number | null;
   refunds: number;
   platformFees: number;
   paymentFees: number;
@@ -448,7 +426,7 @@ type FinancialChannel = {
   marketplaceFundedDiscounts: number;
   ecDeductions: number;
   directAdCost: number;
-  finalProfit: number;
+  finalProfit: number | null;
 };
 
 function shiftMonth(month: string, offset: number) {
@@ -495,15 +473,18 @@ function summarizeMonth(
     const shippingCosts = number(settlement?.shipping_costs);
     const otherCosts = number(settlement?.other_costs);
     const otherCredits = number(settlement?.other_credits);
-    const ecDeductions = refunds + platformFees + paymentFees + sellerDiscounts
-      + sellerCoupons + sellerPoints + shippingCosts + otherCosts - otherCredits;
+    const deductionAdjustment = adjustWebSalesEcDeductions(channel,
+      refunds + platformFees + paymentFees + sellerDiscounts
+        + sellerCoupons + sellerPoints + shippingCosts + otherCosts - otherCredits,
+      sellerDiscounts);
+    const ecDeductions = deductionAdjustment.ecDeductions;
     const importedAdCost = directImportedAdCost(channel, adTotals);
     const rawSummary = settlement?.raw_summary && typeof settlement.raw_summary === "object"
       ? settlement.raw_summary as Record<string, unknown>
       : {};
     const marketplaceFundedDiscounts = number(rawSummary.excluded_marketplace_funded_discounts);
     const directAdCost = Math.max(importedAdCost, number(rawSummary.excluded_ad_costs));
-    const productProfit = salesAndCost.sales - salesAndCost.productCost;
+    const productProfit = subtract(salesAndCost.sales, salesAndCost.productCost);
     return {
       channel,
       label: CHANNEL_LABELS[channel],
@@ -522,16 +503,17 @@ function summarizeMonth(
       otherCredits: round(otherCredits),
       marketplaceFundedDiscounts: round(marketplaceFundedDiscounts),
       ecDeductions: round(ecDeductions),
+      ...(deductionAdjustment.sellerDiscountsIncludedInSales != null ? {
+        sellerDiscountsIncludedInSales: round(deductionAdjustment.sellerDiscountsIncludedInSales),
+        ecDeductionAdjustmentNote: deductionAdjustment.ecDeductionAdjustmentNote,
+      } : {}),
       directAdCost: round(directAdCost),
-      finalProfit: round(productProfit - ecDeductions - directAdCost),
+      finalProfit: round(subtract(productProfit, ecDeductions, directAdCost)),
     };
   });
   const sharedAdCost = adTotals.google + adTotals.meta + adTotals.other;
-  const totals = channels.reduce<Totals>((sum, row) => {
-    for (const key of Object.keys(sum) as (keyof Totals)[]) sum[key] += number(row[key]);
-    return sum;
-  }, emptyTotals());
-  totals.finalProfit -= sharedAdCost;
+  const totals = aggregateTotals(channels);
+  totals.finalProfit = subtract(totals.finalProfit, sharedAdCost);
   return {
     month,
     channels,
@@ -539,7 +521,7 @@ function summarizeMonth(
       ...mapRounded(totals),
       adCost: round(totals.directAdCost + sharedAdCost),
       sharedAdCost: round(sharedAdCost),
-      profitRate: totals.sales > 0 ? round(totals.finalProfit / totals.sales * 100, 1) : 0,
+      profitRate: totals.sales != null && totals.sales > 0 && totals.finalProfit != null ? round(totals.finalProfit / totals.sales * 100, 1) : null,
     },
     adCosts: mapRounded(adTotals),
   };
@@ -567,30 +549,31 @@ function emptyTotals(): Totals {
   };
 }
 
+function add(left: number | null, right: number | null): number | null { return left == null || right == null ? null : left + right; }
+function subtract(first: number | null, ...rest: (number | null)[]): number | null {
+  return first == null || rest.some(value => value == null) ? null : rest.reduce<number>((total, value) => total - value!, first);
+}
+function aggregateTotals(rows: readonly FinancialChannel[]): Totals {
+  const result = emptyTotals();
+  for (const row of rows) {
+    for (const key of Object.keys(result) as (keyof Totals)[]) {
+      if (["sales", "productCost", "productProfit", "finalProfit"].includes(key)) continue;
+      result[key] = number(result[key]) + number(row[key]);
+    }
+    result.sales = add(result.sales, row.sales);
+    result.productCost = add(result.productCost, row.productCost);
+    result.productProfit = add(result.productProfit, row.productProfit);
+    result.finalProfit = add(result.finalProfit, row.finalProfit);
+  }
+  return result;
+}
+
 function channelSalesAndCost(
   channel: Channel,
   rows: readonly Record<string, unknown>[],
-  products: ReadonlyMap<string, Record<string, unknown>>,
+  _products: ReadonlyMap<string, Record<string, unknown>>,
 ) {
-  let quantity = 0;
-  let sales = 0;
-  let productCost = 0;
-  for (const row of rows) {
-    const count = number(row[countColumn[channel]]);
-    if (count <= 0) continue;
-    const fallback = products.get(String(row.product_id));
-    const unitPrice = number(row.unit_price ?? fallback?.price);
-    const unitProfitRate = number(row.unit_profit_rate ?? fallback?.profit_rate);
-    const frozenCost = row.unit_cost_ex_ec == null
-      ? unitPrice * (1 - unitProfitRate / 100)
-      : number(row.unit_cost_ex_ec);
-    quantity += count;
-    sales += channel === "base" && number(row.base_amount) > 0
-      ? number(row.base_amount)
-      : count * unitPrice;
-    productCost += count * frozenCost;
-  }
-  return { quantity, sales, productCost };
+  return summarizeWebSalesChannel(rows, channel);
 }
 
 function directImportedAdCost(channel: Channel, adTotals: AdTotals) {
@@ -604,9 +587,9 @@ type SeriesAccumulator = {
   seriesCode: number | null;
   seriesName: string;
   count: number;
-  sales: number;
-  productCost: number;
-  channelSales: Record<Channel, number>;
+  sales: number | null;
+  productCost: number | null;
+  channelSales: Record<Channel, number | null>;
   directAds: Record<Channel, number>;
   sharedAdCost: number;
 };
@@ -653,21 +636,15 @@ function buildSeriesSummary({
     const product = products.get(String(row.product_id));
     const seriesCode = nullableSeriesCode(product?.series_code);
     const item = ensure(seriesCode, product?.series ? String(product.series) : undefined);
-    const unitPrice = number(row.unit_price ?? product?.price);
-    const unitProfitRate = number(row.unit_profit_rate ?? product?.profit_rate);
-    const frozenCost = row.unit_cost_ex_ec == null
-      ? unitPrice * (1 - unitProfitRate / 100)
-      : number(row.unit_cost_ex_ec);
+    const frozenCost = getWebSalesSavedUnitCost(row);
     for (const channel of CHANNELS) {
       const count = number(row[countColumn[channel]]);
       if (count <= 0) continue;
-      const sales = channel === "base" && number(row.base_amount) > 0
-        ? number(row.base_amount)
-        : count * unitPrice;
+      const sales = resolveWebSalesAmount(row, channel);
       item.count += count;
-      item.sales += sales;
-      item.productCost += count * frozenCost;
-      item.channelSales[channel] += sales;
+      item.sales = add(item.sales, sales);
+      item.productCost = add(item.productCost, frozenCost == null ? null : count * frozenCost);
+      item.channelSales[channel] = add(item.channelSales[channel], sales);
     }
   }
 
@@ -692,8 +669,9 @@ function buildSeriesSummary({
     for (const channel of CHANNELS) {
       const channelRow = channelMap.get(channel);
       if (!channelRow) continue;
-      const salesShare = channelRow.sales > 0 ? item.channelSales[channel] / channelRow.sales : 0;
-      const fallbackShare = channelRow.sales <= 0 && item.seriesCode == null ? 1 : salesShare;
+      const salesShare = channelRow.sales == null || item.channelSales[channel] == null ? null : channelRow.sales > 0 ? item.channelSales[channel]! / channelRow.sales : 0;
+      const fallbackShare = channelRow.sales != null && channelRow.sales <= 0 && item.seriesCode == null ? 1 : salesShare;
+      if (fallbackShare == null) return { seriesCode: item.seriesCode, seriesName: item.seriesName, count: round(item.count), sales: round(item.sales), productCost: round(item.productCost), productProfit: null, platformFees: null, paymentFees: null, ecFees: null, ecDeductions: null, adCost: null, finalProfit: null };
       platformFees += channelRow.platformFees * fallbackShare;
       paymentFees += channelRow.paymentFees * fallbackShare;
       ecDeductions += channelRow.ecDeductions * fallbackShare;
@@ -705,7 +683,7 @@ function buildSeriesSummary({
       directAdCost += channelRow.directAdCost * adShare;
     }
     const adCost = item.sharedAdCost + directAdCost;
-    const productProfit = item.sales - item.productCost;
+    const productProfit = subtract(item.sales, item.productCost);
     return {
       seriesCode: item.seriesCode,
       seriesName: item.seriesName,
@@ -718,9 +696,9 @@ function buildSeriesSummary({
       ecFees: round(platformFees + paymentFees),
       ecDeductions: round(ecDeductions),
       adCost: round(adCost),
-      finalProfit: round(productProfit - ecDeductions - adCost),
+      finalProfit: round(subtract(productProfit, ecDeductions, adCost)),
     };
-  }).sort((a, b) => b.sales - a.sales);
+  }).sort((a, b) => (b.sales ?? -Infinity) - (a.sales ?? -Infinity));
 }
 
 function nullableSeriesCode(value: unknown) {

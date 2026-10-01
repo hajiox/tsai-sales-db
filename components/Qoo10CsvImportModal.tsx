@@ -48,6 +48,7 @@ export default function Qoo10CsvImportModal({
     productId: string;
     productName: string;
     quantity: number;
+    amount: number;
     isLearned?: boolean;
   }>>([]);
   const [savingMapping, setSavingMapping] = useState<string | null>(null);
@@ -74,6 +75,7 @@ export default function Qoo10CsvImportModal({
           productId: '',
           productName: '',
           quantity: u.quantity,
+          amount: u.amount,
           isLearned: false
         })),
         // productInfoがある場合とない場合の両方に対応
@@ -82,6 +84,7 @@ export default function Qoo10CsvImportModal({
           productId: m.productId || m.productInfo?.id || '',
           productName: m.productName || m.productInfo?.name || '',
           quantity: m.quantity,
+          amount: m.amount,
           isLearned: false
         })),
       ];
@@ -199,7 +202,8 @@ export default function Qoo10CsvImportModal({
             productInfo: {
               id: item.productId
             },
-            quantity: item.quantity
+            quantity: item.quantity,
+            amount: item.amount
           })),
           newMappings: [],
         };
@@ -215,7 +219,7 @@ export default function Qoo10CsvImportModal({
       const response = await fetch('/api/import/qoo10-confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestData),
+        body: JSON.stringify({ ...requestData, expectedQuantity: parseResult.summary.totalQuantity, expectedAmount: parseResult.summary.totalAmount }),
       });
 
       const result = await response.json();

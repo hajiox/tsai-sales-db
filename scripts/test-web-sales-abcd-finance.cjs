@@ -11,7 +11,7 @@ const input = { channel: "amazon", start: "2026-08-01", end: "2026-08-31", metri
 const feeFields = { refunds: 0, platform_fees: 100, payment_fees: 0, seller_discounts: 0, seller_coupons: 0, seller_points: 0, shipping_costs: 0, other_costs: 0, other_credits: 0 };
 function fixture() { return {
   products: [{ id: "p1", series_code: 1 }, { id: "p2", series_code: 1 }],
-  sales: [{ product_id: "p1", unit_price: 100, unit_cost_ex_ec: 20, amazon_count: 10, yahoo_count: 10 }, { product_id: "p2", unit_price: 100, unit_cost_ex_ec: 95, amazon_count: 5 }],
+  sales: [{ product_id: "p1", unit_price: 100, unit_cost_ex_ec: 20, amazon_count: 10, amazon_amount: 1000, yahoo_count: 10, yahoo_amount: 1000 }, { product_id: "p2", unit_price: 100, unit_cost_ex_ec: 95, amazon_count: 5, amazon_amount: 500 }],
   mappings: [{ channel: "amazon", external_product_key: "one", product_id: "p1" }, { channel: "amazon", external_product_key: "two", product_id: "p2" }], legacy: [],
   ads: [{ series_code: 1, amazon_cost: 100, google_cost: 100, meta_cost: 100, other_cost: 50 }],
   settlements: [{ channel: "amazon", period_start: input.start, period_end: input.end, coverage_level: "complete", raw_summary: { excluded_ad_costs: 200 }, ...feeFields }],
@@ -71,7 +71,7 @@ test("different period/interim, new/out-of-stock and zero sales hold", () => {
   const i=analyzeFinance(input,d).items[0];assert.equal(i.sales,0);assert.equal(i.margin,null);assert.equal(i.rank,"保留");
 });
 test("missing allocation revenue and unallocated series are visible", () => {
-  const d=fixture();d.sales[1].unit_price=null;
+  const d=fixture();d.sales[1].amazon_amount=null;
   assert.equal(analyzeFinance(input,d).items[0].profit,null);
   const e=fixture();e.ads.push({series_code:99,amazon_cost:100,google_cost:0,meta_cost:0,other_cost:0});
   assert.ok(analyzeFinance(input,e).notes.some(n=>n.includes("配分できない直接広告費")));
@@ -90,5 +90,40 @@ test("ABCD preserved; financial actions use traffic diagnosis; no input mutation
   analyzeFinance(input,fixture(),new Map(a.items.map(i=>[i.key,i.rank])));
   assert.equal(JSON.stringify(input),before); assert.deepEqual(analyze(input),a);
   assert.match(financeAction("A","B"),/購入率/);
+});
+test("official discounted revenue replaces catalog price and determines real margin", () => {
+  const d=fixture(); d.sales[0].amazon_amount=800; d.sales[0].unit_price=9999;
+  const f=analyzeFinance(input,d);
+  assert.equal(f.items[0].sales,800);
+  near(f.items[0].productCost,200);
+  assert.ok(f.items[0].profit < 600);
+});
+test("TikTok SKU seller discount is not deducted twice; settlement evidence is immutable", () => {
+  const tiktokInput = { ...input, channel: "tiktok", items: [input.items[0]] };
+  const d = {
+    products: [{ id: "p1", series_code: 1 }],
+    sales: [{ product_id: "p1", unit_price: 100, unit_cost_ex_ec: 40, tiktok_count: 10, tiktok_amount: 900 }],
+    mappings: [{ channel: "tiktok", external_product_key: "one", product_id: "p1" }], legacy: [], ads: [],
+    settlements: [{ channel: "tiktok", period_start: input.start, period_end: input.end, coverage_level: "complete",
+      raw_summary: { excluded_ad_costs: 0 }, ...feeFields, platform_fees: 0, seller_discounts: 100 }],
+    completedAds: ["google", "meta"],
+  };
+  const before = structuredClone(d);
+  const discounted = analyzeFinance(tiktokInput, d);
+  assert.equal(discounted.items[0].sales, 900);
+  assert.equal(discounted.items[0].productCost, 400);
+  assert.equal(discounted.items[0].ecCosts, 0);
+  assert.equal(discounted.items[0].profit, 500);
+  assert.deepEqual(d, before, "raw settlement discounts must remain available for reconciliation");
+  const noDiscount = structuredClone(d); noDiscount.settlements[0].seller_discounts = 0;
+  const zero = analyzeFinance(tiktokInput, noDiscount);
+  assert.equal(zero.items[0].profit, 500);
+  assert.equal(discounted.notes.length, zero.notes.length + 1, "zero discount adds no adjustment explanation");
+  Object.assign(d.settlements[0], { platform_fees: 30, seller_coupons: 10, seller_points: 5, shipping_costs: 20 });
+  const otherCosts = analyzeFinance(tiktokInput, d).items[0];
+  assert.equal(otherCosts.ecCosts, 65);
+  assert.equal(otherCosts.profit, 435);
+  d.settlements[0].seller_discounts = null;
+  assert.equal(analyzeFinance(tiktokInput, d).items[0].profit, null, "an unknown discount cannot become zero");
 });
 console.log(`${passed} finance tests passed`);

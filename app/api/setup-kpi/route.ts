@@ -30,15 +30,23 @@ export async function GET() {
         RETURN QUERY
         SELECT 
           to_char(s.report_month, 'YYYY-MM-01')::text as month,
-          COALESCE(SUM(
-            (COALESCE(s.amazon_count, 0) + 
-             COALESCE(s.rakuten_count, 0) + 
-             COALESCE(s.yahoo_count, 0) + 
-             COALESCE(s.mercari_count, 0) + 
-             COALESCE(s.base_count, 0) + 
-             COALESCE(s.qoo10_count, 0) + 
-             COALESCE(s.tiktok_count, 0)) * COALESCE(p.price, 0)
-          ), 0)::numeric as amount
+          CASE WHEN COUNT(*) FILTER (WHERE (
+            public.web_sales_reported_amount(s.amazon_count,s.amazon_amount) +
+            public.web_sales_reported_amount(s.rakuten_count,s.rakuten_amount) +
+            public.web_sales_reported_amount(s.yahoo_count,s.yahoo_amount) +
+            public.web_sales_reported_amount(s.mercari_count,s.mercari_amount) +
+            public.web_sales_reported_amount(s.base_count,s.base_amount) +
+            public.web_sales_reported_amount(s.qoo10_count,s.qoo10_amount) +
+            public.web_sales_reported_amount(s.tiktok_count,s.tiktok_amount)
+          ) IS NULL) > 0 THEN NULL::numeric ELSE COALESCE(SUM(
+            public.web_sales_reported_amount(s.amazon_count,s.amazon_amount) +
+            public.web_sales_reported_amount(s.rakuten_count,s.rakuten_amount) +
+            public.web_sales_reported_amount(s.yahoo_count,s.yahoo_amount) +
+            public.web_sales_reported_amount(s.mercari_count,s.mercari_amount) +
+            public.web_sales_reported_amount(s.base_count,s.base_amount) +
+            public.web_sales_reported_amount(s.qoo10_count,s.qoo10_amount) +
+            public.web_sales_reported_amount(s.tiktok_count,s.tiktok_amount)
+          ),0)::numeric END as amount
         FROM web_sales_summary s
         JOIN products p ON s.product_id = p.id
         WHERE s.report_month >= CAST(start_date AS DATE) AND s.report_month < CAST(end_date AS DATE)

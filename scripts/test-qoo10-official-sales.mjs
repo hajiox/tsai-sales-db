@@ -45,6 +45,20 @@ assert.equal(official.totalQuantity, 5);
 assert.equal(official.totalAmount, 13_330);
 assert.equal(official.rows.length, 5);
 
+const missingActual = structuredClone(orderFixtures[0]);
+delete missingActual.items[0].line_amount;
+await assert.rejects(acquireQoo10OfficialSales({
+  startDate: "2026-08-01", endDate: "2026-08-31",
+  fetchImpl: mockFetch({ checked: 1, orders: [missingActual] }),
+}), /金額/);
+const explicitZero = structuredClone(orderFixtures[0]);
+explicitZero.items[0].line_amount = 0;
+const zeroAmount = await acquireQoo10OfficialSales({
+  startDate: "2026-08-01", endDate: "2026-08-31",
+  fetchImpl: mockFetch({ checked: 1, orders: [explicitZero] }),
+});
+assert.equal(zeroAmount.totalAmount, 0, "official zero must not fall back to unit price");
+
 const csv = buildQoo10OfficialCsv(official);
 assert.match(csv, /配送状態,注文番号,注文日,商品番号,商品名,数量,販売者商品コード,購入者決済金額/);
 assert.match(csv, /1206705330/);

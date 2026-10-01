@@ -26,7 +26,7 @@ export type KpiCompletenessResult = {
   fiscalYear: number;
   complete: boolean;
   missing: string[];
-  actuals: Record<string, number>;
+  actuals: Record<string, number | null>;
 };
 
 function getSupabase() {
@@ -122,10 +122,10 @@ export async function assessPreviousMonthKpi(
     throw new Error(`KPI手入力データの取得に失敗しました: ${manual.error.message}`);
   }
 
-  const actuals: Record<string, number> = {};
+  const actuals: Record<string, number | null> = {};
   for (const channel of CHANNELS) {
     const rows = (results[channel.code].data || []) as { amount?: unknown }[];
-    actuals[channel.code] = rows.reduce(
+    actuals[channel.code] = channel.code === 'WEB' && rows.some(row => row.amount == null) ? null : rows.reduce(
       (sum, row) => sum + Number(row.amount || 0),
       0,
     );
@@ -135,7 +135,7 @@ export async function assessPreviousMonthKpi(
   const missing: string[] = [];
 
   for (const channel of CHANNELS) {
-    if (actuals[channel.code] <= 0) missing.push(channel.label);
+    if (actuals[channel.code] == null || actuals[channel.code]! <= 0) missing.push(channel.label);
     if (!hasManualEntry(manualEntries, "target", channel.code, true)) {
       missing.push(TARGET_LABELS[channel.code]);
     }
