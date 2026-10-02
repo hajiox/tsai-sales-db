@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import JSZip from "jszip";
 import iconv from "iconv-lite";
 import * as XLSX from "xlsx";
-import { POST as syncGoogleAds } from "@/app/api/google-ads/sync/route";
-import { POST as importGoogleCosts } from "@/app/api/google-ads/import-costs/route";
+import { runOfficialFinanceAcquisition } from "@/lib/finance-acquisition/run";
 import { POST as uploadMetaAds } from "@/app/api/meta-ads/upload-csv/route";
 import { POST as matchMetaAds } from "@/app/api/meta-ads/auto-match/route";
 import { POST as importMetaCosts } from "@/app/api/meta-ads/import-costs/route";
@@ -16,14 +15,8 @@ import { POST as importYahooCosts } from "@/app/api/yahoo-ads/import-costs/route
 import { POST as uploadAmazonAds } from "@/app/api/amazon-ads/upload-csv/route";
 import { POST as matchAmazonAds } from "@/app/api/amazon-ads/auto-match/route";
 import { POST as importAmazonCosts } from "@/app/api/amazon-ads/import-costs/route";
-import {
-  allocateIntegerTotal,
-  classifyGoogleAdsCostRows,
-  microsToRoundedYen,
-} from "@/lib/google-ads-import-policy";
 import { isCodexBridgeAuthorized, normalizeWorkerId } from "@/lib/web-sales-codex/server";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
-import { resolveWebSalesAmount } from "@/lib/web-sales-amounts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -101,7 +94,7 @@ export async function POST(
 
     const month = String(job.report_month).slice(0, 7);
     if (job.channel === "google") {
-      return NextResponse.json(await runGoogleImport(request.url, month, job.period_start, job.period_end));
+      return NextResponse.json(await runGoogleImport(month, job.period_start, job.period_end));
     }
 
     const file = formData.get("file");
@@ -156,118 +149,23 @@ export async function POST(
   }
 }
 
-async function runGoogleImport(origin: string, month: string, startDate: string, endDate: string) {
-  const synced = await invoke(syncGoogleAds, origin, { startDate, endDate });
-  const supabase = getWebSalesAutomationServiceClient();
-  const { data, error } = await supabase
-    .from("google_ads_performance")
-    .select("campaign_name,asset_group_name,series_code,cost_micros")
-    .gte("report_date", startDate)
-    .lte("report_date", endDate)
-    .gt("cost_micros", 0);
-  if (error) throw error;
-
-  const classified = classifyGoogleAdsCostRows(data || []);
-  if (classified.unknownGroupNames.length > 0) {
-    return {
-      status: "needs_review",
-      summary: `Google広告は${classified.unknownGroupNames.length}件の広告グループが未紐付けです`,
-      details: `Google広告タブの商品マッチングでシリーズを確認してください。対象: ${classified.unknownGroupNames.slice(0, 8).join(" / ")}`,
-      reportMonth: month,
-      importedCount: Number(synced.inserted || 0),
-      unmatchedCount: classified.unknownGroupNames.length,
-    };
-  }
-
-  const mappedYen = new Map<number, number>();
-  for (const [seriesCode, costMicros] of classified.mappedMicrosBySeries) {
-    mappedYen.set(seriesCode, microsToRoundedYen(costMicros));
-  }
-
-  let allocationBasis = "";
-  if (classified.sharedShoppingMicros > 0) {
-    let weights = await getBaseSalesWeights(supabase, month);
-    allocationBasis = "BASE売上構成比";
-    if (weights.size === 0) {
-      weights = new Map(classified.mappedMicrosBySeries);
-      allocationBasis = "商品別Google広告費構成比";
-    }
-    if (weights.size === 0) {
-      return {
-        status: "needs_review",
-        summary: "Google広告のEC共通ショッピング費を配賦できません",
-        details: "BASE売上または商品別Google広告費を確認してください。",
-        reportMonth: month,
-        importedCount: Number(synced.inserted || 0),
-        unmatchedCount: 1,
-      };
-    }
-
-    const mappedTotalYen = [...mappedYen.values()].reduce((sum, value) => sum + value, 0);
-    const ecTotalYen = microsToRoundedYen(
-      [...classified.mappedMicrosBySeries.values()].reduce((sum, value) => sum + value, 0)
-      + classified.sharedShoppingMicros,
-    );
-    const sharedAllocation = allocateIntegerTotal(ecTotalYen - mappedTotalYen, weights);
-    for (const [seriesCode, cost] of sharedAllocation) {
-      mappedYen.set(seriesCode, (mappedYen.get(seriesCode) || 0) + cost);
-    }
-  }
-
-  const mappings = [...mappedYen].map(([series_code, cost]) => ({ series_code, cost }));
-  if (mappings.length === 0) throw new Error("Google広告費の対象データがありません");
-  const imported = await invoke(importGoogleCosts, origin, { month, mappings });
-  const details = [`${Number(synced.inserted || 0)}件の広告実績を同期しました。`];
-  if (classified.sharedShoppingMicros > 0) {
-    details.push(`EC共通ショッピング広告 ${microsToRoundedYen(classified.sharedShoppingMicros).toLocaleString("ja-JP")}円は${allocationBasis}で配賦しました。`);
-  }
-  if (classified.excludedStoreMicros > 0) {
-    details.push(`食ブラ来店広告 ${microsToRoundedYen(classified.excludedStoreMicros).toLocaleString("ja-JP")}円はWEB販売広告費から除外しました。`);
-  }
+async function runGoogleImport(month: string, startDate: string, endDate: string) {
+  // The Bridge authorizes this immutable job above. Call the server service,
+  // not public HTTP handlers whose admin-session guards must stay mandatory.
+  const outcome = await runOfficialFinanceAcquisition("advertising", "google", {
+    startDate, endDate, reportMonth: month,
+  });
   return {
-    status: "completed",
-    summary: `Google広告 ${month} 広告費 ¥${Math.round(Number(imported.totalCost || 0)).toLocaleString("ja-JP")} を反映しました`,
-    details: details.join(" "),
+    status: outcome.status === "success" && !outcome.preservedExisting ? "completed" : "needs_review",
+    summary: outcome.details,
+    details: outcome.details,
     reportMonth: month,
-    importedCount: Number(synced.inserted || 0),
-    unmatchedCount: 0,
-    totalCost: Number(imported.totalCost || 0),
-    seriesCount: Number(imported.seriesCount || 0),
+    importedCount: outcome.importedCount,
+    unmatchedCount: outcome.unmatchedCount || 0,
+    totalCost: outcome.totalCost,
+    acquisitionPath: "api",
+    warnings: outcome.warnings,
   };
-}
-
-async function getBaseSalesWeights(
-  supabase: ReturnType<typeof getWebSalesAutomationServiceClient>,
-  month: string,
-): Promise<Map<number, number>> {
-  const { data: salesRows, error: salesError } = await supabase
-    .from("web_sales_summary")
-    .select("product_id,base_count,base_amount")
-    .eq("report_month", `${month}-01`)
-    .gt("base_count", 0);
-  if (salesError) throw salesError;
-
-  const productIds = [...new Set((salesRows || []).map((row) => String(row.product_id || "")).filter(Boolean))];
-  if (productIds.length === 0) return new Map();
-  const { data: products, error: productError } = await supabase
-    .from("products")
-    .select("id,series_code")
-    .in("id", productIds)
-    .not("series_code", "is", null);
-  if (productError) throw productError;
-
-  const seriesByProduct = new Map(
-    (products || []).map((product) => [String(product.id), Number(product.series_code || 0)]),
-  );
-  const weights = new Map<number, number>();
-  for (const row of salesRows || []) {
-    const seriesCode = seriesByProduct.get(String(row.product_id || "")) || 0;
-    const revenue = resolveWebSalesAmount(row, "base");
-    if (revenue === null) throw new Error("BASEの実売額が未取得のため広告費を売上比で按分できません。先に対象月の売上原本を取り込んでください。");
-    if (seriesCode <= 0 || revenue <= 0) continue;
-    weights.set(seriesCode, (weights.get(seriesCode) || 0) + revenue);
-  }
-  return weights;
 }
 
 async function invoke(handler: RouteHandler, origin: string, body: FormData | Record<string, unknown>) {

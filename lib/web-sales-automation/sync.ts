@@ -2,10 +2,12 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { findBestMatchSimplified, type Product } from "@/lib/csvHelpers";
 import { getBulkProductUnitPrices } from "@/lib/unitPriceHelper";
 import { hasPackConflict } from "@/lib/sales-price-reconciliation";
-import { getChannelConfigStatus } from "./config";
+import { getChannelConfigStatusAsync } from "./config";
 import { fetchChannelSales } from "./connectors";
 import { ActualSalesAmountUnavailableError } from "./actual-sales-policy";
 import { compactText } from "./http";
+import { SalesApiError } from "./api-common";
+import { isFullCalendarMonth, reconcileApiSales, salesApiErrorNeedsReview } from "./sales-reconciliation";
 import type {
   ChannelSyncResult,
   NormalizedSalesItem,
@@ -42,7 +44,7 @@ export async function runChannelSync(
   triggerType: WebSalesTrigger,
 ): Promise<ChannelSyncResult> {
   const supabase = serviceClient();
-  const config = getChannelConfigStatus(channel);
+  const config = await getChannelConfigStatusAsync(channel);
   const { data: run, error: runError } = await supabase
     .from("web_sales_sync_runs")
     .insert({
@@ -52,6 +54,7 @@ export async function runChannelSync(
       period_end: period.endDate,
       report_month: period.reportMonth,
       status: config.configured ? "running" : "skipped",
+      metadata: ["amazon", "rakuten", "yahoo", "base"].includes(channel) ? { acquisitionPath: "api" } : {},
       error_message: config.configured
         ? null
         : `未設定: ${config.missing.join(", ")}`,
@@ -79,18 +82,20 @@ export async function runChannelSync(
 
   try {
     const fetched = await fetchChannelSales(channel, period);
+    // Finalization and mapping retries must see the immutable acquisition basis.
+    const { error: metadataError } = await supabase.from("web_sales_sync_runs")
+      .update({ metadata: fetched.metadata || {} }).eq("id", runId);
+    if (metadataError) throw new Error("API取得条件を保存できません");
     const normalizedItems = deduplicateItems(fetched.items);
     await insertRunItems(supabase, runId, normalizedItems);
 
     const outcome = await finalizeRun(supabase, runId, channel, period);
-    await supabase
-      .from("web_sales_sync_runs")
-      .update({ metadata: fetched.metadata || {} })
-      .eq("id", runId);
     return { runId, channel, ...outcome };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "自動同期に失敗しました";
-    const status = error instanceof ActualSalesAmountUnavailableError ? "needs_review" : "failed";
+    const message = error instanceof SalesApiError ? error.message
+      : error instanceof ActualSalesAmountUnavailableError ? error.message : "自動同期の取得・保存を完了できませんでした";
+    const status = error instanceof ActualSalesAmountUnavailableError
+      || (error instanceof SalesApiError && salesApiErrorNeedsReview(error.code)) ? "needs_review" : "failed";
     await supabase
       .from("web_sales_sync_runs")
       .update({
@@ -108,6 +113,7 @@ export async function runChannelSync(
       matchedCount: 0,
       unmatchedCount: 0,
       error: message,
+      errorCode: error instanceof SalesApiError ? error.code : undefined,
     };
   }
 }
@@ -123,13 +129,16 @@ export async function runImportedCsvSync(
   if (codexJobId) {
     const { data: existing } = await supabase
       .from("web_sales_sync_runs")
-      .select("id,status,item_count,quantity_total,matched_count,unmatched_count,error_message")
+      .select("id,channel,period_start,period_end,status,item_count,quantity_total,matched_count,unmatched_count,error_message")
       .contains("metadata", { codex_job_id: codexJobId })
       .in("status", ["success", "needs_review"])
       .order("started_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (existing) {
+      if (existing.channel !== channel || existing.period_start !== period.startDate || existing.period_end !== period.endDate) {
+        throw new Error("既存取込履歴の商品チャネルまたは対象期間が一致しません");
+      }
       if (existing.status === "needs_review") {
         const outcome = await finalizeRun(supabase, String(existing.id), channel, period);
         return { runId: String(existing.id), channel, ...outcome };
@@ -215,21 +224,36 @@ async function finalizeRun(
   channel: WebSalesChannel,
   period: SyncPeriod,
 ): Promise<Omit<ChannelSyncResult, "runId" | "channel">> {
-  const { data: storedItems, error: itemError } = await supabase
-    .from("web_sales_sync_items")
-    .select("external_order_id,external_line_id,external_product_key,external_product_name,occurred_at,quantity,amount,source_status,raw_data")
-    .eq("run_id", runId);
-  if (itemError) throw new Error(`同期明細を取得できません: ${itemError.message}`);
-  const items = (storedItems || []).map((item): NormalizedSalesItem => ({
-    externalOrderId: item.external_order_id,
-    externalLineId: item.external_line_id,
-    externalProductKey: item.external_product_key,
-    externalProductName: item.external_product_name,
-    occurredAt: item.occurred_at,
+  const { data: acquisition, error: acquisitionError } = await supabase.from("web_sales_sync_runs")
+    .select("metadata,channel,period_start,period_end").eq("id", runId).single();
+  if (acquisitionError || !acquisition || acquisition.channel !== channel
+    || acquisition.period_start !== period.startDate || acquisition.period_end !== period.endDate) {
+    throw new Error("同期履歴の取得条件を確認できません");
+  }
+  const metadata = acquisition.metadata || {};
+  const isApi = metadata.acquisitionPath === "api";
+  // PostgREST defaults to 1,000 returned rows. A monthly order import must not
+  // finalize only that first page and falsely clear the other saved sales.
+  const storedItems: Array<Record<string, unknown>> = [];
+  for (let offset = 0; offset < 100_000; offset += 1000) {
+    const { data, error: itemError } = await supabase.from("web_sales_sync_items")
+      .select("external_order_id,external_line_id,external_product_key,external_product_name,occurred_at,quantity,amount,source_status,raw_data")
+      .eq("run_id", runId).order("id", { ascending: true }).range(offset, offset + 999);
+    if (itemError || !Array.isArray(data)) throw new Error("同期明細の全件を取得できません");
+    storedItems.push(...data);
+    if (data.length < 1000) break;
+    if (offset === 99_000) throw new Error("同期明細の取得上限に達しました。月次集計は更新していません");
+  }
+  const items = storedItems.map((item): NormalizedSalesItem => ({
+    externalOrderId: compactText(item.external_order_id),
+    externalLineId: compactText(item.external_line_id),
+    externalProductKey: compactText(item.external_product_key),
+    externalProductName: compactText(item.external_product_name),
+    occurredAt: typeof item.occurred_at === "string" ? item.occurred_at : null,
     quantity: Number(item.quantity) || 0,
     amount: requireActualSalesAmount(item.amount),
-    sourceStatus: item.source_status,
-    rawData: item.raw_data || {},
+    sourceStatus: typeof item.source_status === "string" ? item.source_status : null,
+    rawData: (item.raw_data || {}) as Record<string, unknown>,
   }));
 
   const resolution = await resolveMappings(supabase, channel, items);
@@ -252,7 +276,33 @@ async function finalizeRun(
   const matchedCount = resolution.matchedItemCount;
   const unmatchedCount = resolution.unmatched.length;
 
-  if (unmatchedCount > 0) {
+  let reviewReason = unmatchedCount > 0
+    ? `${unmatchedCount}商品が未紐付けのため、月次集計は更新していません` : null;
+  if (isApi && ((Array.isArray(metadata.reviewReasonCodes) && metadata.reviewReasonCodes.length > 0)
+    || Number(metadata.unresolvedOrderCount || 0) > 0)) {
+    const codes = Array.isArray(metadata.reviewReasonCodes) ? metadata.reviewReasonCodes
+      .filter((code: unknown) => typeof code === "string" && /^[a-z_]{1,80}$/.test(code)).slice(0, 12) : [];
+    reviewReason = `API semantic_review: ${codes.join(",") || "order_review_required"}。確認が必要な注文があります。取得できた明細を保存し、月次集計は更新していません`;
+  }
+  let expectedSummary: Array<{ product_id: string; quantity: number; amount: number | null }> = [];
+  if (isApi && !reviewReason && !isFullCalendarMonth(period)) {
+    reviewReason = "API partial_period_staged: 一部期間の取得明細は保存済みです。月全体の集計は更新していません";
+  }
+  if (isApi && !reviewReason) {
+    if (typeof metadata.sourceBasis !== "string" || typeof metadata.amountBasis !== "string"
+      || typeof metadata.reconciliationRequired !== "boolean") {
+      reviewReason = "API source_basis_unverified: 取得金額の条件を確認できません。月次集計は更新していません";
+    } else {
+      const { data: summary, error: summaryError } = await supabase.from("web_sales_summary")
+        .select(`product_id,${channel}_count,${channel}_amount`).eq("report_month", period.reportMonth);
+      if (summaryError) throw new Error("保存済み実売金額を照合できません");
+      const reconciliation = reconcileApiSales(channel, resolution.aggregated, summary || [], metadata.reconciliationRequired);
+      expectedSummary = reconciliation.expected;
+      if (reconciliation.code) reviewReason = `API ${reconciliation.code}: 保存済み帳票の金額・個数・商品別内訳の確認が必要です。月次集計は更新していません`;
+    }
+  }
+
+  if (reviewReason) {
     await supabase
       .from("web_sales_sync_runs")
       .update({
@@ -261,7 +311,7 @@ async function finalizeRun(
         quantity_total: quantityTotal,
         matched_count: matchedCount,
         unmatched_count: unmatchedCount,
-        error_message: `${unmatchedCount}商品が未紐付けのため、月次集計は更新していません`,
+        error_message: reviewReason,
         completed_at: new Date().toISOString(),
       })
       .eq("id", runId);
@@ -271,15 +321,26 @@ async function finalizeRun(
       quantityTotal,
       matchedCount,
       unmatchedCount,
+      error: reviewReason,
     };
   }
 
-  await replaceMonthlyChannelSummary(
-    supabase,
-    channel,
-    period.reportMonth,
-    resolution.aggregated,
-  );
+  try {
+    await replaceMonthlyChannelSummary(
+      supabase,
+      channel,
+      period.reportMonth,
+      resolution.aggregated,
+      isApi ? { period, expectedSummary, reconciliationRequired: metadata.reconciliationRequired === true } : undefined,
+    );
+  } catch (error) {
+    if (!(error instanceof SalesApiError)) throw error;
+    // Also applies to a mapping retry whose baseline changed during commit.
+    await supabase.from("web_sales_sync_runs").update({ status: "needs_review", item_count: itemCount,
+      quantity_total: quantityTotal, matched_count: matchedCount, unmatched_count: 0,
+      error_message: error.message, completed_at: new Date().toISOString() }).eq("id", runId);
+    return { status: "needs_review", itemCount, quantityTotal, matchedCount, unmatchedCount: 0, error: error.message, errorCode: error.code };
+  }
   await supabase
     .from("web_sales_sync_runs")
     .update({
@@ -464,6 +525,7 @@ async function replaceMonthlyChannelSummary(
   channel: WebSalesChannel,
   reportMonth: string,
   aggregated: Map<string, { quantity: number; amount: number }>,
+  apiGuard?: { period: SyncPeriod; expectedSummary: Array<{ product_id: string; quantity: number; amount: number | null }>; reconciliationRequired: boolean },
 ) {
   const productIds = [...aggregated.keys()];
   const unitPriceMap = await getBulkProductUnitPrices(supabase, productIds);
@@ -478,11 +540,14 @@ async function replaceMonthlyChannelSummary(
       unit_profit_rate: unit.unit_profit_rate,
     };
   });
-  const { error } = await supabase.rpc("replace_web_sales_channel_summary", {
+  const { error } = await supabase.rpc(apiGuard ? "replace_verified_api_sales_summary" : "replace_web_sales_channel_summary", {
     p_channel: channel,
     p_report_month: reportMonth,
     p_rows: rows,
+    ...(apiGuard ? { p_period_start: apiGuard.period.startDate, p_period_end: apiGuard.period.endDate,
+      p_expected_summary: apiGuard.expectedSummary, p_reconciliation_required: apiGuard.reconciliationRequired } : {}),
   });
+  if (error && apiGuard) throw new SalesApiError(channel, "saved_summary_changed_or_unverified");
   if (error) throw new Error(`月次集計を一括更新できません: ${error.message}`);
 }
 

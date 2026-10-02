@@ -3,7 +3,10 @@ import { getReportMonth } from "@/lib/web-sales-automation/date";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import { ACTIVE_EC_CHANNELS } from "@/lib/web-sales-abcd/monthly";
 const activeChannel = (channel: string) => (ACTIVE_EC_CHANNELS as readonly string[]).includes(channel);
-import { enqueueCodexJobs } from "@/lib/web-sales-codex/server";
+import { enqueueFinanceAcquisitions } from "@/lib/finance-acquisition/dispatch";
+import { validatePeriod } from "@/lib/web-sales-automation/date";
+import type { AcquisitionKind } from "@/lib/finance-acquisition/capabilities";
+import type { CodexJobTrigger } from "@/lib/web-sales-codex/types";
 import { AD_COST_CODEX_TASKS, EC_PROFIT_CODEX_TASKS } from "@/lib/web-sales-codex/tasks";
 import { upsertEcProfitEstimate, type EcProfitChannel } from "@/lib/web-sales-codex/ec-profit-estimate";
 import {
@@ -25,6 +28,15 @@ function isAuthorized(request: Request) {
 
 function previousMonthPeriod(year: number, monthIndex: number) {
   return settlementPeriodMonthsAgo(year, monthIndex, 1);
+}
+
+async function enqueueFinancialJobs(input: {
+  kind: AcquisitionKind; channels: string[]; startDate: string; endDate: string;
+  triggerType: Exclude<CodexJobTrigger, "test">; requestedBy: string; idempotencyPrefix: string; incompleteOnly?: boolean;
+}) {
+  const queued = await enqueueFinanceAcquisitions({ ...input,
+    period: validatePeriod(input.startDate, input.endDate), allowBridge: true });
+  return queued.results.filter(result => result.status === "queued");
 }
 
 async function enqueueIncompleteSettlementRetryPeriod(input: {
@@ -92,14 +104,15 @@ async function enqueueIncompleteSettlementRetryPeriod(input: {
     });
   }
 
-  return enqueueCodexJobs({
-    taskKey: "ec_profit_import",
+  return enqueueFinancialJobs({
+    kind: "ec_profit",
     channels: retryChannels,
     startDate: period.startDate,
     endDate: period.endDate,
     triggerType: "retry",
     requestedBy: "vercel-cron-auto-retry",
     idempotencyPrefix: `automatic-retry:${input.dateKey}:${period.reportMonth}`,
+    incompleteOnly: true,
   });
 }
 
@@ -126,6 +139,9 @@ export async function GET(request: Request) {
     const startDate = url.searchParams.get("startDate");
     const endDate = url.searchParams.get("endDate");
     const forced = url.searchParams.get("force") === "1" && startDate && endDate;
+    if (!forced && process.env.WEB_SALES_AUTO_ACQUISITION_ENABLED !== "true") {
+      return NextResponse.json({ ok: true, skipped: true, reason: "定期取得は停止中です", queued: 0, jobs: [] });
+    }
     const jst = new Date(Date.now() + 9 * 60 * 60 * 1000);
     const year = jst.getUTCFullYear();
     const monthIndex = jst.getUTCMonth();
@@ -171,7 +187,8 @@ export async function GET(request: Request) {
     const reportMonth = getReportMonth(periodStart);
     const shouldQueueMonthlyExpenses = forced || triggerType === "scheduled_previous_month";
     const [salesJobs, adJobs] = await Promise.all([
-      enqueueCodexJobs({
+      enqueueFinancialJobs({
+        kind: "sales",
         channels: [...ACTIVE_EC_CHANNELS],
         startDate: periodStart,
         endDate: periodEnd,
@@ -180,8 +197,8 @@ export async function GET(request: Request) {
         idempotencyPrefix: `${triggerType}:${reportMonth}`,
       }),
       shouldQueueMonthlyExpenses
-        ? enqueueCodexJobs({
-            taskKey: "ad_cost_import",
+        ? enqueueFinancialJobs({
+            kind: "advertising",
             channels: AD_COST_CODEX_TASKS.map((task) => task.channel),
             startDate: periodStart,
             endDate: periodEnd,
@@ -192,8 +209,8 @@ export async function GET(request: Request) {
         : Promise.resolve([]),
     ]);
     const profitJobs = shouldQueueMonthlyExpenses
-      ? await enqueueCodexJobs({
-          taskKey: "ec_profit_import",
+      ? await enqueueFinancialJobs({
+          kind: "ec_profit",
           channels: EC_PROFIT_CODEX_TASKS.filter((task) => activeChannel(task.channel)).map((task) => task.channel),
           startDate: periodStart,
           endDate: periodEnd,

@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 import { WEB_SALES_CHANNELS, sumWebSalesAmounts } from '@/lib/web-sales-amounts';
+import { AcquisitionRouteMark, AcquisitionRouteProvider } from '@/components/AcquisitionRouteBadge';
 
 // Supabase RPC関数の戻り値型を明確に定義
 type SupabaseRpcResult = {
@@ -304,6 +305,7 @@ const WebSalesInputView = () => {
   }, 0);
 
   return (
+    <AcquisitionRouteProvider reportMonth={ym}>
     <div className="p-4 space-y-3">
       <div className="flex items-center gap-3 text-sm">
         <div className="flex items-center gap-2">
@@ -339,6 +341,20 @@ const WebSalesInputView = () => {
         <div className="text-xs text-gray-600">
           {rows.length > 0 && `${rows.length}件のデータを表示中`}
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-x-4 gap-y-2 border-y border-slate-200 py-2" aria-label="EC別の取得経路">
+        {[
+          { channel: 'amazon', label: 'Amazon' },
+          { channel: 'rakuten', label: '楽天' },
+          { channel: 'yahoo', label: 'Yahoo!' },
+          { channel: 'base', label: 'BASE' },
+        ].map(({ channel, label }) => (
+          <div key={channel} className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-semibold text-slate-700">{label}</span>
+            <AcquisitionRouteMark kind="sales" channel={channel} />
+          </div>
+        ))}
       </div>
 
       {/* 商品追加・編集フォーム */}
@@ -575,6 +591,7 @@ const WebSalesInputView = () => {
         </div>
       )}
     </div>
+    </AcquisitionRouteProvider>
   );
 };
 

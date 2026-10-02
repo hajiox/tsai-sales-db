@@ -1,9 +1,8 @@
 import { createHmac } from "node:crypto";
-import { gunzipSync } from "node:zlib";
-import { XMLParser } from "fast-xml-parser";
 import { addDays } from "./date";
+import { fetchAmazonApiSales, fetchRakutenApiSales, fetchYahooApiSales, fetchBaseApiSales } from "./official-sales-api";
 import { requireEnv } from "./config";
-import { compactText, fetchJson, numberValue, sleep } from "./http";
+import { compactText, fetchJson, numberValue } from "./http";
 import { requireReportedAmount } from "./actual-sales-policy";
 import type {
   ChannelFetchResult,
@@ -20,283 +19,20 @@ export async function fetchChannelSales(
 ): Promise<ChannelFetchResult> {
   switch (channel) {
     case "amazon":
-      return fetchAmazonSales(period);
+      return fetchAmazonApiSales(period);
     case "rakuten":
-      return fetchRakutenSales(period);
+      return fetchRakutenApiSales(period);
     case "yahoo":
-      return fetchYahooSales(period);
+      return fetchYahooApiSales(period);
     case "mercari":
       return fetchMercariSales(period);
     case "base":
-      return fetchBaseSales(period);
+      return fetchBaseApiSales(period);
     case "qoo10":
       return fetchQoo10Sales(period);
     case "tiktok":
       return fetchTiktokSales(period);
   }
-}
-
-async function fetchAmazonAccessToken() {
-  const body = new URLSearchParams({
-    grant_type: "refresh_token",
-    refresh_token: requireEnv("AMAZON_SP_API_REFRESH_TOKEN"),
-    client_id: requireEnv("AMAZON_SP_API_CLIENT_ID"),
-    client_secret: requireEnv("AMAZON_SP_API_CLIENT_SECRET"),
-  });
-  const result = await fetchJson<{ access_token: string }>(
-    "https://api.amazon.com/auth/o2/token",
-    {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body,
-    },
-  );
-  if (!result.access_token) throw new Error("Amazon LWA token was not returned");
-  return result.access_token;
-}
-
-function amazonHeaders(accessToken: string) {
-  return {
-    "content-type": "application/json",
-    "x-amz-access-token": accessToken,
-    "x-amz-date": new Date().toISOString().replace(/[-:]|\.\d{3}/g, ""),
-    "user-agent": "TSA-WebSalesAutomation/1.0 (Language=TypeScript)",
-  };
-}
-
-async function fetchAmazonSales(period: SyncPeriod): Promise<ChannelFetchResult> {
-  const token = await fetchAmazonAccessToken();
-  const endpoint = process.env.AMAZON_SP_API_ENDPOINT?.trim()
-    || "https://sellingpartnerapi-fe.amazon.com";
-  const marketplaceId = process.env.AMAZON_SP_API_MARKETPLACE_ID?.trim()
-    || "A1VC38T7YXB528";
-  const created = await fetchJson<{ reportId: string }>(
-    `${endpoint}/reports/2021-06-30/reports`,
-    {
-      method: "POST",
-      headers: amazonHeaders(token),
-      body: JSON.stringify({
-        reportType: "GET_SALES_AND_TRAFFIC_REPORT",
-        dataStartTime: `${period.startDate}T00:00:00Z`,
-        dataEndTime: `${addDays(period.endDate, 1)}T00:00:00Z`,
-        marketplaceIds: [marketplaceId],
-        reportOptions: {
-          dateGranularity: "DAY",
-          asinGranularity: "CHILD",
-        },
-      }),
-    },
-  );
-  if (!created.reportId) throw new Error("Amazon reportId was not returned");
-
-  let reportDocumentId = "";
-  let processingStatus = "IN_QUEUE";
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    if (attempt > 0) await sleep(Math.min(2000 + attempt * 250, 5000));
-    const report = await fetchJson<{
-      processingStatus: string;
-      reportDocumentId?: string;
-    }>(`${endpoint}/reports/2021-06-30/reports/${created.reportId}`, {
-      headers: amazonHeaders(token),
-    });
-    processingStatus = report.processingStatus;
-    if (processingStatus === "DONE" && report.reportDocumentId) {
-      reportDocumentId = report.reportDocumentId;
-      break;
-    }
-    if (["CANCELLED", "FATAL"].includes(processingStatus)) {
-      throw new Error(`Amazon report failed: ${processingStatus}`);
-    }
-  }
-  if (!reportDocumentId) {
-    throw new Error(`Amazon report is not ready: ${processingStatus}. 再実行してください`);
-  }
-
-  const document = await fetchJson<{
-    url: string;
-    compressionAlgorithm?: string;
-  }>(`${endpoint}/reports/2021-06-30/documents/${reportDocumentId}`, {
-    headers: amazonHeaders(token),
-  });
-  const documentResponse = await fetch(document.url, { cache: "no-store" });
-  if (!documentResponse.ok) {
-    throw new Error(`Amazon report download failed: ${documentResponse.status}`);
-  }
-  const bytes = Buffer.from(await documentResponse.arrayBuffer());
-  const text = document.compressionAlgorithm === "GZIP"
-    ? gunzipSync(bytes).toString("utf8")
-    : bytes.toString("utf8");
-  const payload = JSON.parse(text) as UnknownRecord;
-  const rows = asArray(payload.salesAndTrafficByAsin);
-  const snapshotKey = `${period.startDate}_${period.endDate}`;
-  const items = rows.map((row, index): NormalizedSalesItem => {
-    const key = compactText(row.childAsin || row.sku || row.parentAsin);
-    const sales = row.salesByAsin || {};
-    return {
-      externalOrderId: snapshotKey,
-      externalLineId: `${key || "unknown"}:${index}`,
-      externalProductKey: key || `amazon-row-${index}`,
-      externalProductName: compactText(row.title || row.productName || key),
-      occurredAt: null,
-      quantity: numberValue(sales.unitsOrdered),
-      amount: numberValue(sales.unitsOrdered) > 0 ? requireReportedAmount("amazon", sales.orderedProductSales?.amount) : 0,
-      sourceStatus: "reported",
-      rawData: row,
-    };
-  }).filter((item) => item.quantity > 0);
-  return { items, metadata: { reportId: created.reportId, reportDocumentId } };
-}
-
-function rakutenHeaders() {
-  const credentials = Buffer.from(
-    `${requireEnv("RAKUTEN_RMS_SERVICE_SECRET")}:${requireEnv("RAKUTEN_RMS_LICENSE_KEY")}`,
-  ).toString("base64");
-  return {
-    Authorization: `ESA ${credentials}`,
-    "content-type": "application/json; charset=utf-8",
-  };
-}
-
-async function fetchRakutenSales(period: SyncPeriod): Promise<ChannelFetchResult> {
-  const baseUrl = process.env.RAKUTEN_RMS_API_BASE_URL?.trim()
-    || "https://api.rms.rakuten.co.jp/es/2.0";
-  const orderNumbers: string[] = [];
-  let page = 1;
-  let totalPages = 1;
-  do {
-    const result = await fetchJson<UnknownRecord>(`${baseUrl}/order/searchOrder/`, {
-      method: "POST",
-      headers: rakutenHeaders(),
-      body: JSON.stringify({
-        dateType: 1,
-        startDatetime: `${period.startDate}T00:00:00+0900`,
-        endDatetime: `${period.endDate}T23:59:59+0900`,
-        orderProgressList: [100, 200, 300, 400, 500, 600, 700, 800],
-        PaginationRequestModel: {
-          requestRecordsAmount: 1000,
-          requestPage: page,
-          SortModelList: [{ sortColumn: 1, sortDirection: 1 }],
-        },
-      }),
-    });
-    const model = result.orderSearchModel || result;
-    orderNumbers.push(...asArray(model.orderNumberList).map(String));
-    totalPages = numberValue(model.PaginationResponseModel?.totalPages) || 1;
-    page += 1;
-  } while (page <= totalPages);
-
-  const items: NormalizedSalesItem[] = [];
-  for (let offset = 0; offset < orderNumbers.length; offset += 100) {
-    const batch = orderNumbers.slice(offset, offset + 100);
-    const result = await fetchJson<UnknownRecord>(`${baseUrl}/order/getOrder/`, {
-      method: "POST",
-      headers: rakutenHeaders(),
-      body: JSON.stringify({ orderNumberList: batch, version: 7 }),
-    });
-    const orders = asArray(result.OrderModelList || result.orderModelList || result.orders);
-    for (const order of orders) {
-      const orderNumber = compactText(order.orderNumber || order.OrderNumber);
-      const orderedAt = compactText(order.orderDatetime || order.OrderDatetime) || null;
-      const packages = asArray(order.PackageModelList || order.packageModelList || order.packages);
-      const packageModels = packages.length > 0 ? packages : [order];
-      let lineIndex = 0;
-      for (const pkg of packageModels) {
-        for (const item of asArray(pkg.ItemModelList || pkg.itemModelList || pkg.items)) {
-          const sku = asArray(item.SkuModelList || item.skuModelList)[0] || {};
-          const key = compactText(
-            sku.variantId || item.manageNumber || item.itemNumber || item.itemId,
-          );
-          const quantity = numberValue(item.units || item.quantity);
-          if (quantity <= 0) continue;
-          items.push({
-            externalOrderId: orderNumber,
-            externalLineId: compactText(item.itemDetailId || item.itemId) || `${key}:${lineIndex++}`,
-            externalProductKey: key || `rakuten-${orderNumber}-${lineIndex}`,
-            externalProductName: compactText(item.itemName || item.productName),
-            occurredAt: orderedAt,
-            quantity,
-            amount: requireReportedAmount("rakuten", item.line_amount),
-            sourceStatus: compactText(order.orderProgress) || null,
-            rawData: item,
-          });
-        }
-      }
-    }
-  }
-  return { items, metadata: { orderCount: orderNumbers.length } };
-}
-
-async function fetchYahooAccessToken() {
-  const clientId = requireEnv("YAHOO_SHOPPING_CLIENT_ID");
-  const clientSecret = requireEnv("YAHOO_SHOPPING_CLIENT_SECRET");
-  const result = await fetchJson<{ access_token: string }>(
-    "https://auth.login.yahoo.co.jp/yconnect/v2/token",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: requireEnv("YAHOO_SHOPPING_REFRESH_TOKEN"),
-      }),
-    },
-  );
-  return result.access_token;
-}
-
-async function fetchYahooSales(period: SyncPeriod): Promise<ChannelFetchResult> {
-  const token = await fetchYahooAccessToken();
-  const sellerId = requireEnv("YAHOO_SHOPPING_SELLER_ID");
-  const parser = new XMLParser({ ignoreAttributes: false, parseTagValue: false });
-  const items: NormalizedSalesItem[] = [];
-  let start = 1;
-  let totalCount = 1;
-  do {
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Req><Search><Result>2000</Result><Start>${start}</Start><Sort>+order_time</Sort><Condition><OrderTimeFrom>${period.startDate.replaceAll("-", "")}000000</OrderTimeFrom><OrderTimeTo>${period.endDate.replaceAll("-", "")}235959</OrderTimeTo><IsActive>true</IsActive></Condition><Field>OrderId,OrderTime,OrderStatus,IsActive,ItemId,ItemTitle,Quantity,UnitPrice</Field></Search><SellerId>${escapeXml(sellerId)}</SellerId></Req>`;
-    const response = await fetch(
-      "https://circus.shopping.yahooapis.jp/ShoppingWebService/V1/orderList",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "content-type": "application/xml; charset=utf-8",
-        },
-        body: xml,
-        cache: "no-store",
-      },
-    );
-    const text = await response.text();
-    if (!response.ok) throw new Error(`Yahoo API ${response.status}: ${text.slice(0, 800)}`);
-    const parsed = parser.parse(text) as UnknownRecord;
-    const result = parsed.ResultSet?.Result || parsed.Result || parsed;
-    const search = result.Search || result.search || result;
-    totalCount = numberValue(search.TotalCount || result.TotalCount) || 0;
-    const orders = asArray(search.OrderInfo || result.OrderInfo);
-    for (const order of orders) {
-      const orderId = compactText(order.OrderId);
-      const orderItems = asArray(order.Item || order.Items?.Item);
-      orderItems.forEach((item, index) => {
-        const quantity = numberValue(item.Quantity);
-        if (quantity <= 0) return;
-        const key = compactText(item.ItemId || item.SubCode);
-        items.push({
-          externalOrderId: orderId,
-          externalLineId: compactText(item.LineId) || `${key}:${index}`,
-          externalProductKey: key || `yahoo-${orderId}-${index}`,
-          externalProductName: compactText(item.ItemTitle),
-          occurredAt: compactText(order.OrderTime) || null,
-          quantity,
-          amount: requireReportedAmount("yahoo", item.line_amount),
-          sourceStatus: compactText(order.OrderStatus) || null,
-          rawData: item,
-        });
-      });
-    }
-    start += orders.length || 2000;
-  } while (start <= totalCount);
-  return { items, metadata: { orderCount: totalCount } };
 }
 
 async function fetchMercariSales(period: SyncPeriod): Promise<ChannelFetchResult> {
@@ -357,73 +93,6 @@ async function fetchMercariSales(period: SyncPeriod): Promise<ChannelFetchResult
     after = connection.pageInfo?.endCursor || null;
   }
   return { items };
-}
-
-async function fetchBaseAccessToken() {
-  const result = await fetchJson<{ access_token: string }>(
-    "https://api.thebase.in/1/oauth/token",
-    {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        client_id: requireEnv("BASE_CLIENT_ID"),
-        client_secret: requireEnv("BASE_CLIENT_SECRET"),
-        refresh_token: requireEnv("BASE_REFRESH_TOKEN"),
-      }),
-    },
-  );
-  return result.access_token;
-}
-
-async function fetchBaseSales(period: SyncPeriod): Promise<ChannelFetchResult> {
-  const token = await fetchBaseAccessToken();
-  const headers = { Authorization: `Bearer ${token}` };
-  const orderHeaders: UnknownRecord[] = [];
-  let offset = 0;
-  while (true) {
-    const url = new URL("https://api.thebase.in/1/orders");
-    url.searchParams.set("start_ordered", `${period.startDate} 00:00:00`);
-    url.searchParams.set("end_ordered", `${period.endDate} 23:59:59`);
-    url.searchParams.set("limit", "100");
-    url.searchParams.set("offset", String(offset));
-    const result = await fetchJson<{ orders?: UnknownRecord[] }>(url, { headers });
-    const batch = result.orders || [];
-    orderHeaders.push(...batch);
-    if (batch.length < 100) break;
-    offset += batch.length;
-  }
-
-  const items: NormalizedSalesItem[] = [];
-  for (const header of orderHeaders) {
-    if (header.cancelled || header.dispatch_status === "cancelled" || header.dispatch_status === "unpaid") continue;
-    const key = compactText(header.unique_key);
-    const detail = await fetchJson<{ order?: UnknownRecord }>(
-      `https://api.thebase.in/1/orders/detail/${encodeURIComponent(key)}`,
-      { headers },
-    );
-    const order = detail.order || {};
-    asArray(order.order_items).forEach((item, index) => {
-      if (item.status === "cancelled") return;
-      const quantity = numberValue(item.amount);
-      if (quantity <= 0) return;
-      const productKey = compactText(
-        item.variation_identifier || item.item_identifier || item.barcode || item.item_id,
-      );
-      items.push({
-        externalOrderId: key,
-        externalLineId: compactText(item.order_item_id) || `${productKey}:${index}`,
-        externalProductKey: productKey,
-        externalProductName: compactText(item.title),
-        occurredAt: unixTimeToIso(order.ordered || header.ordered),
-        quantity,
-        amount: requireReportedAmount("base", item.item_total),
-        sourceStatus: compactText(item.status || order.dispatch_status) || null,
-        rawData: item,
-      });
-    });
-  }
-  return { items, metadata: { orderCount: orderHeaders.length } };
 }
 
 async function fetchQoo10Sales(period: SyncPeriod): Promise<ChannelFetchResult> {
@@ -580,13 +249,4 @@ function unixTimeToIso(value: unknown) {
   const seconds = numberValue(value);
   if (!seconds) return null;
   return new Date(seconds * 1000).toISOString();
-}
-
-function escapeXml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
 }

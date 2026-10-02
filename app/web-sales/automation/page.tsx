@@ -25,6 +25,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { AcquisitionRouteBadge, AcquisitionRouteMark, AcquisitionRouteProvider } from "@/components/AcquisitionRouteBadge";
+import { activeAcquisitionTasks, acquisitionRunIsSaved, savedAcquisitionIsComplete, savedAcquisitionSupersedesAttempt, selectEffectiveAcquisitionRun, type AcquisitionRun, type AcquisitionStatus, type SavedAcquisitionResult } from "@/lib/web-sales-acquisition-display";
 import {
   hasPersistedFinanceImport,
   selectEffectiveFinanceJob,
@@ -123,6 +125,7 @@ type SyncRun = {
   period_start: string;
   period_end: string;
   status: "running" | "success" | "needs_review" | "failed";
+  completed_at: string | null;
 };
 
 type Product = {
@@ -140,14 +143,22 @@ type StatusPayload = {
   events: JobEvent[];
   artifacts: Artifact[];
   runs: SyncRun[];
+  acquisitionRuns?: AcquisitionRun[];
+  apiWorker?: { id: string; status: string; last_seen_at: string; current_run_id: string | null; online: boolean } | null;
   unmatched: Unmatched[];
   products: Product[];
   bridge: { requiredVersion: string };
-  schedule: { halfMonth: string; previousMonth: string; timezone: string };
+  schedule: { enabled?: boolean; halfMonth: string; previousMonth: string; timezone: string };
 };
 
 type PeriodMode = "halfMonth" | "previousMonth" | "custom";
 type Workflow = "sales" | "ads" | "profit";
+type AcquisitionRunResult = {
+  channel: string;
+  route: "api" | "bridge" | "none";
+  status: "queued" | "running" | "completed" | "needs_review" | "failed" | "skipped" | "waiting_for_user";
+  message?: string;
+};
 
 export default function WebSalesAutomationPage() {
   const router = useRouter();
@@ -164,6 +175,9 @@ export default function WebSalesAutomationPage() {
   const [mappingChannel, setMappingChannel] = useState<string | null>(null);
   const [mappingSelections, setMappingSelections] = useState<Record<string, string>>({});
   const [mappingSavingId, setMappingSavingId] = useState<string | null>(null);
+  const [acquisitionResults, setAcquisitionResults] = useState<AcquisitionRunResult[]>([]);
+  const [routeRefreshKey, setRouteRefreshKey] = useState(0);
+  const [acquisitionRoutes, setAcquisitionRoutes] = useState<AcquisitionStatus[]>([]);
   const autoOpenedReviewKey = useRef<string | null>(null);
 
   const loadStatus = useCallback(async (quiet = false) => {
@@ -199,13 +213,13 @@ export default function WebSalesAutomationPage() {
     : workflow === "profit"
       ? "ec_profit_import"
       : "web_sales_import";
-  const workflowTasks = workflow === "ads"
+  const workflowTasks = useMemo(() => workflow === "ads"
     ? (data?.adTasks || [])
     : workflow === "profit"
-      ? (data?.profitTasks || [])
-      : (data?.tasks || []);
+      ? activeAcquisitionTasks(data?.profitTasks || [])
+      : activeAcquisitionTasks(data?.tasks || []), [workflow, data?.adTasks, data?.profitTasks, data?.tasks]);
   const allTasks = [...(data?.tasks || []), ...(data?.adTasks || []), ...(data?.profitTasks || [])];
-  const workflowChannels = workflowTasks.map((task) => task.channel);
+  const workflowChannels = useMemo(() => workflowTasks.map((task) => task.channel), [workflowTasks]);
 
   const activeJobs = useMemo(
     () => {
@@ -287,6 +301,24 @@ export default function WebSalesAutomationPage() {
     }
     return map;
   }, [data?.jobs, endDate, startDate, taskKey]);
+  const acquisitionKind = workflow === "ads" ? "advertising" : workflow === "profit" ? "ec_profit" : "sales";
+  const periodAcquisitionRuns = useMemo(
+    () => (data?.acquisitionRuns || []).filter((run) => run.kind === acquisitionKind && run.period_start === startDate && run.period_end === endDate),
+    [data?.acquisitionRuns, acquisitionKind, startDate, endDate],
+  );
+  const apiRunByChannel = useMemo(() => {
+    const map = new Map<string, AcquisitionRun>();
+    for (const channel of workflowChannels) {
+      const apiRun = selectEffectiveAcquisitionRun(periodAcquisitionRuns.filter((run) => run.channel === channel));
+      const bridgeJob = latestPeriodJobByChannel.get(channel);
+      if (!apiRun) continue;
+      const apiDate = apiRun.completed_at || apiRun.started_at;
+      const bridgeDate = bridgeJob?.completed_at || bridgeJob?.started_at || bridgeJob?.created_at || "";
+      if (!bridgeJob || !(bridgeJob.status === "completed" || hasPersistedFinanceImport(bridgeJob))
+        || ((["queued", "running", "waiting_for_user"].includes(apiRun.status) || acquisitionRunIsSaved(apiRun)) && apiDate >= bridgeDate)) map.set(channel, apiRun);
+    }
+    return map;
+  }, [periodAcquisitionRuns, workflowChannels, latestPeriodJobByChannel]);
   const selectedPeriodRunIds = useMemo(
     () => new Set((data?.runs || [])
       .filter((run) => run.period_start === startDate && run.period_end === endDate)
@@ -306,28 +338,56 @@ export default function WebSalesAutomationPage() {
     for (const item of periodUnmatched) counts.set(item.channel, (counts.get(item.channel) || 0) + 1);
     return counts;
   }, [periodUnmatched]);
+  const newerSavedByChannel = useMemo(() => {
+    const saved = new Map<string, SavedAcquisitionResult>();
+    for (const channel of workflowChannels) {
+      const apiRun = apiRunByChannel.get(channel);
+      const job = latestPeriodJobByChannel.get(channel);
+      const attemptAt = apiRun ? apiRun.completed_at || apiRun.started_at : job?.completed_at || job?.started_at || job?.created_at;
+      const candidates: SavedAcquisitionResult[] = [];
+      const latest = acquisitionRoutes.find((route) => route.kind === acquisitionKind && route.channel === channel)?.latest;
+      if (latest) candidates.push(latest);
+      if (acquisitionKind === "sales") for (const run of data?.runs || []) {
+        if (run.channel === channel && run.status === "success") candidates.push({ status: run.status, period_start: run.period_start, period_end: run.period_end, finished_at: run.completed_at });
+      }
+      candidates.sort((left, right) => Date.parse(right.finished_at || "") - Date.parse(left.finished_at || ""));
+      const candidate = candidates.find((result) => savedAcquisitionSupersedesAttempt(result, startDate, endDate, attemptAt));
+      if (candidate) saved.set(channel, candidate);
+    }
+    return saved;
+  }, [workflowChannels, apiRunByChannel, latestPeriodJobByChannel, acquisitionRoutes, acquisitionKind, data?.runs, startDate, endDate]);
   const reviewChannels = useMemo(
     () => workflowTasks
       .map((task) => task.channel)
-      .filter((channel) => latestPeriodJobByChannel.get(channel)?.status === "needs_review"
+      .filter((channel) => !savedAcquisitionIsComplete(newerSavedByChannel.get(channel)) && (apiRunByChannel.get(channel)?.status || latestPeriodJobByChannel.get(channel)?.status) === "needs_review"
         && (unmatchedCountByChannel.get(channel) || 0) > 0),
-    [latestPeriodJobByChannel, unmatchedCountByChannel, workflowTasks],
+    [apiRunByChannel, latestPeriodJobByChannel, unmatchedCountByChannel, workflowTasks, newerSavedByChannel],
   );
   const incompleteChannels = useMemo(
     () => workflowChannels.filter((channel) => {
+      if (newerSavedByChannel.has(channel)) return false;
+      const apiRun = apiRunByChannel.get(channel);
+      if (apiRun) {
+        if (acquisitionRunIsSaved(apiRun) || ["queued", "running"].includes(apiRun.status)) return false;
+        return apiRun.status !== "needs_review" || (unmatchedCountByChannel.get(channel) || 0) === 0;
+      }
       const latest = latestPeriodJobByChannel.get(channel);
       if (!latest) return true;
       if (hasPersistedFinanceImport(latest)) return false;
       if (["failed", "waiting_for_user", "cancelled"].includes(latest.status)) return true;
       return latest.status === "needs_review" && (unmatchedCountByChannel.get(channel) || 0) === 0;
     }),
-    [latestPeriodJobByChannel, workflowChannels, unmatchedCountByChannel],
+    [apiRunByChannel, latestPeriodJobByChannel, workflowChannels, unmatchedCountByChannel, newerSavedByChannel],
   );
   const completedChannelCount = workflowChannels.filter((channel) => {
+    const saved = newerSavedByChannel.get(channel);
+    if (saved) return savedAcquisitionIsComplete(saved);
+    const apiRun = apiRunByChannel.get(channel);
+    if (apiRun) return acquisitionRunIsSaved(apiRun);
     const job = latestPeriodJobByChannel.get(channel);
-    return job?.status === "completed" || hasPersistedFinanceImport(job);
+    return job?.status === "completed";
   }).length;
-  const operationWaitingCount = workflowChannels.filter((channel) => latestPeriodJobByChannel.get(channel)?.status === "waiting_for_user").length;
+  const operationWaitingCount = workflowChannels.filter((channel) => !newerSavedByChannel.has(channel) && (apiRunByChannel.get(channel)?.status || latestPeriodJobByChannel.get(channel)?.status) === "waiting_for_user").length;
   const automaticWaitingCount = Math.max(0, incompleteChannels.length - operationWaitingCount);
   const selectedPeriodKind = getPeriodKind(startDate, endDate);
   const selectedPeriodStatus = completedChannelCount === workflowChannels.length && workflowChannels.length > 0
@@ -359,6 +419,7 @@ export default function WebSalesAutomationPage() {
   };
 
   const changeWorkflow = (nextWorkflow: Workflow) => {
+    setAcquisitionResults([]);
     setWorkflow(nextWorkflow);
     const nextMode: Exclude<PeriodMode, "custom"> = nextWorkflow === "sales" ? "halfMonth" : "previousMonth";
     const period = getPeriod(nextMode);
@@ -373,18 +434,24 @@ export default function WebSalesAutomationPage() {
       return;
     }
     setSubmitting(true);
+    setAcquisitionResults([]);
     try {
-      const response = await fetch("/api/web-sales/codex-jobs", {
+      const response = await fetch("/api/web-sales/acquisition/run", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ taskKey, channels, startDate, endDate, incompleteOnly }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "タスクを登録できません");
+      if (!response.ok) throw new Error(payload.error || "データ更新を開始できません");
+      const results: AcquisitionRunResult[] = payload.results || [];
+      setAcquisitionResults(results);
       const jobCount = payload.jobs?.length || 0;
-      toast.success(jobCount > 0
+      const message = typeof payload.summary === "string" ? payload.summary : jobCount > 0
         ? `${jobCount}件を実行待ちに登録しました`
-        : incompleteOnly ? "未取得のタスクはありません" : "同じ期間のタスクはすでに実行待ちです");
+        : results.length > 0 ? "取得結果を更新しました" : incompleteOnly ? "未取得のタスクはありません" : "同じ期間のタスクはすでに実行待ちです";
+      if (results.some((result) => ["failed", "waiting_for_user", "needs_review"].includes(result.status))) toast.warning(message);
+      else toast.success(message);
+      setRouteRefreshKey((key) => key + 1);
       await loadStatus(true);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "タスクを登録できません");
@@ -464,6 +531,7 @@ export default function WebSalesAutomationPage() {
   };
 
   return (
+    <AcquisitionRouteProvider reportMonth={startDate.slice(0, 7)} refreshKey={routeRefreshKey} onLoaded={setAcquisitionRoutes}>
     <main className="min-h-screen bg-slate-50 text-slate-950">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-3 px-4 py-4 sm:px-6">
@@ -477,7 +545,7 @@ export default function WebSalesAutomationPage() {
               <ArrowLeft size={18} />
             </button>
             <div className="min-w-0">
-              <h1 className="truncate text-xl font-bold">{workflow === "ads" ? "Codex広告費取込" : workflow === "profit" ? "Codex EC控除取込" : "Codex売上集計"}</h1>
+              <h1 className="truncate text-xl font-bold">{workflow === "ads" ? "広告費データ更新" : workflow === "profit" ? "EC控除データ更新" : "売上データ更新"}</h1>
               <p className="mt-0.5 text-xs text-slate-500">
                 {workflow === "ads" ? "広告レポート取得・費用反映" : workflow === "profit" ? "手数料・返金・店舗負担値引の取得" : "ECデータ取得・TSA取込"}
               </p>
@@ -626,19 +694,46 @@ export default function WebSalesAutomationPage() {
               </section>
             )}
 
+            <section className={`rounded-md border px-4 py-3 ${data?.apiWorker?.online ? "border-sky-200 bg-sky-50" : "border-amber-200 bg-amber-50"}`}>
+              <h2 className="text-sm font-bold">事務所PCのAPI取得処理</h2>
+              <p className={`mt-1 text-xs ${data?.apiWorker?.online ? "text-sky-900" : "text-amber-900"}`}>
+                {data?.apiWorker?.online ? (data.apiWorker.status === "busy" ? "オンライン・取得中です" : "オンライン・待機中です") : "事務所PCのAPI取得処理が停止中です。待機中の取得は進みません"}
+              </p>
+            </section>
+
+            {periodAcquisitionRuns.some((run) => ["queued", "running", "waiting_for_user"].includes(run.status)) && (
+              <section className="space-y-2" aria-live="polite">
+                <h2 className="text-base font-bold">API取得の処理状況</h2>
+                {periodAcquisitionRuns.filter((run) => ["queued", "running", "waiting_for_user"].includes(run.status)).map((run) => (
+                  <div key={run.id} className="flex flex-wrap items-center gap-2 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm">
+                    {run.status === "running" ? <Loader2 size={16} className="animate-spin text-sky-700" aria-hidden="true" /> : <Clock3 size={16} className="text-sky-700" aria-hidden="true" />}
+                    <strong>{channelLabel(run.channel, workflowTasks)}</strong>
+                    <span className="text-sky-800">{run.status === "running" ? "公式APIから取得しています" : run.status === "waiting_for_user" ? "API接続・認可の操作待ちです" : "API取得の実行待ちです"}</span>
+                  </div>
+                ))}
+              </section>
+            )}
+
             <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
               <div>
                 <div className="mb-3 flex items-center gap-2">
                   <Server size={18} />
                   <h2 className="text-base font-bold">対象データ</h2>
+                  <button type="button" onClick={() => router.push("/web-sales/automation/api-connections")} className="ml-auto rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50">API接続設定</button>
                 </div>
+                <p className="mb-3 text-[11px] text-slate-500">次回は取得設定、保存は選択月に保存したデータの取得経路です。</p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {workflowTasks.map((task) => {
                     const latest = latestPeriodJobByChannel.get(task.channel);
+                    const apiRun = apiRunByChannel.get(task.channel);
+                    const saved = newerSavedByChannel.get(task.channel);
+                    const targetStatus = saved ? (savedAcquisitionIsComplete(saved) ? "completed" : "needs_review") : apiRun ? apiJobStatus(apiRun) : latest?.status;
                     const unmatchedCount = unmatchedCountByChannel.get(task.channel) || 0;
                     const verifiedZero = latest?.status === "completed"
                       && latest.result?.zero_result_verified === true;
-                    const reason = latest
+                    const reason = saved ? (savedAcquisitionIsComplete(saved) ? null : "保存済みデータは一部取得・要確認です。内容を確認して補完してください。") : apiRun
+                      ? resultSummary(apiRun.result) || (apiRun.status === "completed" && !acquisitionRunIsSaved(apiRun) ? "取得結果の保存を確認してください" : null)
+                      : latest
                       ? latest.status !== "completed"
                         ? latest.error_message || resultDetails(latest.result) || resultSummary(latest.result) || latest.current_step
                         : verifiedZero
@@ -654,26 +749,27 @@ export default function WebSalesAutomationPage() {
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <div className="truncate text-sm font-bold">{task.label}</div>
-                              <div className="mt-1 text-[11px] text-slate-500">{task.schedule}</div>
+                              <AcquisitionRouteMark kind={workflow === "ads" ? "advertising" : workflow === "profit" ? "ec_profit" : "sales"} channel={task.channel} className="mt-1.5" />
+                              <div className="mt-1 text-[11px] text-slate-500">{data?.schedule.enabled ? task.schedule : "定期実行停止中"}</div>
                             </div>
-                            {latest ? (
+                            {targetStatus ? (
                               <JobStatusBadge
-                                status={latest.status}
+                                status={targetStatus}
                                 compact
-                                labelOverride={jobStatusOverride(latest, unmatchedCount)}
+                                labelOverride={saved ? (saved.status === "partial" ? "部分取得" : saved.status === "needs_review" ? "要確認" : undefined) : apiRun ? (apiRun.status === "completed" && !acquisitionRunIsSaved(apiRun) ? "保存未確認" : undefined) : latest ? jobStatusOverride(latest, unmatchedCount) : undefined}
                               />
                             ) : <span className="text-[11px] font-semibold text-slate-400">未実行</span>}
                           </div>
                           <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-200/70 pt-2 text-[11px] text-slate-500">
-                            <span>{latest ? formatDateTime(latest.created_at) : "未実行"}</span>
-                            {latest?.status === "waiting_for_user" && (
-                              <span className="font-semibold text-amber-700">{jobWaitAction(latest)}</span>
+                            <span>{apiRun ? formatDateTime(apiRun.completed_at || apiRun.started_at) : latest ? formatDateTime(latest.created_at) : "未実行"}</span>
+                            {targetStatus === "waiting_for_user" && (
+                              <span className="font-semibold text-amber-700">{apiRun ? "接続設定を確認" : latest ? jobWaitAction(latest) : "操作待ち"}</span>
                             )}
-                            {latest && ["failed", "cancelled"].includes(latest.status) && <span className="font-semibold text-blue-700">毎朝自動再実行</span>}
+                            {targetStatus && ["failed", "cancelled"].includes(targetStatus) && <span className="font-semibold text-blue-700">取得結果を確認</span>}
                           </div>
                           {reason && <p className="mt-2 text-[11px] leading-5 text-slate-600">{reason}</p>}
                         </div>
-                        {latest?.status === "needs_review" && unmatchedCount > 0 && (
+                        {targetStatus === "needs_review" && unmatchedCount > 0 && (
                           <button
                             type="button"
                             onClick={() => openMapping(task.channel)}
@@ -752,7 +848,7 @@ export default function WebSalesAutomationPage() {
                   </div>
                   <div className="grid grid-cols-3 gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 text-center">
                     <div className="bg-white px-2 py-2"><div className="text-[11px] text-slate-500">完了</div><strong className="text-emerald-700">{completedChannelCount}/{workflowChannels.length}</strong></div>
-                    <div className="bg-white px-2 py-2"><div className="text-[11px] text-slate-500">自動処理待ち</div><strong className="text-blue-700">{automaticWaitingCount}</strong></div>
+                    <div className="bg-white px-2 py-2"><div className="text-[11px] text-slate-500">処理待ち</div><strong className="text-blue-700">{automaticWaitingCount}</strong></div>
                     <div className="bg-white px-2 py-2"><div className="text-[11px] text-slate-500">操作待ち</div><strong className="text-amber-700">{operationWaitingCount}</strong></div>
                   </div>
                   <button
@@ -768,15 +864,31 @@ export default function WebSalesAutomationPage() {
                         : selectedPeriodKind === "fullMonth"
                           ? `前月1か月分を取得（${incompleteChannels.length}件）`
                           : `指定期間を取得（${incompleteChannels.length}件）`
-                      : selectedPeriodKind === "halfMonth"
+                      : completedChannelCount < workflowChannels.length
+                        ? "保存内容・処理状況を確認してください"
+                        : selectedPeriodKind === "halfMonth"
                         ? "1〜15日分は取得済み"
                         : selectedPeriodKind === "fullMonth"
                           ? "前月1か月分は取得済み"
                           : "指定期間は取得済み"}
                   </button>
                   <p className="text-xs leading-5 text-slate-500">
-                    完了済みは再取得せず、未取得・失敗・確認待ちだけを実行します。ログイン・MFA・権限待ちは自動再実行せず、操作後にこの画面から再開します。
+                    APIで取得できるデータを優先し、その他はBridgeで取得します。完了済みは再取得せず、ログイン・MFA・権限待ちは操作後に再開します。
                   </p>
+                  {acquisitionResults.length > 0 && (
+                    <div className="space-y-2 border-t border-slate-200 pt-3" aria-live="polite">
+                      {acquisitionResults.map((result) => (
+                        <div key={result.channel} className="text-xs text-slate-700">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <strong>{channelLabel(result.channel, workflowTasks)}</strong>
+                            <AcquisitionRouteBadge mark={{ route: result.route, label: result.route === "api" ? "API" : result.route === "bridge" ? "Bridge" : "対象外", title: "今回の実行経路" }} />
+                            <span>{result.status === "queued" ? "待機中" : result.status === "running" ? "実行中" : result.status === "completed" ? "完了" : result.status === "needs_review" ? "要確認" : result.status === "waiting_for_user" ? "操作待ち" : result.status === "failed" ? "失敗" : "変更なし"}</span>
+                          </div>
+                          {result.message && <p className="mt-1 leading-5">{result.message}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </section>
@@ -804,6 +916,20 @@ export default function WebSalesAutomationPage() {
                 <Clock3 size={18} />
                 <h2 className="text-base font-bold">実行履歴</h2>
               </div>
+              {periodAcquisitionRuns.length > 0 && (
+                <div className="mb-3 space-y-2 rounded-md border border-sky-200 bg-white p-3">
+                  <h3 className="text-xs font-bold text-slate-700">選択期間のAPI取得履歴</h3>
+                  {periodAcquisitionRuns.slice(0, 20).map((run) => (
+                    <div key={run.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
+                      <span>{formatDateTime(run.completed_at || run.started_at)}</span>
+                      <strong>{channelLabel(run.channel, workflowTasks)}</strong>
+                      <AcquisitionRouteBadge mark={{ route: "api", label: "API", title: "公式APIからの取得記録" }} />
+                      <JobStatusBadge status={apiJobStatus(run)} compact labelOverride={run.status === "completed" && !acquisitionRunIsSaved(run) ? "保存未確認" : undefined} />
+                      <span>{resultSummary(run.result)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="overflow-x-auto border-y border-slate-200 bg-white">
                 <table className="w-full min-w-[1100px] text-left text-sm">
                   <thead className="bg-slate-100 text-xs text-slate-600">
@@ -858,9 +984,11 @@ export default function WebSalesAutomationPage() {
             </section>
 
             <footer className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-slate-200 pt-4 text-[11px] text-slate-500">
-              <span className="inline-flex items-center gap-1"><HardDrive size={13} /> 元CSV・処理結果を履歴保存</span>
-              <span>{data?.schedule.halfMonth}</span>
-              <span>{data?.schedule.previousMonth}</span>
+              <span className="inline-flex items-center gap-1"><HardDrive size={13} /> 取得結果を履歴保存</span>
+              {data?.schedule.enabled ? <>
+                <span>{data.schedule.halfMonth}</span>
+                <span>{data.schedule.previousMonth}</span>
+              </> : <span>定期実行停止中。指定した取得のみ進めます。定期実行は再開していません。</span>}
             </footer>
           </>
         )}
@@ -937,7 +1065,14 @@ export default function WebSalesAutomationPage() {
         </DialogContent>
       </Dialog>
     </main>
+    </AcquisitionRouteProvider>
   );
+}
+
+function apiJobStatus(run: AcquisitionRun): JobStatus {
+  if (run.status === "completed") return acquisitionRunIsSaved(run) ? "completed" : "needs_review";
+  if (["queued", "running", "waiting_for_user", "needs_review", "failed", "cancelled"].includes(run.status)) return run.status as JobStatus;
+  return "needs_review";
 }
 
 function JobStatusBadge({
@@ -1041,7 +1176,7 @@ function jobWaitReason(job: CodexJob) {
 function jobStatusOverride(job: CodexJob, unmatchedCount: number) {
   if (job.status === "needs_review") {
     if (hasPersistedFinanceImport(job)) return "一部確定";
-    return unmatchedCount > 0 ? "商品紐付け待ち" : "自動再実行待ち";
+    return unmatchedCount > 0 ? "商品紐付け待ち" : "取得結果の確認待ち";
   }
   if (job.status !== "waiting_for_user") return undefined;
   if (jobWaitReason(job) === "codex_browser_download_approval") return job.channel === "amazon" ? "CSV取得確認待ち" : "Codex承認待ち";

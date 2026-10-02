@@ -19,7 +19,7 @@ export async function GET() {
   }
   try {
     const supabase = getWebSalesAutomationServiceClient();
-    const [runsResult, unmatchedResult, productsResult, jobsResult, workersResult, artifactsResult] = await Promise.all([
+    const [runsResult, unmatchedResult, productsResult, jobsResult, workersResult, artifactsResult, acquisitionResult, apiWorkerResult] = await Promise.all([
       supabase
         .from("web_sales_sync_runs")
         .select("id,channel,trigger_type,period_start,period_end,report_month,status,item_count,quantity_total,matched_count,unmatched_count,error_message,started_at,completed_at")
@@ -51,6 +51,10 @@ export async function GET() {
         .select("id,job_id,artifact_type,file_name,content_type,byte_size,created_at")
         .order("created_at", { ascending: false })
         .limit(200),
+      supabase.from("web_sales_acquisition_runs")
+        .select("id,kind,channel,route,status,period_start,period_end,report_month,result,started_at,completed_at")
+        .order("started_at",{ascending:false}).limit(100),
+      supabase.from("web_sales_api_runtime").select("id,status,last_seen_at,current_run_id").eq("id","office-pc").maybeSingle(),
     ]);
     if (runsResult.error) throw runsResult.error;
     if (unmatchedResult.error) throw unmatchedResult.error;
@@ -58,6 +62,7 @@ export async function GET() {
     if (jobsResult.error) throw jobsResult.error;
     if (workersResult.error) throw workersResult.error;
     if (artifactsResult.error) throw artifactsResult.error;
+    if (acquisitionResult.error || apiWorkerResult.error) throw new Error("API取得状態を確認できません");
 
     const jobIds = (jobsResult.data || []).slice(0, 30).map((job) => job.id);
     const eventsResult = jobIds.length > 0
@@ -85,9 +90,12 @@ export async function GET() {
       events: eventsResult.data || [],
       artifacts: artifactsResult.data || [],
       runs: runsResult.data || [],
+      acquisitionRuns: acquisitionResult.data || [],
+      apiWorker: apiWorkerResult.data ? {...apiWorkerResult.data,online:Date.now()-new Date(apiWorkerResult.data.last_seen_at).getTime()<70_000 && apiWorkerResult.data.status!=="stopped"} : null,
       unmatched: unmatchedResult.data || [],
       products: productsResult.data || [],
       schedule: {
+        enabled: process.env.WEB_SALES_AUTO_ACQUISITION_ENABLED === "true",
         halfMonth: "中間集計：毎月16日 09:15に当月1〜15日の商品販売個数のみ取得",
         previousMonth: "月次確定：毎月1日 09:15に前月の商品販売個数・広告費・EC手数料を取得",
         timezone: "Asia/Tokyo",

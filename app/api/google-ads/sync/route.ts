@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getGoogleAdsAccessToken, isGoogleAdsReauthRequiredError } from '@/lib/google-ads-auth'
+import { isFinanceAdmin, isSameOriginFinanceRequest } from '@/lib/finance-acquisition/auth'
 
 // サーバーサイドAPI用: service_role_keyでRLSバイパス
 const supabase = createClient(
@@ -55,6 +56,8 @@ async function getSeriesMapping(): Promise<Map<string, number>> {
 
 // POST: 指定期間のデータを同期
 export async function POST(request: NextRequest) {
+    if (!await isFinanceAdmin()) return NextResponse.json({ error: 'ログインが必要です' }, { status: 401 })
+    if (!isSameOriginFinanceRequest(request)) return NextResponse.json({ error: '送信元が正しくありません' }, { status: 403 })
     try {
         const body = await request.json()
         const { startDate, endDate } = body

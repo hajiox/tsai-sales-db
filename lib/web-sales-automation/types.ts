@@ -56,4 +56,6 @@ export type ChannelSyncResult = {
   matchedCount: number;
   unmatchedCount: number;
   error?: string;
+  /** Fixed server-owned category; never a provider body or credential value. */
+  errorCode?: string;
 };

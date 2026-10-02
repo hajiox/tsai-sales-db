@@ -13,6 +13,7 @@ import AdvertisingCostModal from "@/components/AdvertisingCostModal";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { WebSalesData } from "@/types/db";
 import { Plus, Trash2, DollarSign, EyeOff, Target, RefreshCw, CalendarRange } from "lucide-react";
+import { AcquisitionRouteMark, AcquisitionRouteProvider } from "@/components/AcquisitionRouteBadge";
 
 type ViewMode = "month" | "period";
 
@@ -686,6 +687,24 @@ function WebSalesDashboardContent() {
           </div>
         </div>
       </header>
+
+      {viewMode === "month" && (
+        <AcquisitionRouteProvider reportMonth={month} refreshKey={refreshTrigger}>
+          <div className="mb-4 flex flex-wrap items-start gap-x-5 gap-y-2 border-y border-slate-200 py-2" aria-label="EC別の取得経路">
+            {[
+              { channel: "amazon", label: "Amazon" },
+              { channel: "rakuten", label: "楽天" },
+              { channel: "yahoo", label: "Yahoo!" },
+              { channel: "base", label: "BASE" },
+            ].map(({ channel, label }) => (
+              <div key={channel} className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs font-semibold text-slate-700">{label}</span>
+                <AcquisitionRouteMark kind="sales" channel={channel} />
+              </div>
+            ))}
+          </div>
+        </AcquisitionRouteProvider>
+      )}
 
       <div className="flex min-w-0 flex-col gap-5 lg:gap-6">
         <section

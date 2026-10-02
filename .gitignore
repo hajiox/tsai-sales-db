@@ -46,3 +46,4 @@ implementation_plan.md
 sync_body.json
 .vercel
 .env*.local
+.operations/

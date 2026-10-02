@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "finance:api-worker": "node scripts/run-finance-api-queue.cjs --poll",
+    "test:finance-api": "node scripts/test-official-sales-api.cjs && node scripts/test-api-sales-reconciliation.cjs && node scripts/test-google-api-acquisition.cjs && node scripts/test-finance-acquisition.mjs && node scripts/test-finance-acquisition-security.cjs && node scripts/test-yahoo-oauth.cjs && node scripts/test-finance-api-routing.cjs && node scripts/test-finance-api-dispatch.cjs && node scripts/test-finance-api-queue.cjs && node --experimental-strip-types scripts/test-web-sales-acquisition-display.mjs",
     "test:web-sales-amounts": "node scripts/test-web-sales-amounts.cjs",
     "test:web-sales-actual-import": "node scripts/test-web-sales-actual-import.cjs",
     "test:web-sales-ui-amounts": "node scripts/test-web-sales-ui-amounts.cjs",

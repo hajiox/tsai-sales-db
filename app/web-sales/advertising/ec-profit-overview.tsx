@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AcquisitionRouteMark } from "@/components/AcquisitionRouteBadge";
 import {
   AlertTriangle,
   CalendarClock,
@@ -232,7 +233,7 @@ export default function EcProfitOverview({ month }: { month: string }) {
     setActionMessage(null);
     try {
       const period = monthPeriod(month);
-      const response = await fetch("/api/web-sales/codex-jobs", {
+      const response = await fetch("/api/web-sales/acquisition/run", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -245,7 +246,7 @@ export default function EcProfitOverview({ month }: { month: string }) {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "公式データの再取得を開始できません");
-      setActionMessage(payload.jobs?.length
+      setActionMessage(typeof payload.summary === "string" ? payload.summary : payload.jobs?.length
         ? `公式データの再取得を${payload.jobs.length}媒体で開始しました`
         : "すでに実行中、または再取得対象はありません");
       await load();
@@ -529,6 +530,7 @@ export default function EcProfitOverview({ month }: { month: string }) {
               <AdPlatformValue
                 key={key}
                 label={label}
+                channel={key === "other" ? undefined : key}
                 value={displayedAdCosts[key]}
                 previous={previousMonthAdCosts[key]}
                 previousYear={previousYearAdCosts[key]}
@@ -738,10 +740,11 @@ function ExpenseComparison({ label, value, sales, previous, previousYear }: { la
   );
 }
 
-function AdPlatformValue({ label, value, previous, previousYear }: { label: string; value: number; previous: number; previousYear: number }) {
+function AdPlatformValue({ label, channel, value, previous, previousYear }: { label: string; channel?: string; value: number; previous: number; previousYear: number }) {
   return (
     <div className="min-w-0">
       <div className="text-[11px] text-slate-500">{label}</div>
+      {channel && <AcquisitionRouteMark kind="advertising" channel={channel} className="mt-1" />}
       <div className="mt-0.5 truncate text-sm font-bold tabular-nums text-slate-900" title={yen(value)}>{yen(value)}</div>
       <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
         <CompactDelta label="前月" value={changeRate(value, previous)} />
@@ -791,6 +794,7 @@ function ChannelExpenseCard({ row }: { row: ChannelRow }) {
           <h4 className="truncate text-sm font-bold text-slate-950" title={row.label}>{row.label}</h4>
           <span className="shrink-0 text-[10px] font-medium text-slate-500">売上 {yen(row.sales)}</span>
         </div>
+        <AcquisitionRouteMark kind="ec_profit" channel={row.channel} className="mt-1.5" />
         <div className="mt-2 flex items-end justify-between gap-2">
           <span className="text-[11px] font-semibold text-slate-600">EC控除</span>
           <div className="text-right">
@@ -845,6 +849,7 @@ function DesktopChannelRows({ row, open, onToggle }: { row: ChannelRow; open: bo
       <tr className="border-b border-slate-100 hover:bg-slate-50">
         <td className="px-5 py-3">
           <div className="font-bold text-slate-950">{row.label}</div>
+          <AcquisitionRouteMark kind="ec_profit" channel={row.channel} className="mt-1" />
           <StatusText row={row} />
         </td>
         <MoneyCell value={row.sales} />
@@ -874,6 +879,7 @@ function MobileChannel({ row, open, onToggle }: { row: ChannelRow; open: boolean
       <button type="button" onClick={onToggle} className="flex w-full items-start justify-between gap-3 text-left">
         <div>
           <div className="font-bold text-slate-950">{row.label}</div>
+          <AcquisitionRouteMark kind="ec_profit" channel={row.channel} className="mt-1" />
           <StatusText row={row} />
         </div>
         <div className="text-right">

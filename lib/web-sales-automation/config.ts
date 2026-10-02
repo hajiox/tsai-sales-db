@@ -3,6 +3,8 @@ import {
   type ChannelConfigStatus,
   type WebSalesChannel,
 } from "./types";
+import { getConfiguredApiCredentialNames } from "../finance-acquisition/credential-store";
+import { financeCapability } from "../finance-acquisition/capabilities";
 
 const CHANNEL_LABELS: Record<WebSalesChannel, string> = {
   amazon: "Amazon",
@@ -19,6 +21,7 @@ const REQUIRED_ENV: Record<WebSalesChannel, string[]> = {
     "AMAZON_SP_API_CLIENT_ID",
     "AMAZON_SP_API_CLIENT_SECRET",
     "AMAZON_SP_API_REFRESH_TOKEN",
+    "AMAZON_SP_API_SELLER_ID",
   ],
   rakuten: ["RAKUTEN_RMS_SERVICE_SECRET", "RAKUTEN_RMS_LICENSE_KEY"],
   yahoo: [
@@ -28,7 +31,7 @@ const REQUIRED_ENV: Record<WebSalesChannel, string[]> = {
     "YAHOO_SHOPPING_SELLER_ID",
   ],
   mercari: ["MERCARI_SHOPS_ACCESS_TOKEN", "MERCARI_SHOPS_USER_AGENT"],
-  base: ["BASE_CLIENT_ID", "BASE_CLIENT_SECRET", "BASE_REFRESH_TOKEN"],
+  base: ["BASE_CLIENT_ID", "BASE_CLIENT_SECRET", "BASE_REFRESH_TOKEN", "BASE_SHOP_ID", "BASE_REDIRECT_URI"],
   qoo10: ["QOO10_API_KEY"],
   tiktok: [
     "TIKTOK_SHOP_APP_KEY",
@@ -58,6 +61,23 @@ export function getChannelConfigStatus(
 
 export function getAllChannelConfigStatuses() {
   return WEB_SALES_CHANNELS.map(getChannelConfigStatus);
+}
+
+function statusFromNames(channel: WebSalesChannel, configuredNames: Set<string>): ChannelConfigStatus {
+  const capability = financeCapability("sales", channel, configuredNames);
+  return { channel, label: CHANNEL_LABELS[channel], configured: capability.api_ready, missing: capability.missing_config };
+}
+
+/** Server-only: encrypted managed credentials take precedence during execution. */
+export async function getChannelConfigStatusAsync(channel: WebSalesChannel): Promise<ChannelConfigStatus> {
+  if (!["amazon", "rakuten", "yahoo", "base"].includes(channel)) return getChannelConfigStatus(channel);
+  return statusFromNames(channel, await getConfiguredApiCredentialNames());
+}
+
+export async function getAllChannelConfigStatusesAsync(): Promise<ChannelConfigStatus[]> {
+  const names = await getConfiguredApiCredentialNames();
+  return WEB_SALES_CHANNELS.map(channel => ["amazon", "rakuten", "yahoo", "base"].includes(channel)
+    ? statusFromNames(channel, names) : getChannelConfigStatus(channel));
 }
 
 export function requireEnv(name: string) {

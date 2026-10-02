@@ -25,6 +25,7 @@ import RakutenSearchRequestTab from "./rakuten-search-request-tab"
 import EcProfitOverview from "./ec-profit-overview"
 import WebSalesCodexAnalysis from "@/components/web-sales-codex-analysis"
 import { sumWebSalesAmounts } from "@/lib/web-sales-amounts"
+import { AcquisitionRouteMark, AcquisitionRouteProvider } from "@/components/AcquisitionRouteBadge"
 
 // ===== 型定義 =====
 interface AssetGroupSummary {
@@ -606,6 +607,7 @@ export default function AdvertisingDashboard() {
     const activeSecondaryTabs = secondaryTabs[activePrimaryTab] ?? []
 
     return (
+        <AcquisitionRouteProvider reportMonth={month}>
         <div className="w-full min-w-0 space-y-4 lg:space-y-5">
             {/* ヘッダー */}
             <header>
@@ -686,6 +688,10 @@ export default function AdvertisingDashboard() {
                 )}
             </div>
 
+            {['google', 'meta', 'rakuten', 'yahoo', 'amazon'].includes(activeTab) && (
+                <AcquisitionRouteMark kind="advertising" channel={activeTab} />
+            )}
+
             {/* ===== 概要タブ ===== */}
             {activeTab === 'overview' && (
                 <>
@@ -763,16 +769,17 @@ export default function AdvertisingDashboard() {
                         </div>
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 lg:gap-3">
                             {[
-                                { name: 'Google', cost: platformCosts.google, color: 'emerald', active: true },
-                                { name: 'Meta', cost: platformCosts.meta, color: 'blue', active: true },
-                                { name: 'Amazon', cost: platformCosts.amazon, color: 'orange', active: false },
-                                { name: '楽天', cost: platformCosts.rakuten, color: 'red', active: true },
-                                { name: 'Yahoo', cost: platformCosts.yahoo, color: 'purple', active: false },
+                                { name: 'Google', channel: 'google', cost: platformCosts.google, color: 'emerald', active: true },
+                                { name: 'Meta', channel: 'meta', cost: platformCosts.meta, color: 'blue', active: true },
+                                { name: 'Amazon', channel: 'amazon', cost: platformCosts.amazon, color: 'orange', active: false },
+                                { name: '楽天', channel: 'rakuten', cost: platformCosts.rakuten, color: 'red', active: true },
+                                { name: 'Yahoo', channel: 'yahoo', cost: platformCosts.yahoo, color: 'purple', active: false },
                                 { name: 'その他', cost: platformCosts.other, color: 'gray', active: false },
                                 { name: '合計', cost: totalPlatformCost, color: 'indigo', active: true },
                             ].map(p => (
                                 <div key={p.name} className={`min-w-0 rounded-lg border p-3 ${p.active ? 'bg-white' : 'bg-gray-50'}`}>
                                     <div className="text-xs text-gray-500 mb-1">{p.name}</div>
+                                    {p.channel && <AcquisitionRouteMark kind="advertising" channel={p.channel} className="mb-1.5" />}
                                     <div className={`break-words text-base font-bold sm:text-lg ${p.cost > 0 ? `text-${p.color}-700` : 'text-gray-300'}`}>
                                         {p.cost > 0 ? formatCurrency(p.cost) : '—'}
                                     </div>
@@ -1231,6 +1238,7 @@ export default function AdvertisingDashboard() {
 
 
         </div>
+        </AcquisitionRouteProvider>
     )
 }
 

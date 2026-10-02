@@ -20,6 +20,10 @@ export function validatePeriod(startDate: string, endDate: string): SyncPeriod {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
     throw new Error("日付の形式が正しくありません");
   }
+  for (const value of [startDate, endDate]) {
+    const date = new Date(`${value}T00:00:00Z`);
+    if (!Number.isFinite(date.getTime()) || isoDate(date) !== value) throw new Error("実在する日付を指定してください");
+  }
   if (startDate > endDate) throw new Error("終了日は開始日以降にしてください");
   if (startDate.slice(0, 7) !== endDate.slice(0, 7)) {
     throw new Error("自動集計は同じ月の期間を指定してください");

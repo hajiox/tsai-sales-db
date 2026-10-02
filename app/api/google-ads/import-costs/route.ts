@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { isFinanceAdmin, isSameOriginFinanceRequest } from '@/lib/finance-acquisition/auth'
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set") })(),
@@ -18,6 +19,8 @@ interface CostMapping {
 }
 
 export async function POST(request: NextRequest) {
+    if (!await isFinanceAdmin()) return NextResponse.json({ error: 'ログインが必要です' }, { status: 401 })
+    if (!isSameOriginFinanceRequest(request)) return NextResponse.json({ error: '送信元が正しくありません' }, { status: 403 })
     try {
         const body = await request.json()
         const { month, mappings } = body as { month: string; mappings: CostMapping[] }
