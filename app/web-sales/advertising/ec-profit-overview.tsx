@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AcquisitionRouteMark } from "@/components/AcquisitionRouteBadge";
+import { activeAcquisitionTasks } from "@/lib/web-sales-acquisition-display";
 import {
   AlertTriangle,
   CalendarClock,
@@ -173,7 +174,7 @@ export default function EcProfitOverview({ month }: { month: string }) {
   }, [month]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const hasActiveSettlementJob = data?.completeness.settlementIssues.some(
+    const hasActiveSettlementJob = activeAcquisitionTasks(data?.completeness.settlementIssues || []).some(
       (issue) => issue.status === "queued" || issue.status === "running",
     );
     if (!hasActiveSettlementJob) {
@@ -208,6 +209,11 @@ export default function EcProfitOverview({ month }: { month: string }) {
     );
   }
 
+  const acquisitionSettlementIssues = activeAcquisitionTasks(data.completeness.settlementIssues);
+  const acquisitionMissingChannels = activeAcquisitionTasks(
+    data.completeness.missingChannels.map((channel) => ({ channel })),
+  ).map(({ channel }) => channel);
+
   const recalculateEstimate = async () => {
     setAction("estimate");
     setActionMessage(null);
@@ -215,7 +221,7 @@ export default function EcProfitOverview({ month }: { month: string }) {
       const response = await fetch("/api/web-sales/ec-profit/estimate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ month, channels: data.completeness.missingChannels }),
+        body: JSON.stringify({ month, channels: acquisitionMissingChannels }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "概算を再計算できません");
@@ -238,7 +244,7 @@ export default function EcProfitOverview({ month }: { month: string }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           taskKey: "ec_profit_import",
-          channels: data.completeness.missingChannels,
+          channels: acquisitionMissingChannels,
           startDate: period.startDate,
           endDate: period.endDate,
           incompleteOnly: true,
@@ -267,33 +273,30 @@ export default function EcProfitOverview({ month }: { month: string }) {
   const displayedAdCosts = authoritativeAdCosts(data);
   const previousMonthAdCosts = authoritativeAdCosts(previousMonth);
   const previousYearAdCosts = authoritativeAdCosts(previousYear);
-  const waitingForChromeIssues = data.completeness.settlementIssues.filter(
+  const waitingForChromeIssues = acquisitionSettlementIssues.filter(
     (issue) => issue.status === "waiting_for_user"
       && /(browser security policy|declined permission|Chrome.*(?:アクセス|許可|セキュリティ))/i.test(issue.reason),
   );
   const waitingForChromeHosts = waitingForChromeIssues.map(
     (issue) => CHROME_HOST_BY_CHANNEL[issue.channel] || issue.label,
   );
-  const activeSettlementIssues = data.completeness.settlementIssues.filter(
+  const activeSettlementIssues = acquisitionSettlementIssues.filter(
     (issue) => issue.status === "queued" || issue.status === "running",
   );
   const stalledSettlementIssues = activeSettlementIssues.filter(
     (issue) => issue.status === "running" && isHeartbeatStale(issue.heartbeatAt),
   );
-  const operatorSettlementIssues = data.completeness.settlementIssues.filter(
+  const operatorSettlementIssues = acquisitionSettlementIssues.filter(
     (issue) => issue.status === "waiting_for_user",
   );
-  const failedSettlementIssues = data.completeness.settlementIssues.filter(
+  const failedSettlementIssues = acquisitionSettlementIssues.filter(
     (issue) => issue.status === "failed",
   );
-  const operatorActionIssues = data.completeness.settlementIssues.filter(
+  const operatorActionIssues = acquisitionSettlementIssues.filter(
     (issue) => issue.status === "waiting_for_user" || issue.status === "failed" || issue.status === "not_started",
   );
-  const automaticReviewIssues = data.completeness.settlementIssues.filter(
-    (issue) => !operatorActionIssues.includes(issue) && issue.retryPolicy.mode === "automatic",
-  );
-  const manualReviewIssues = data.completeness.settlementIssues.filter(
-    (issue) => !operatorActionIssues.includes(issue) && !automaticReviewIssues.includes(issue),
+  const manualReviewIssues = acquisitionSettlementIssues.filter(
+    (issue) => !operatorActionIssues.includes(issue),
   );
   const feeTotal = data.totals.platformFees + data.totals.paymentFees;
   const promotionTotal = data.totals.sellerDiscounts + data.totals.sellerCoupons + data.totals.sellerPoints;
@@ -359,23 +362,20 @@ export default function EcProfitOverview({ month }: { month: string }) {
           stalled={stalledSettlementIssues}
           operatorWaiting={operatorSettlementIssues}
           failed={failedSettlementIssues}
-          incompleteCount={data.completeness.settlementIssues.length}
+          incompleteCount={acquisitionSettlementIssues.length}
         />
       </section>
 
-      {!data.completeness.isFinal && (
+      {!data.completeness.isFinal && acquisitionSettlementIssues.length > 0 && (
         <div className="border-l-4 border-amber-500 bg-amber-50 px-4 py-4 text-sm text-amber-950">
           <div className="flex items-start gap-3">
             <AlertTriangle size={18} className="mt-0.5 shrink-0" />
             <div className="min-w-0">
-              <strong>未確定のEC精算：{data.completeness.settlementIssues.length}社</strong>
+              <strong>未確定のEC精算：{acquisitionSettlementIssues.length}社</strong>
               <p className="mt-0.5 text-xs text-amber-800">概算を含む現在の利益には反映済みです。必要な対応だけ確認してください。</p>
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
                 {operatorActionIssues.length > 0 && (
                   <span><b className="text-red-700">要対応：</b>{formatIssueLabels(operatorActionIssues)}</span>
-                )}
-                {automaticReviewIssues.length > 0 && (
-                  <span><b className="text-blue-700">自動確認中：</b>{formatIssueLabels(automaticReviewIssues)}</span>
                 )}
                 {manualReviewIssues.length > 0 && (
                   <span><b>確認待ち：</b>{formatIssueLabels(manualReviewIssues)}</span>
@@ -384,7 +384,7 @@ export default function EcProfitOverview({ month }: { month: string }) {
             </div>
           </div>
           <div className="mt-3 divide-y divide-amber-200 border-y border-amber-200">
-            {data.completeness.settlementIssues.map((issue) => (
+            {acquisitionSettlementIssues.map((issue) => (
               <div key={issue.channel} className="grid gap-2 py-3 sm:grid-cols-[140px_minmax(0,1fr)_auto] sm:items-start sm:gap-3">
                 <div className="flex items-center gap-2">
                   <strong className="text-xs">{issue.label}</strong>
@@ -411,8 +411,8 @@ export default function EcProfitOverview({ month }: { month: string }) {
                 <div className="flex flex-col items-start gap-1 sm:items-end">
                   <SettlementStatusBadge issue={issue} />
                   {issue.status !== "queued" && issue.status !== "running" && (
-                    <span className={`inline-flex w-fit items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold ${issue.retryPolicy.mode === "automatic" ? "bg-blue-100 text-blue-800" : "bg-white text-amber-900"}`}>
-                      <CalendarClock size={13} /> {issue.retryPolicy.mode === "automatic" ? "次回" : "対応"}: {issue.retryPolicy.label}
+                    <span className="inline-flex w-fit items-center gap-1 rounded bg-white px-2 py-1 text-[11px] font-semibold text-amber-900">
+                      <CalendarClock size={13} /> 対応: 原本・対象月確定後に手動確認
                     </span>
                   )}
                 </div>
@@ -420,11 +420,11 @@ export default function EcProfitOverview({ month }: { month: string }) {
             ))}
           </div>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-            <button type="button" onClick={recalculateEstimate} disabled={action !== null} className="inline-flex min-h-10 items-center justify-center gap-2 rounded border border-amber-300 bg-white px-4 text-xs font-bold text-amber-950 disabled:opacity-50">
+            <button type="button" onClick={recalculateEstimate} disabled={action !== null || acquisitionMissingChannels.length === 0} className="inline-flex min-h-10 items-center justify-center gap-2 rounded border border-amber-300 bg-white px-4 text-xs font-bold text-amber-950 disabled:opacity-50">
               {action === "estimate" ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
               概算を再計算
             </button>
-            <button type="button" onClick={retryOfficial} disabled={action !== null} className="inline-flex min-h-10 items-center justify-center gap-2 rounded bg-slate-900 px-4 text-xs font-bold text-white disabled:opacity-50">
+            <button type="button" onClick={retryOfficial} disabled={action !== null || acquisitionMissingChannels.length === 0} className="inline-flex min-h-10 items-center justify-center gap-2 rounded bg-slate-900 px-4 text-xs font-bold text-white disabled:opacity-50">
               {action === "official" ? <Loader2 size={15} className="animate-spin" /> : <DownloadCloud size={15} />}
               公式データを再取得
             </button>
