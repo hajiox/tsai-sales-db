@@ -62,10 +62,28 @@ async function main() {
   assert.deepEqual(noIdentity.missing_config, ["BASE_SHOP_ID"]);
   configured.add("BASE_SHOP_ID");
   assert.equal(capabilities.financeCapability("sales", "base", configured).preferred_route, "api");
-  for (const [channel, token, identity] of [["amazon", "AMAZON_SP_API_ACCESS_TOKEN", "AMAZON_SP_API_SELLER_ID"], ["yahoo", "YAHOO_SHOPPING_ACCESS_TOKEN", "YAHOO_SHOPPING_SELLER_ID"]]) {
+  for (const [channel, token, identity] of [["amazon", "AMAZON_SP_API_ACCESS_TOKEN", "AMAZON_SP_API_SELLER_ID"]]) {
     assert.equal(capabilities.financeCapability("sales", channel, new Set([token])).api_ready, false);
     assert.equal(capabilities.financeCapability("sales", channel, new Set([token, identity])).api_ready, true);
   }
+  const configuredYahoo = new Set(["YAHOO_SHOPPING_CLIENT_ID", "YAHOO_SHOPPING_CLIENT_SECRET", "YAHOO_SHOPPING_REFRESH_TOKEN", "YAHOO_SHOPPING_ACCESS_TOKEN", "YAHOO_SHOPPING_SELLER_ID"]);
+  for (const names of [new Set(), configuredYahoo]) for (const kind of ["sales", "ec_profit", "advertising"]) {
+    const yahoo = capabilities.financeCapability(kind, "yahoo", names);
+    assert.equal(yahoo.preferred_route, "bridge", "Yahoo must remain on the selected Bridge route even when API credentials are present");
+    assert.equal(yahoo.api_ready, false);
+    assert.equal(yahoo.api_disabled_by_policy, true);
+    assert.deepEqual(yahoo.missing_config, [], "A selected Bridge route must not ask the operator for API credentials");
+  }
+  assert.equal(configuredYahoo.size, 5, "Route selection must preserve saved credential names");
+  for (const kind of ["sales", "ec_profit"]) {
+    const amazon = capabilities.financeCapability(kind, "amazon", new Set(["AMAZON_SP_API_ACCESS_TOKEN", "AMAZON_SP_API_SELLER_ID"]));
+    assert.equal(amazon.preferred_route, "api", "Yahoo's route policy must not disable configured Amazon acquisition");
+    assert.equal(amazon.api_ready, true);
+    assert.notEqual(amazon.api_disabled_by_policy, true);
+  }
+  const rakuten = capabilities.financeCapability("sales", "rakuten", new Set(["RAKUTEN_RMS_SERVICE_SECRET", "RAKUTEN_RMS_LICENSE_KEY"]));
+  assert.equal(rakuten.preferred_route, "api", "Yahoo's route policy must not disable configured RMS sales acquisition");
+  assert.equal(rakuten.api_ready, true);
   assert.equal(capabilities.financeCapability("ec_profit", "rakuten", new Set()).preferred_route, "bridge");
   for (const channel of ["mercari", "tiktok", "qoo10"]) {
     const retired = capabilities.financeCapability("sales", channel, configured);

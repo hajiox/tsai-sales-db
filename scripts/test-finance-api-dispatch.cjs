@@ -13,16 +13,26 @@ let previousApiRun;
 let savedSalesRun;
 const salesFilters = [];
 let inserted = 0;
+let salesCalls = 0;
+let officialFinanceCalls = 0;
+let bridgeAllowed = false;
+const bridgeCalls = [];
+let configuredCapabilities = [{ kind: 'sales', channel: 'yahoo', preferred_route: 'api', api_ready: true }];
 const writes = [];
 const originalLoad = Module._load;
 Module._load = function (request, parent, isMain) {
   if (request === '../web-sales-automation/sync' && parent.filename.endsWith(`${path.sep}dispatch.ts`)) return {
     getWebSalesAutomationServiceClient: () => db,
-    runChannelSync: async () => salesOutcome,
+    runChannelSync: async () => { salesCalls++; return salesOutcome; },
   };
-  if (request === '../web-sales-codex/server') return { enqueueCodexJobs: async () => { throw new Error('Unexpected Bridge enqueue'); } };
-  if (request === './capabilities') return { getFinanceCapabilities: async () => [{ kind: 'sales', channel: 'yahoo', preferred_route: 'api', api_ready: true }] };
-  if (request === './run' && parent.filename.endsWith(`${path.sep}dispatch.ts`)) return { runOfficialFinanceAcquisition: async () => { throw new Error('Unexpected finance acquisition'); } };
+  if (request === '../web-sales-codex/server') return { enqueueCodexJobs: async (input) => {
+    if (!bridgeAllowed) throw new Error('Unexpected Bridge enqueue');
+    bridgeCalls.push(input); return [{ id: 'bridge-run', ...input }];
+  } };
+  if (request === './capabilities') return { getFinanceCapabilities: async () => configuredCapabilities };
+  if (request === './run' && parent.filename.endsWith(`${path.sep}dispatch.ts`)) return { runOfficialFinanceAcquisition: async () => {
+    officialFinanceCalls++; throw new Error('Unexpected finance acquisition');
+  } };
   return originalLoad.call(this, request, parent, isMain);
 };
 const { enqueueFinanceAcquisitions, executeAcquisitionRun } = require('../lib/finance-acquisition/dispatch.ts');
@@ -98,7 +108,38 @@ async function main() {
   const waiting = await enqueueFinanceAcquisitions({ kind: 'sales', channels: ['yahoo'], period, triggerType: 'scheduled_previous_month' });
   assert.equal(waiting.results[0].status, 'waiting_for_user', 'scheduled acquisition must preserve operator wait');
   assert.equal(inserted, 2);
+  configuredCapabilities = ['sales', 'ec_profit', 'advertising'].map(kind => ({ kind, channel: 'yahoo', preferred_route: 'bridge',
+    api_ready: false, api_disabled_by_policy: true, reason: 'Yahoo!はBridgeで取得します' }));
+  bridgeAllowed = true;
+  const insertedBeforePolicy = inserted;
+  for (const [kind, taskKey] of [['sales', 'web_sales_import'], ['ec_profit', 'ec_profit_import'], ['advertising', 'ad_cost_import']]) {
+    const selectedBridge = await enqueueFinanceAcquisitions({ kind, channels: ['yahoo'], period, allowBridge: true });
+    assert.equal(selectedBridge.results[0].route, 'bridge');
+    assert.equal(selectedBridge.results[0].status, 'queued');
+    assert.equal(selectedBridge.jobs.length, 1);
+    assert.deepEqual(bridgeCalls.at(-1), { taskKey, channels: ['yahoo'], startDate: period.startDate, endDate: period.endDate,
+      triggerType: 'manual', requestedBy: undefined, idempotencyPrefix: undefined }, 'The Bridge job must keep the locked kind, channel and period');
+    assert.equal(inserted, insertedBeforePolicy, 'Yahoo Bridge selection must not enqueue API acquisition');
+    const bridgeCallsBefore = bridgeCalls.length;
+    const withheld = await enqueueFinanceAcquisitions({ kind, channels: ['yahoo'], period, allowBridge: false });
+    assert.equal(withheld.jobs.length, 0, 'Bridge cannot launch when its caller disallows Bridge');
+    assert.equal(bridgeCalls.length, bridgeCallsBefore);
+    assert.equal(inserted, insertedBeforePolicy, 'Disallowed Bridge must not silently fall back to Yahoo API');
+  }
+  const salesCallsBeforePolicy = salesCalls;
+  const officialFinanceCallsBeforePolicy = officialFinanceCalls;
+  for (const kind of ['sales', 'ec_profit', 'advertising']) {
+    queuedRow.kind = kind;
+    writes.length = 0;
+    const abandoned = await executeAcquisitionRun('api-run');
+    assert.equal(abandoned.status, 'skipped', 'An old queued Yahoo API run is terminalized after explicit Bridge selection');
+    assert.equal(abandoned.persisted, false);
+    assert.equal(writes.at(-1).status, 'skipped');
+    assert.equal(writes.at(-1).result.persisted, false);
+    assert.equal(salesCalls, salesCallsBeforePolicy, 'Stale queued Yahoo sales must not call the API provider');
+    assert.equal(officialFinanceCalls, officialFinanceCallsBeforePolicy, 'Stale queued Yahoo costs must not call a finance API provider');
+  }
   await assert.rejects(enqueueFinanceAcquisitions({kind:'sales',channels:['yahoo'],period:{startDate:'2099-01-01',endDate:'2099-01-31',reportMonth:'2099-01-01'}}), /未来の期間/, 'future periods cannot be saved as empty completed results');
-  console.log('Finance dispatch regression tests passed: sales auth waits, coupon review, actual persisted success and completed-period retry prevention.');
+  console.log('Finance dispatch regression tests passed: auth waits, actual persistence, retry prevention, Yahoo Bridge selection and abandoned API runs.');
 }
 main().catch(error => { console.error(error.message); process.exitCode = 1; });

@@ -25,6 +25,7 @@ export type AcquisitionStatus = {
   preferred_route: AcquisitionRoute;
   api_ready: boolean;
   api_supported: boolean;
+  api_disabled_by_policy?: boolean;
   missing_config: string[];
   reason: string;
   latest?: {
@@ -52,6 +53,11 @@ export type AcquisitionRun = {
 
 export function acquisitionRunIsSaved(run: AcquisitionRun | undefined | null): boolean {
   return run?.status === "completed" && run.result.persisted === true;
+}
+
+/** Keep historical API records, but do not present abandoned API attempts as current Bridge work. */
+export function acquisitionRunIsCurrent(run: AcquisitionRun, status: AcquisitionStatus | undefined): boolean {
+  return !status?.api_disabled_by_policy || acquisitionRunIsSaved(run);
 }
 
 export function selectEffectiveAcquisitionRun(runs: AcquisitionRun[]): AcquisitionRun | undefined {

@@ -39,7 +39,7 @@ export async function getAcquisitionStatus(month:string) {
       saved.push({route:"unknown",status:"success",finished_at:null,period_start:reportMonth,period_end:null});
     }
     saved.sort((a,b)=>(b.finished_at||"").localeCompare(a.finished_at||""));
-    const lastApi=apiRuns[0],lastBridge=[...channelJobs].sort((a,b)=>(b.started_at||b.created_at).localeCompare(a.started_at||a.created_at))[0];
+    const lastApi=apiRuns.find(run=>!capability.api_disabled_by_policy || run.result?.persisted===true),lastBridge=[...channelJobs].sort((a,b)=>(b.started_at||b.created_at).localeCompare(a.started_at||a.created_at))[0];
     const bridgeAttemptedAt=lastBridge?.started_at||lastBridge?.created_at;
     const lastAttempt=lastApi && (!lastBridge || lastApi.started_at>=bridgeAttemptedAt!)
       ? {route:lastApi.route,status:lastApi.status,message:lastApi.error_message||undefined,attempted_at:lastApi.started_at}

@@ -45,6 +45,7 @@ export async function runChannelSync(
 ): Promise<ChannelSyncResult> {
   const supabase = serviceClient();
   const config = await getChannelConfigStatusAsync(channel);
+  const skippedReason = config.missing.length ? `未設定: ${config.missing.join(", ")}` : "運用方針によりBridgeで公式ファイルを取得します";
   const { data: run, error: runError } = await supabase
     .from("web_sales_sync_runs")
     .insert({
@@ -57,7 +58,7 @@ export async function runChannelSync(
       metadata: ["amazon", "rakuten", "yahoo", "base"].includes(channel) ? { acquisitionPath: "api" } : {},
       error_message: config.configured
         ? null
-        : `未設定: ${config.missing.join(", ")}`,
+        : skippedReason,
       completed_at: config.configured ? null : new Date().toISOString(),
     })
     .select("id")
@@ -76,7 +77,7 @@ export async function runChannelSync(
       quantityTotal: 0,
       matchedCount: 0,
       unmatchedCount: 0,
-      error: `未設定: ${config.missing.join(", ")}`,
+      error: skippedReason,
     };
   }
 

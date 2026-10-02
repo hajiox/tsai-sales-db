@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { activeAcquisitionTasks, acquisitionMarks, acquisitionRunIsSaved, savedAcquisitionIsComplete, savedAcquisitionSupersedesAttempt, selectEffectiveAcquisitionRun } from "../lib/web-sales-acquisition-display.ts";
+import { activeAcquisitionTasks, acquisitionMarks, acquisitionRunIsCurrent, acquisitionRunIsSaved, savedAcquisitionIsComplete, savedAcquisitionSupersedesAttempt, selectEffectiveAcquisitionRun } from "../lib/web-sales-acquisition-display.ts";
 
 const historicalTasks = ["amazon", "rakuten", "yahoo", "base", "mercari", "tiktok", "qoo10"].map((channel) => ({ channel, label: channel }));
 assert.deepEqual(activeAcquisitionTasks(historicalTasks).map((task) => task.channel), ["amazon", "rakuten", "yahoo", "base"]);
@@ -65,5 +65,18 @@ const queuedRetry = { ...runningRetry, status: "queued" };
 assert.equal(selectEffectiveAcquisitionRun([completed, queuedRetry]), queuedRetry, "New queued API run must remain visible instead of hidden by old completion");
 const waitingRetry = { ...queuedRetry, status: "waiting_for_user" };
 assert.equal(selectEffectiveAcquisitionRun([completed, waitingRetry]), waitingRetry, "Operator waits are active and must not disappear behind prior saved data");
+const yahooBridge = { ...api, channel: "yahoo", preferred_route: "bridge", api_ready: false, api_disabled_by_policy: true, reason: "Yahoo!はBridgeで取得します" };
+const savedYahoo = { ...completed, channel: "yahoo" };
+const waitingYahoo = { ...waitingRetry, channel: "yahoo" };
+assert.equal(acquisitionRunIsCurrent(waitingYahoo, yahooBridge), false, "Old Yahoo API waits must not remain current work after explicit Bridge selection");
+assert.equal(acquisitionRunIsCurrent(savedYahoo, yahooBridge), true, "Saved Yahoo API history must survive a future route change");
+assert.equal(acquisitionRunIsCurrent(noSave, yahooBridge), false, "An unpersisted completion is not saved history");
+assert.equal(acquisitionRunIsCurrent(waitingRetry, api), true, "Other configured API operator waits remain actionable");
+assert.equal(acquisitionRunIsCurrent(waitingYahoo, undefined), true, "Absent capability metadata must not silently hide a pending run");
+const yahooHistory = [waitingYahoo, savedYahoo];
+assert.equal(selectEffectiveAcquisitionRun(yahooHistory.filter(run => acquisitionRunIsCurrent(run, yahooBridge))), savedYahoo);
+assert.equal(yahooHistory.length, 2, "Filtering current work must not delete the historical attempts");
+const yahooMarks = acquisitionMarks({ ...yahooBridge, latest: { route: "api", status: "completed", period_start: savedYahoo.period_start, period_end: savedYahoo.period_end } });
+assert.deepEqual(yahooMarks.map(mark => mark.label), ["次回: Bridge", "保存: API"], "Bridge policy must not relabel the original saved API provenance");
 assert.equal(selectEffectiveAcquisitionRun([]), undefined);
-console.log("Acquisition display: historical provenance, configuration, operator waits and failures passed");
+console.log("Acquisition display: provenance, operator waits, Yahoo Bridge policy and retained API history passed");

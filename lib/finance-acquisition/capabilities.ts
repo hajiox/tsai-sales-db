@@ -6,6 +6,7 @@ export const ADVERTISING_CHANNELS = ["google", "meta", "amazon", "rakuten", "yah
 export type AcquisitionCapability = {
   kind: AcquisitionKind; channel: string; preferred_route: "api" | "bridge" | "none";
   api_supported: boolean; api_ready: boolean; missing_config: string[]; reason: string;
+  api_disabled_by_policy?: boolean;
 };
 
 const requirements: Record<string, string[][]> = {
@@ -28,6 +29,12 @@ export function financeCapability(kind: AcquisitionKind, channel: string, config
   const key = `${kind}:${channel}`;
   if (["mercari", "tiktok", "qoo10"].includes(channel)) {
     return { kind, channel, preferred_route: "none", api_supported: false, api_ready: false, missing_config: [], reason: "退店予定・新規取得対象外" };
+  }
+  // Yahoo finance acquisition remains on Bridge by the operator's choice,
+  // regardless of saved OAuth credentials or the inventory server's API use.
+  if (channel === "yahoo") {
+    return { kind, channel, preferred_route: "bridge", api_supported: Boolean(requirements[key]), api_ready: false,
+      api_disabled_by_policy: true, missing_config: [], reason: "Yahoo!は運用方針によりBridgeで公式ファイルを取得します" };
   }
   let alternatives = requirements[key];
   if (!alternatives) {

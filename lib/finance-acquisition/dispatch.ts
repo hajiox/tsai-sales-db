@@ -97,7 +97,8 @@ export async function executeAcquisitionRun(id: string) {
   let status="failed"; let result: Record<string,unknown>={persisted:false}; let message: string|null=null;
   try {
     const capability=(await getFinanceCapabilities()).find(c=>c.kind===row.kind && c.channel===row.channel);
-    if (!capability?.api_ready) { status="waiting_for_user";message="API接続情報が不足しています"; }
+    if (capability?.api_disabled_by_policy) { status="skipped";message=capability.reason;result={persisted:false,policy_route:capability.preferred_route}; }
+    else if (!capability?.api_ready) { status="waiting_for_user";message="API接続情報が不足しています"; }
     else if (row.kind === "sales") {
       const outcome=await runChannelSync(row.channel as WebSalesChannel,{startDate:row.period_start,endDate:row.period_end,reportMonth:row.report_month},"manual");
       const operatorWait=apiErrorRequiresOperator(outcome.errorCode);

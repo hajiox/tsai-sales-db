@@ -8,6 +8,7 @@ require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule
 }).outputText, file);
 let db;
 let fetched;
+let providerCalls = 0;
 let credentialNames = new Set();
 const originalLoad = Module._load;
 Module._load = function (request, parent, isMain) {
@@ -18,7 +19,7 @@ Module._load = function (request, parent, isMain) {
     getBulkProductUnitPrices: async (_client, ids) => new Map(ids.map(id => [id, { unit_price: 99999, unit_profit_rate: 10 }])),
   };
   if (request === './connectors' && parent.filename.endsWith(`${path.sep}sync.ts`)) return {
-    fetchChannelSales: async () => { if (fetched instanceof Error) throw fetched; return fetched; },
+    fetchChannelSales: async () => { providerCalls++; if (fetched instanceof Error) throw fetched; return fetched; },
   };
   if (request.includes('finance-acquisition/credential-store')) return {
     getConfiguredApiCredentialNames: async () => credentialNames,
@@ -80,28 +81,35 @@ async function run(summary, items = [item('A', 2, 1234)], options = {}) {
   fetched = { items, metadata: options.metadata || metadata };
   if (options.error) fetched = options.error;
   fixtureDb.state.race = Boolean(options.race);
-  const result = await runChannelSync('yahoo', options.period || period, 'manual');
+  const result = await runChannelSync('base', options.period || period, 'manual');
   return { result, ...fixtureDb };
 }
 async function main() {
-  credentialNames = new Set(['YAHOO_SHOPPING_CLIENT_ID', 'YAHOO_SHOPPING_CLIENT_SECRET', 'YAHOO_SHOPPING_REFRESH_TOKEN', 'YAHOO_SHOPPING_SELLER_ID']);
-  assert.equal((await getChannelConfigStatusAsync('yahoo')).configured, true, 'managed credentials support setup without environment tokens');
-  credentialNames.delete('YAHOO_SHOPPING_SELLER_ID');
-  assert.equal((await getChannelConfigStatusAsync('yahoo')).configured, false, 'shop identity is required');
-  credentialNames.add('YAHOO_SHOPPING_SELLER_ID');
-  credentialNames = new Set(['YAHOO_SHOPPING_ACCESS_TOKEN', 'YAHOO_SHOPPING_SELLER_ID']);
-  assert.equal((await getChannelConfigStatusAsync('yahoo')).configured, true, 'access-only API credential is supported with the same shop lock');
+  credentialNames = new Set(['BASE_CLIENT_ID', 'BASE_CLIENT_SECRET', 'BASE_REFRESH_TOKEN', 'BASE_REDIRECT_URI', 'BASE_SHOP_ID']);
+  assert.equal((await getChannelConfigStatusAsync('base')).configured, true, 'managed credentials support setup without environment tokens');
+  credentialNames.delete('BASE_SHOP_ID');
+  assert.equal((await getChannelConfigStatusAsync('base')).configured, false, 'shop identity is required');
   credentialNames = new Set(['BASE_ACCESS_TOKEN', 'BASE_SHOP_ID']);
-  assert.equal((await getChannelConfigStatusAsync('base')).configured, true);
+  assert.equal((await getChannelConfigStatusAsync('base')).configured, true, 'access-only API credential is supported with the same shop lock');
+  credentialNames = new Set(['RAKUTEN_RMS_SERVICE_SECRET', 'RAKUTEN_RMS_LICENSE_KEY']);
+  assert.equal((await getChannelConfigStatusAsync('rakuten')).configured, true, 'managed RMS credentials remain enabled');
   credentialNames = new Set(['AMAZON_SP_API_ACCESS_TOKEN', 'AMAZON_SP_API_SELLER_ID']);
   assert.equal((await getChannelConfigStatusAsync('amazon')).configured, true);
   credentialNames.delete('AMAZON_SP_API_SELLER_ID');
   assert.equal((await getChannelConfigStatusAsync('amazon')).configured, false);
-  credentialNames = new Set(['YAHOO_SHOPPING_ACCESS_TOKEN', 'YAHOO_SHOPPING_SELLER_ID']);
+  credentialNames = new Set(['YAHOO_SHOPPING_CLIENT_ID', 'YAHOO_SHOPPING_CLIENT_SECRET', 'YAHOO_SHOPPING_REFRESH_TOKEN', 'YAHOO_SHOPPING_ACCESS_TOKEN', 'YAHOO_SHOPPING_SELLER_ID']);
+  const yahooStatus = await getChannelConfigStatusAsync('yahoo');
+  assert.equal(yahooStatus.configured, false, 'Yahoo API acquisition remains disabled under the selected Bridge policy');
+  assert.deepEqual(yahooStatus.missing, [], 'Bridge policy is not a missing-credential condition');
+  db = fixture().client;
+  const callsBeforeYahoo = providerCalls;
+  assert.equal((await runChannelSync('yahoo', period, 'manual')).status, 'skipped', 'Direct legacy API sync cannot bypass Yahoo Bridge policy');
+  assert.equal(providerCalls, callsBeforeYahoo, 'Yahoo Bridge policy must stop the provider call before collection');
+  credentialNames = new Set(['BASE_ACCESS_TOKEN', 'BASE_SHOP_ID']);
   assert.equal(isFullCalendarMonth(period), true);
   assert.equal(isFullCalendarMonth({ ...period, endDate: '2026-09-15' }), false);
   assert.equal(isFullCalendarMonth({ startDate: '2028-02-01', endDate: '2028-02-29', reportMonth: '2028-02-01' }), true);
-  const summary = [{ product_id: 'A', yahoo_count: 2, yahoo_amount: 1234 }];
+  const summary = [{ product_id: 'A', base_count: 2, base_amount: 1234 }];
   let result = await run(summary);
   assert.equal(result.result.status, 'success');
   assert.equal(result.state.calls[0].name, 'replace_verified_api_sales_summary');
@@ -112,7 +120,7 @@ async function main() {
   assert.equal(result.result.status, 'needs_review');
   assert.match(result.result.error, /total_mismatch/);
   assert.equal(result.state.calls.length, 0, 'different actual report totals cannot overwrite CSV');
-  result = await run([{ product_id: 'A', yahoo_count: 1, yahoo_amount: 100 }, { product_id: 'B', yahoo_count: 1, yahoo_amount: 200 }],
+  result = await run([{ product_id: 'A', base_count: 1, base_amount: 100 }, { product_id: 'B', base_count: 1, base_amount: 200 }],
     [item('A', 1, 200), item('B', 1, 100)]);
   assert.match(result.result.error, /product_mismatch/, 'equal grand totals cannot hide different products');
   assert.equal(result.state.calls.length, 0);
@@ -130,17 +138,17 @@ async function main() {
   assert.equal(result.state.items.length, 1, 'verified partial lines are staged');
   assert.equal(result.state.calls.length, 0, 'unresolved coupon orders must block replacement even if remaining totals accidentally match');
   assert.equal((await rerunMappingFinalization(result.result.runId)).status, 'needs_review', 'mapping retry cannot erase semantic review markers');
-  result = await run(summary, [item('A', 2, 1234)], { error: new SalesApiError('yahoo', 'permission_required', 403) });
+  result = await run(summary, [item('A', 2, 1234)], { error: new SalesApiError('base', 'permission_required', 403) });
   assert.equal(result.result.status, 'needs_review');
   assert.equal(result.result.errorCode, 'permission_required', 'fixed auth failure code survives the sales outcome for operator-wait dispatch');
   assert.equal(result.state.calls.length, 0);
   result = await run(summary);
-  result = await run([{ product_id: 'A', yahoo_count: 1001, yahoo_amount: 1001 }],
+  result = await run([{ product_id: 'A', base_count: 1001, base_amount: 1001 }],
     Array.from({ length: 1001 }, (_, i) => ({ ...item('A', 1, 1), externalOrderId: `order-${i}` })));
   assert.equal(result.result.status, 'success', 'monthly orders must finalize all pages beyond the PostgREST 1000-row default');
   assert.equal(result.state.calls[0].args.p_rows[0].quantity, 1001);
   result = await run(summary);
-  result.state.summary = [{ product_id: 'A', yahoo_count: 2, yahoo_amount: 1500 }];
+  result.state.summary = [{ product_id: 'A', base_count: 2, base_amount: 1500 }];
   const retry = await rerunMappingFinalization(result.result.runId);
   assert.equal(retry.status, 'needs_review', 'mapping retry reloads original API basis and repeats reconciliation');
   assert.equal(result.state.calls.length, 1, 'retry cannot bypass comparison');

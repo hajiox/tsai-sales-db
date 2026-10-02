@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AcquisitionRouteBadge, AcquisitionRouteMark, AcquisitionRouteProvider } from "@/components/AcquisitionRouteBadge";
-import { activeAcquisitionTasks, acquisitionRunIsSaved, savedAcquisitionIsComplete, savedAcquisitionSupersedesAttempt, selectEffectiveAcquisitionRun, type AcquisitionRun, type AcquisitionStatus, type SavedAcquisitionResult } from "@/lib/web-sales-acquisition-display";
+import { activeAcquisitionTasks, acquisitionRunIsCurrent, acquisitionRunIsSaved, savedAcquisitionIsComplete, savedAcquisitionSupersedesAttempt, selectEffectiveAcquisitionRun, type AcquisitionRun, type AcquisitionStatus, type SavedAcquisitionResult } from "@/lib/web-sales-acquisition-display";
 import {
   hasPersistedFinanceImport,
   selectEffectiveFinanceJob,
@@ -306,10 +306,14 @@ export default function WebSalesAutomationPage() {
     () => (data?.acquisitionRuns || []).filter((run) => run.kind === acquisitionKind && run.period_start === startDate && run.period_end === endDate),
     [data?.acquisitionRuns, acquisitionKind, startDate, endDate],
   );
+  const currentPeriodAcquisitionRuns = useMemo(
+    () => periodAcquisitionRuns.filter(run => acquisitionRunIsCurrent(run, acquisitionRoutes.find(route => route.kind === run.kind && route.channel === run.channel))),
+    [periodAcquisitionRuns, acquisitionRoutes],
+  );
   const apiRunByChannel = useMemo(() => {
     const map = new Map<string, AcquisitionRun>();
     for (const channel of workflowChannels) {
-      const apiRun = selectEffectiveAcquisitionRun(periodAcquisitionRuns.filter((run) => run.channel === channel));
+      const apiRun = selectEffectiveAcquisitionRun(currentPeriodAcquisitionRuns.filter((run) => run.channel === channel));
       const bridgeJob = latestPeriodJobByChannel.get(channel);
       if (!apiRun) continue;
       const apiDate = apiRun.completed_at || apiRun.started_at;
@@ -318,7 +322,7 @@ export default function WebSalesAutomationPage() {
         || ((["queued", "running", "waiting_for_user"].includes(apiRun.status) || acquisitionRunIsSaved(apiRun)) && apiDate >= bridgeDate)) map.set(channel, apiRun);
     }
     return map;
-  }, [periodAcquisitionRuns, workflowChannels, latestPeriodJobByChannel]);
+  }, [currentPeriodAcquisitionRuns, workflowChannels, latestPeriodJobByChannel]);
   const selectedPeriodRunIds = useMemo(
     () => new Set((data?.runs || [])
       .filter((run) => run.period_start === startDate && run.period_end === endDate)
@@ -701,10 +705,10 @@ export default function WebSalesAutomationPage() {
               </p>
             </section>
 
-            {periodAcquisitionRuns.some((run) => ["queued", "running", "waiting_for_user"].includes(run.status)) && (
+            {currentPeriodAcquisitionRuns.some((run) => ["queued", "running", "waiting_for_user"].includes(run.status)) && (
               <section className="space-y-2" aria-live="polite">
                 <h2 className="text-base font-bold">API取得の処理状況</h2>
-                {periodAcquisitionRuns.filter((run) => ["queued", "running", "waiting_for_user"].includes(run.status)).map((run) => (
+                {currentPeriodAcquisitionRuns.filter((run) => ["queued", "running", "waiting_for_user"].includes(run.status)).map((run) => (
                   <div key={run.id} className="flex flex-wrap items-center gap-2 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm">
                     {run.status === "running" ? <Loader2 size={16} className="animate-spin text-sky-700" aria-hidden="true" /> : <Clock3 size={16} className="text-sky-700" aria-hidden="true" />}
                     <strong>{channelLabel(run.channel, workflowTasks)}</strong>
@@ -924,7 +928,7 @@ export default function WebSalesAutomationPage() {
                       <span>{formatDateTime(run.completed_at || run.started_at)}</span>
                       <strong>{channelLabel(run.channel, workflowTasks)}</strong>
                       <AcquisitionRouteBadge mark={{ route: "api", label: "API", title: "公式APIからの取得記録" }} />
-                      <JobStatusBadge status={apiJobStatus(run)} compact labelOverride={run.status === "completed" && !acquisitionRunIsSaved(run) ? "保存未確認" : undefined} />
+                      <JobStatusBadge status={apiJobStatus(run)} compact labelOverride={run.status === "skipped" ? "変更なし" : run.status === "completed" && !acquisitionRunIsSaved(run) ? "保存未確認" : undefined} />
                       <span>{resultSummary(run.result)}</span>
                     </div>
                   ))}
@@ -1071,6 +1075,7 @@ export default function WebSalesAutomationPage() {
 
 function apiJobStatus(run: AcquisitionRun): JobStatus {
   if (run.status === "completed") return acquisitionRunIsSaved(run) ? "completed" : "needs_review";
+  if (run.status === "skipped") return "cancelled";
   if (["queued", "running", "waiting_for_user", "needs_review", "failed", "cancelled"].includes(run.status)) return run.status as JobStatus;
   return "needs_review";
 }
