@@ -1,3 +1,4 @@
+import { XMLParser } from "fast-xml-parser";
 import { addDays } from "./date";
 import type { SyncPeriod } from "./types";
 
@@ -21,6 +22,54 @@ export class SalesApiError extends Error {
   constructor(channel: string, public readonly code: string, status?: number) {
     super(`${channel}: API ${code}${status ? ` (HTTP ${status})` : ""}`);
     this.name = "SalesApiError";
+  }
+}
+
+const YAHOO_OPERATOR_ERROR_CODES: Readonly<Record<string, string>> = {
+  "px-04306": "source_ip_not_allowed",
+  "px-14303": "business_id_not_registered",
+  "px-14304": "seller_not_allowed",
+  "px-04303": "order_api_not_approved",
+};
+const API_OPERATOR_WAIT_CODES = new Set([
+  "authentication_required", "permission_required", "account_verification",
+  "account_verification_required", "required_credentials", ...Object.values(YAHOO_OPERATOR_ERROR_CODES),
+]);
+
+export function apiErrorRequiresOperator(code: unknown): boolean {
+  return typeof code === "string" && API_OPERATOR_WAIT_CODES.has(code);
+}
+
+// Inspect only a bounded error packet. The provider message, body and unknown
+// codes must never escape this function or become part of a saved exception.
+async function yahooOperatorErrorCode(response: Response): Promise<string | undefined> {
+  const reader = response.body?.getReader();
+  if (!reader) return;
+  try {
+    const decoder = new TextDecoder();
+    let length = 0;
+    let body = "";
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      length += chunk.value.byteLength;
+      if (length > 64 * 1024) return;
+      body += decoder.decode(chunk.value, { stream: true });
+    }
+    body += decoder.decode();
+    if (/<!DOCTYPE|<!ENTITY/i.test(body)) return;
+    const parsed = record(body.trimStart().startsWith("{") ? JSON.parse(body)
+      : new XMLParser({ parseTagValue: false }).parse(body));
+    const result = record(record(parsed.ResultSet).Result || parsed.Result);
+    const code = record(parsed.Error).Code ?? record(result.Error).Code;
+    if (typeof code === "string" && Object.hasOwn(YAHOO_OPERATOR_ERROR_CODES, code)) {
+      return YAHOO_OPERATOR_ERROR_CODES[code];
+    }
+  } catch {
+    // Malformed or unavailable bodies retain the original HTTP classification.
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
   }
 }
 
@@ -92,9 +141,12 @@ export async function apiResponse(channel: string, url: string | URL, init: Requ
       signal: init.signal || AbortSignal.timeout(30_000),
     });
     if (!response.ok) {
-      const code = response.status === 401 ? "authentication_required"
+      let code = response.status === 401 ? "authentication_required"
         : response.status === 403 ? "permission_required"
           : response.status === 429 ? "rate_limited" : "request_failed";
+      if (channel === "yahoo" && new URL(url).origin === "https://circus.shopping.yahooapis.jp") {
+        code = await yahooOperatorErrorCode(response) || code;
+      }
       throw new SalesApiError(channel, code, response.status);
     }
     return response;

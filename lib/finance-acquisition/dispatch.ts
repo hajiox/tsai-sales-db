@@ -1,5 +1,6 @@
 import { getWebSalesAutomationServiceClient, runChannelSync } from "../web-sales-automation/sync";
 import { validatePeriod } from "../web-sales-automation/date";
+import { apiErrorRequiresOperator } from "../web-sales-automation/api-common";
 import type { SyncPeriod, WebSalesChannel } from "../web-sales-automation/types";
 import { enqueueCodexJobs } from "../web-sales-codex/server";
 import type { CodexChannel, CodexJobTrigger } from "../web-sales-codex/types";
@@ -99,7 +100,7 @@ export async function executeAcquisitionRun(id: string) {
     if (!capability?.api_ready) { status="waiting_for_user";message="API接続情報が不足しています"; }
     else if (row.kind === "sales") {
       const outcome=await runChannelSync(row.channel as WebSalesChannel,{startDate:row.period_start,endDate:row.period_end,reportMonth:row.report_month},"manual");
-      const operatorWait=["authentication_required","permission_required","account_verification","account_verification_required","required_credentials"].includes(outcome.errorCode || "");
+      const operatorWait=apiErrorRequiresOperator(outcome.errorCode);
       status=operatorWait ? "waiting_for_user" : outcome.status === "success" ? "completed" : outcome.status;
       message=outcome.error ? safeAcquisitionError(new Error(outcome.error)) : null;
       result={persisted:outcome.status==="success",salesRunId:outcome.runId,itemCount:outcome.itemCount,quantityTotal:outcome.quantityTotal,unmatchedCount:outcome.unmatchedCount,errorCode:outcome.errorCode};
@@ -115,7 +116,7 @@ export async function executeAcquisitionRun(id: string) {
   } catch (caught) {
     message=safeAcquisitionError(caught);
     const code = caught && typeof caught === "object" && "code" in caught ? String(caught.code) : "";
-    status=/authentication_required|permission_required|account_verification|required_credentials/.test(code) ? "waiting_for_user"
+    status=apiErrorRequiresOperator(code) ? "waiting_for_user"
       : /review|mismatch|mapping|incomplete|report_pending/.test(code) || /再認証|認証|権限/.test(message) ? "needs_review" : "failed";
   }
   const {error: saveError}=await supabase.from("web_sales_acquisition_runs").update({status,result,error_message:status==="completed"?null:message,

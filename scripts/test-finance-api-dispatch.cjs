@@ -55,7 +55,8 @@ function outcome(code) {
     matchedCount: 0, unmatchedCount: 0, error: `yahoo: API ${code}`, errorCode: code };
 }
 async function main() {
-  for (const code of ['authentication_required', 'permission_required', 'account_verification_required', 'required_credentials']) {
+  for (const code of ['authentication_required', 'permission_required', 'account_verification_required', 'required_credentials',
+    'source_ip_not_allowed', 'business_id_not_registered', 'seller_not_allowed', 'order_api_not_approved']) {
     writes.length = 0; salesOutcome = outcome(code);
     const result = await executeAcquisitionRun('api-run');
     assert.equal(result.status, 'waiting_for_user', `${code} must remain an operator wait instead of a completed/reviewable data result`);

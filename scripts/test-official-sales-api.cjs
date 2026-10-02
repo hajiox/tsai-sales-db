@@ -32,7 +32,7 @@ const {
   normalizeAmazonReport, normalizeYahooOrder, normalizeBaseOrder, normalizeRakutenOrder,
   fetchYahooApiSales, fetchBaseApiSales, fetchRakutenApiSales, salesApiAccessToken, verifyAmazonApiShop, verifyBaseApiShop,
 } = require('../lib/web-sales-automation/official-sales-api.ts');
-const { apiJson, jstTimestamp, SalesApiError } = require('../lib/web-sales-automation/api-common.ts');
+const { apiJson, apiResponse, jstTimestamp, SalesApiError } = require('../lib/web-sales-automation/api-common.ts');
 const period = { startDate: '2026-09-01', endDate: '2026-09-30', reportMonth: '2026-09-01' };
 
 const amazon = {
@@ -180,6 +180,51 @@ async function main() {
     assert(!error.message.includes('CUSTOMER_NAME'));
     return /permission_required/.test(error.message);
   });
+  const yahooOrderUrl = 'https://circus.shopping.yahooapis.jp/ShoppingWebService/V1/orderList';
+  const yahooOperatorCodes = {
+    'px-04306': 'source_ip_not_allowed',
+    'px-14303': 'business_id_not_registered',
+    'px-14304': 'seller_not_allowed',
+    'px-04303': 'order_api_not_approved',
+  };
+  for (const [providerCode, category] of Object.entries(yahooOperatorCodes)) {
+    for (const body of [
+      `<Error><Message>SECRET_TOKEN CUSTOMER_NAME seller-private</Message><Code>${providerCode}</Code></Error>`,
+      JSON.stringify({ Error: { Code: providerCode, Message: 'SECRET_TOKEN CUSTOMER_NAME seller-private' } }),
+      `<ResultSet><Result><Error><Code>${providerCode}</Code><Message>SECRET_TOKEN CUSTOMER_NAME</Message></Error></Result></ResultSet>`,
+    ]) {
+      global.fetch = async () => new Response(body, { status: providerCode === 'px-04303' ? 400 : 403 });
+      await assert.rejects(apiResponse('yahoo', yahooOrderUrl), error => {
+        assert(error instanceof SalesApiError);
+        assert.equal(error.code, category);
+        assert(!/SECRET_TOKEN|CUSTOMER_NAME|seller-private|px-/.test(error.message));
+        assert.deepEqual(Object.keys(error).sort(), ['code', 'name']);
+        return true;
+      });
+    }
+  }
+  for (const body of [
+    '<Error><Code>px-99999</Code><Message>SECRET_TOKEN</Message></Error>',
+    '<Error><Code>px-04306 SECRET_TOKEN</Code></Error>',
+    '{ "Error": { "Code": "constructor", "Message": "SECRET_TOKEN" } }',
+    '{not-json SECRET_TOKEN',
+    '<!DOCTYPE Error [<!ENTITY x "SECRET_TOKEN">]><Error><Code>px-04306</Code></Error>',
+    `<Error><Code>px-04306</Code><Message>${'SECRET_TOKEN'.repeat(7000)}</Message></Error>`,
+  ]) {
+    global.fetch = async () => new Response(body, { status: 403 });
+    await assert.rejects(apiResponse('yahoo', yahooOrderUrl), error => {
+      assert.equal(error.code, 'permission_required');
+      assert(!/SECRET_TOKEN|px-/.test(error.message));
+      return true;
+    });
+  }
+  global.fetch = async () => new Response('<Error><Code>px-04306</Code><Message>SECRET_TOKEN</Message></Error>', { status: 403 });
+  await assert.rejects(apiResponse('base', 'https://api.thebase.in/1/orders'), /permission_required/,
+    'other API behavior remains unchanged even when its body resembles a Yahoo error');
+  await assert.rejects(apiResponse('yahoo', 'https://auth.login.yahoo.co.jp/yconnect/v2/token'), /permission_required/,
+    'Yahoo OAuth errors retain their existing classification');
+  global.fetch = async () => new Response('<Error><Code>px-04306</Code></Error>');
+  assert.equal((await apiResponse('yahoo', yahooOrderUrl)).status, 200, 'success packets are never classified as error bodies');
   global.fetch = async () => { throw new Error('secret signed URL'); };
   await assert.rejects(apiJson('base', 'https://api.thebase.in/1/orders'), /connection_or_timeout/);
   console.log('Official sales API connector tests passed');

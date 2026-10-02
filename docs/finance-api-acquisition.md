@@ -18,6 +18,8 @@ AmazonはSP-APIと広告APIを別認可。楽天は店舗所有アプリのsearc
 
 Yahooの既存アプリは接続設定の「Yahoo!のAPI認証へ進む」から認可する。登録済みの本番callbackのみ使用し、管理者本人・10分の暗号state Cookie・PKCEを確認して更新トークンを保存する。OAuth成功だけで注文APIの本番許可があると判断せず、実取得で確認する。定期実行はこの操作でも再開しない。
 
+Yahoo注文APIは接続元のグローバルIPにも許可が必要。`source_ip_not_allowed` は公式のIP追加・変更申請待ちであり、ログインの繰り返しでは解消しない。`business_id_not_registered`、`seller_not_allowed`、`order_api_not_approved` も操作待ちとして扱う。プロバイダのエラー原文は保存せず、公式の既知コードを固定カテゴリに変換する。
+
 ## 金額と再実行
 
 APIとBridgeの同種・同媒体・重なる期間をDBで排他制御。同期間のAPI保存完了は再実行しない。明示的な手動要求だけが失敗・確認待ちを再開する。
