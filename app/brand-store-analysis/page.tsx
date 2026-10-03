@@ -182,8 +182,8 @@ function BrandStoreAnalysisContent() {
 
         const enrichedData = salesData.map(item => ({
           ...item,
-          category_id: productMap.get(item.product_id) || null,
-          category: categoryMap.get(productMap.get(item.product_id)) || '未分類'
+          category_id: item.product_id == null ? null : productMap.get(item.product_id) || null,
+          category: (item.product_id == null ? null : categoryMap.get(productMap.get(item.product_id))) || item.category || '未分類'
         }))
 
         const totalSales = enrichedData.reduce((sum, item) => sum + (item.total_sales || 0), 0)
