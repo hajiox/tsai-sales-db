@@ -4,6 +4,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { addMonths, format, subYears, parseISO } from 'date-fns';
 import { revalidatePath } from 'next/cache';
+import { resolveKpiWebActual } from '@/lib/kpi-amounts';
 
 // ----------------------------------------------------------------------
 // Types & Interfaces
@@ -111,6 +112,7 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
 
     // Lookup Maps - Manual Entries (Targets, Acquisition, Manufacturing, Historical)
     const targetMap = new Map();
+    const recordedActualMap = new Map();
     const acquisitionTargetMap = new Map();
     const acquisitionActualMap = new Map();
     // Manufacturing
@@ -123,6 +125,8 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
     manualRows.forEach(r => {
       if (r.metric === 'target') {
         targetMap.set(`${r.channel}_${r.month}`, r.amount);
+      } else if (r.metric === 'actual') {
+        recordedActualMap.set(`${r.channel}_${r.month}`, r.amount);
       } else if (r.metric === 'acquisition_target') {
         acquisitionTargetMap.set(r.month, r.amount);
       } else if (r.metric === 'acquisition_actual') {
@@ -140,7 +144,11 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
 
     const getAmount = (channel: ChannelCode, month: string) => {
       switch (channel) {
-        case 'WEB': return webMap.has(month) ? webMap.get(month)! : 0;
+        case 'WEB': return resolveKpiWebActual(
+          webMap.get(month),
+          recordedActualMap.get(`${channel}_${month}`),
+          historicalActualMap.get(`${channel}_${month}`),
+        );
         case 'WHOLESALE': return wholesaleMap.get(month) || 0;
         case 'STORE': return storeMap.get(month) || 0;
         case 'SHOKU': return shokuMap.get(month) || 0;
@@ -156,13 +164,16 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
         const lastYearMonth = format(subYears(parseISO(month), 1), 'yyyy-MM-01');
         const twoYearsAgoMonth = format(subYears(parseISO(month), 2), 'yyyy-MM-01');
 
-        // Priority: Seeded historical data > Calculated from sales_v1
+        // WEB uses the same official-amount priority for every comparison year.
+        // Other channels retain their established historical-data priority.
         const seededHist = historicalActualMap.get(`${channel}_${lastYearMonth}`);
-        const lastYearAmount = seededHist !== undefined ? seededHist : getAmount(channel, lastYearMonth);
+        const lastYearAmount = channel === 'WEB'
+          ? getAmount(channel, lastYearMonth)
+          : seededHist !== undefined ? seededHist : getAmount(channel, lastYearMonth);
         const seededTwoYearsAgo = historicalActualMap.get(`${channel}_${twoYearsAgoMonth}`);
-        const twoYearsAgoAmount = seededTwoYearsAgo !== undefined
-          ? seededTwoYearsAgo
-          : getAmount(channel, twoYearsAgoMonth);
+        const twoYearsAgoAmount = channel === 'WEB'
+          ? getAmount(channel, twoYearsAgoMonth)
+          : seededTwoYearsAgo !== undefined ? seededTwoYearsAgo : getAmount(channel, twoYearsAgoMonth);
 
         return {
           month,

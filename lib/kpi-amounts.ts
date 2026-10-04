@@ -1,4 +1,17 @@
-/** A missing recorded WEB amount must also remain missing in company KPIs. */
+/** Prefer complete EC amounts, then a separately verified monthly KPI record. */
+export function resolveKpiWebActual(
+  reportedAmount: number | null | undefined,
+  recordedActual?: number,
+  historicalActual?: number,
+): number | null {
+  if (reportedAmount != null) return reportedAmount;
+  const recordedAmount = recordedActual ?? historicalActual;
+  if (recordedAmount != null) return recordedAmount;
+  // Preserve zero for months without sales rows; a returned incomplete month stays null.
+  return reportedAmount === undefined ? 0 : null;
+}
+
+/** Incomplete monthly amounts must also remain missing in company totals. */
 export function sumKpiAmounts(values: readonly number[]): number;
 export function sumKpiAmounts(values: readonly (number | null)[]): number | null;
 export function sumKpiAmounts(values: readonly (number | null)[]): number | null {

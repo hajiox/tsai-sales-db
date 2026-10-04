@@ -73,3 +73,10 @@
 - Google conversion values are not configured as purchase revenue and multiple campaign conversion counts exceed plausible product orders. Meta results likewise do not reconcile to purchases. Neither source can currently support a reliable ROAS judgment.
 - July WEB direct contribution was approximately JPY 78,956 before Google and Meta and negative JPY 350,744 after those ads, using product costs, channel deductions, JPY 366 shipping per unit, and marketplace ads. Recommended keeping Meta paused and, if revenue protection is needed, restarting only selected high-margin P-MAX campaigns at a limited test budget after purchase-value tracking is corrected.
 - Analysis only; no ad campaign, application, database, or production behavior was changed, so no deployment was required.
+
+## 2026-10-04 Restore verified August WEB KPI actuals
+
+- WEB KPI now uses complete official EC amounts first, then separately saved monthly actual/history records for both current and comparison years. Incomplete months without a verified record remain unavailable; catalog-price estimates are not used. Other channels retain their existing source priority.
+- Restored the missing 2025-08 WEB historical actual of JPY 10,201,547 from `参考用KPI.xlsx`, sheet `令和7年-令和8年売上計画`, numeric cell C17. Source SHA-256 and the previous twelve seeded months were verified; the single insert was guarded and read back through the KPI RPC.
+- The verified 2026-08 six-EC subtotal is JPY 11,441,721 / 5,370 units. TikTok has only an August 1-15 order source; settlement-month income is not an order-month substitute. No partial subtotal was recorded as a complete monthly KPI actual. Full-month TikTok order retrieval remains an operator login wait.
+- Focused KPI source-priority/fiscal-year/zero/missing regression tests and the existing WEB actual-amount/UI tests passed. Changed-file lint passed. Deployment validation is recorded in the local operation note.
