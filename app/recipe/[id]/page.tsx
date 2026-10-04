@@ -2883,29 +2883,6 @@ function RecipeDetailContent() {
                     </div>
                   </div>
                 </div>
-                <EcPriceSyncControls
-                  recipeId={recipe.id}
-                  recipeName={recipe.name}
-                  ecProductName={recipe.ec_product_name ?? null}
-                  productLpUrl={recipe.product_lp_url}
-                  sellingPriceInclTax={sellingPriceInclTax}
-                  expectedRecipeSnapshot={{
-                    id: recipe.id,
-                    name: recipe.name,
-                    ec_product_name: recipe.ec_product_name,
-                    linked_product_id: recipe.linked_product_id,
-                    jan_code: recipe.jan_code,
-                    series_code: recipe.series_code,
-                    product_code: recipe.product_code,
-                    filling_quantity: recipe.filling_quantity,
-                    filling_quantity_unit: recipe.filling_quantity_unit,
-                    storage_method: recipe.storage_method,
-                    product_lp_url: recipe.product_lp_url,
-                    selling_price: recipe.selling_price,
-                  }}
-                  hasUnsavedChanges={hasChanges}
-                  isSaving={isSaving}
-                />
                 {/* Wholesale Simulation */}
                 <div>
                   <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 px-1">
@@ -4724,6 +4701,33 @@ function RecipeDetailContent() {
               </h3>
             </div>
             <SalesPriceCheck recipeId={recipe.id} active={activeDetailTab === "ec"} />
+            {!recipe.is_intermediate && (
+              <div className="pt-4">
+                <EcPriceSyncControls
+                  recipeId={recipe.id}
+                  recipeName={recipe.name}
+                  ecProductName={recipe.ec_product_name ?? null}
+                  productLpUrl={recipe.product_lp_url}
+                  sellingPriceInclTax={sellingPriceInclTax}
+                  expectedRecipeSnapshot={{
+                    id: recipe.id,
+                    name: recipe.name,
+                    ec_product_name: recipe.ec_product_name,
+                    linked_product_id: recipe.linked_product_id,
+                    jan_code: recipe.jan_code,
+                    series_code: recipe.series_code,
+                    product_code: recipe.product_code,
+                    filling_quantity: recipe.filling_quantity,
+                    filling_quantity_unit: recipe.filling_quantity_unit,
+                    storage_method: recipe.storage_method,
+                    product_lp_url: recipe.product_lp_url,
+                    selling_price: recipe.selling_price,
+                  }}
+                  hasUnsavedChanges={hasChanges}
+                  isSaving={isSaving}
+                />
+              </div>
+            )}
             <div className="space-y-4 pb-4 pt-4">
               {recipe.category === "ネット専用" && (() => {
                 const productLpUrl = (recipe.product_lp_url || '').trim();
