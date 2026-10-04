@@ -118,7 +118,7 @@ export function validateBrandStoreMailEnvelope(value: unknown): { input: BrandSt
   return { input, bytes, start: `${input.reportMonth}-01`, end: `${input.reportMonth}-${days}` };
 }
 
-function sourceDate(value: unknown) {
+export function sourceDate(value: unknown) {
   if (typeof value === "number") {
     if (!Number.isInteger(value) || value < 1 || value > 100000) review("invalid_period", "帳票の対象日が不正です");
     // Current POS Excel serials use the 1900 calendar. A date-only UTC
@@ -130,7 +130,7 @@ function sourceDate(value: unknown) {
   return `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
 }
 
-function readMatrix(bytes: Buffer, filename: string): unknown[][] {
+export function readMatrix(bytes: Buffer, filename: string): unknown[][] {
   if (/\.xlsx$/i.test(filename)) {
     try {
       const workbook = readWorkbook(bytes, { type: "buffer", cellFormula: true, sheetRows: 10002 });
