@@ -25,6 +25,8 @@ import IngredientSourceDetailDialog, {
   hasIngredientSourceDetails,
 } from "../_components/IngredientSourceDetailDialog";
 import InlineEdit from "../_components/InlineEdit";
+import IngredientPackRequirement from "../_components/IngredientPackRequirement";
+import { getIngredientPackQuantity, type IngredientPackSource } from "@/lib/recipe-ingredient-pack";
 import EcPriceSyncControls from "../_components/EcPriceSyncControls";
 import EcProductNameSyncControls from "../_components/EcProductNameSyncControls";
 import EcProductNameAiEditor from "../_components/EcProductNameAiEditor";
@@ -328,6 +330,7 @@ function RecipeDetailContent() {
 
   // Master Data
   const [ingredients, setIngredients] = useState<ItemCandidate[]>([]);
+  const [ingredientPacks, setIngredientPacks] = useState<IngredientPackSource[]>([]);
   const [selectedIngredientDetail, setSelectedIngredientDetail] = useState<ItemCandidate | null>(null);
   const [materials, setMaterials] = useState<ItemCandidate[]>([]);
   const [intermediates, setIntermediates] = useState<ItemCandidate[]>([]);
@@ -743,6 +746,8 @@ function RecipeDetailContent() {
         "id, name, unit_quantity, price, calories, protein, fat, carbohydrate, sodium, tax_included, raw_materials, allergens, origin, manufacturer, product_description, nutrition_per, label_images",
       );
     if (ingData) {
+      // Keep the registered pack size separate from the cost editor's defaults.
+      setIngredientPacks(ingData.map(({ id, name, unit_quantity }) => ({ id, name, unit_quantity })));
       setIngredients(
         ingData.map((i) => ({
           id: i.id,
@@ -3494,15 +3499,35 @@ function RecipeDetailContent() {
                     )}
                   </div>
                   {group.items.length > 0 ? (
+                    <>
                     <div className="-mx-3 overflow-x-auto px-3 pb-1 lg:mx-0 lg:px-0">
-                    <table className="min-w-[980px] w-full text-sm table-auto">
+                    <table className={group.type === "ingredient" ? "min-w-[1040px] w-full text-sm table-fixed" : "min-w-[980px] w-full text-sm table-auto"}>
+                      {group.type === "ingredient" && (
+                        <colgroup>
+                          <col style={{ width: "3%" }} />
+                          <col style={{ width: "3%" }} />
+                          <col style={{ width: isEditing ? "34%" : "36%" }} />
+                          <col style={{ width: "8%" }} />
+                          <col style={{ width: "7%" }} />
+                          <col style={{ width: "6%" }} />
+                          <col style={{ width: "7%" }} />
+                          <col style={{ width: "15%" }} />
+                          <col style={{ width: "15%" }} />
+                          {isEditing && <col style={{ width: "2%" }} />}
+                        </colgroup>
+                      )}
                       <thead>
                         <tr className="border-b border-gray-200 text-gray-500">
                           <th className="text-left py-1 w-8 font-normal">#</th>
                           <th className="py-1 w-5 font-normal"></th>
-                          <th className="text-left py-1 min-w-[320px] font-normal">
+                          <th className={`text-left py-1 font-normal ${group.type === "ingredient" ? "" : "min-w-[320px]"}`}>
                             名称
                           </th>
+                          {group.type === "ingredient" && (
+                            <th className="py-1 pr-2 text-right font-normal text-gray-500">
+                              入数<br /><span className="text-[10px]">g/個</span>
+                            </th>
+                          )}
                           {/* 1 Unit */}
                           {/* 1 Unit */}
                           <th className="text-right py-1 w-20 font-bold text-gray-800 bg-gray-50">
@@ -3622,14 +3647,14 @@ function RecipeDetailContent() {
                           <th className="text-right py-1 w-28 font-bold text-blue-700 bg-blue-50 border-l border-white">
                             {batchSize1}個分 <br />
                             <span className="text-xs font-normal text-gray-500">
-                              使用量 | 袋数
+                              {group.type === "ingredient" ? "使用量 | 必要個数" : "使用量"}
                             </span>
                           </th>
                           {/* Batch 2 */}
                           <th className="text-right py-1 w-28 font-bold text-purple-700 bg-purple-50 border-l border-white">
                             {batchSize2}個分 <br />
                             <span className="text-xs font-normal text-gray-500">
-                              使用量 | 袋数
+                              {group.type === "ingredient" ? "使用量 | 必要個数" : "使用量"}
                             </span>
                           </th>
                           {isEditing && <th className="w-8"></th>}
@@ -3659,6 +3684,9 @@ function RecipeDetailContent() {
                           // Batch 2 Calcs
                           const b2Usage = unitUsage * batchSize2;
                           const b2Bags = unitQty > 0 ? b2Usage / unitQty : 0;
+                          const packQuantity = getIngredientPackQuantity(
+                            item, ingredientPacks, Boolean(previewingVersionId || draftSourceVersionId),
+                          );
 
                           return (
                             <tr
@@ -3681,7 +3709,7 @@ function RecipeDetailContent() {
                                   </button>
                                 )}
                               </td>
-                              <td className="py-2 font-medium text-gray-700 align-top pr-2">
+                              <td className="py-2 font-medium text-gray-700 align-top pr-2 break-words" title={item.item_name}>
                                 {isEditing ? (
                                   <ItemNameSelect
                                     candidates={group.candidates}
@@ -3700,6 +3728,7 @@ function RecipeDetailContent() {
                                     </div>
                                     <div className="text-[10px] text-gray-400 font-normal">
                                       {unitQty > 0 &&
+                                        group.type !== "ingredient" &&
                                         !isMaterialGroup &&
                                         group.type !== "product"
                                         ? `(${formatNumber(unitQty, 0)}g/pk)`
@@ -3713,6 +3742,11 @@ function RecipeDetailContent() {
                                   </>
                                 )}
                               </td>
+                              {group.type === "ingredient" && (
+                                <td className="py-2 pr-2 text-right font-mono text-gray-600 align-top">
+                                  {packQuantity === null ? <span className="text-xs text-gray-400">未設定</span> : packQuantity.toLocaleString("ja-JP", { maximumFractionDigits: 4 })}
+                                </td>
+                              )}
                               {/* 1 Unit Usage */}
                               <td className="py-2 text-right font-mono text-gray-800 bg-gray-50/30 align-top">
                                 {isEditing ? (
@@ -3866,7 +3900,10 @@ function RecipeDetailContent() {
                                         : isMaterialGroup ? "個" : "g"}
                                     </span>
                                   </div>
-                                  {b1Bags > 0 &&
+                                  {group.type === "ingredient" && (
+                                    <IngredientPackRequirement usage={item.usage_amount} batchSize={batchSize1} packQuantity={packQuantity} />
+                                  )}
+                                  {group.type !== "ingredient" && b1Bags > 0 &&
                                     !isMaterialGroup &&
                                     item.item_type !== "expense" &&
                                     group.type !== "product" && (
@@ -3890,7 +3927,10 @@ function RecipeDetailContent() {
                                         : isMaterialGroup ? "個" : "g"}
                                     </span>
                                   </div>
-                                  {b2Bags > 0 &&
+                                  {group.type === "ingredient" && (
+                                    <IngredientPackRequirement usage={item.usage_amount} batchSize={batchSize2} packQuantity={packQuantity} />
+                                  )}
+                                  {group.type !== "ingredient" && b2Bags > 0 &&
                                     !isMaterialGroup &&
                                     item.item_type !== "expense" && (
                                       <div className="text-[10px] text-purple-500 mt-0.5 font-bold">
@@ -3953,6 +3993,7 @@ function RecipeDetailContent() {
                               </>
                               : "-"}
                           </td>
+                          {group.type === "ingredient" && <td />}
                           {/* 原価合計 */}
                           <td className="py-2 text-right font-mono font-bold text-gray-900">
                             {formatCurrency(
@@ -4016,6 +4057,12 @@ function RecipeDetailContent() {
                       </tfoot>
                     </table>
                     </div>
+                    {group.type === "ingredient" && (
+                      <p className="mt-1 text-[10px] text-gray-500">
+                        入数は{previewingVersionId || draftSourceVersionId ? "履歴保存時" : "材料DB"}の1包装あたりの重量です。必要個数は端数切り上げ、括弧内は使用する個数換算です。
+                      </p>
+                    )}
+                    </>
                   ) : (
                     <div className="text-sm text-gray-300 py-4 text-center border border-dashed rounded bg-gray-50/50">
                       アイテムがありません
@@ -4316,11 +4363,20 @@ function RecipeDetailContent() {
                   <div className="text-[10px] font-bold bg-gray-100 px-1 py-0 inline-block rounded mb-0">
                     {group.title}
                   </div>
-                  <table className="w-full text-xs border-collapse">
+                  <table className="w-full text-xs border-collapse table-fixed">
+                    <colgroup>
+                      <col style={{ width: "3%" }} />
+                      <col style={{ width: group.type === "ingredient" ? "31%" : "43%" }} />
+                      {group.type === "ingredient" && <col style={{ width: "12%" }} />}
+                      <col style={{ width: "10%" }} />
+                      <col style={{ width: "22%" }} />
+                      <col style={{ width: "22%" }} />
+                    </colgroup>
                     <thead>
                       <tr className="border-b border-gray-400 text-gray-600">
                         <th className="text-left py-0 w-4 text-[10px]">#</th>
                         <th className="text-left py-0 text-[10px]">名称</th>
+                        {group.type === "ingredient" && <th className="text-right py-0 pr-2 text-[10px]">入数 (g/個)</th>}
                         <th className="text-right py-0 w-16 text-[10px]">
                           基本(1)
                         </th>
@@ -4336,12 +4392,11 @@ function RecipeDetailContent() {
                       {group.items.map((item, idx) => {
                         const unitUsage =
                           parseFloat(String(item.usage_amount)) || 0;
-                        const unitQty =
-                          parseFloat(String(item.unit_quantity)) || 0;
                         const b1Usage = unitUsage * batchSize1;
-                        const b1Bags = unitQty > 0 ? b1Usage / unitQty : 0;
                         const b2Usage = unitUsage * batchSize2;
-                        const b2Bags = unitQty > 0 ? b2Usage / unitQty : 0;
+                        const packQuantity = getIngredientPackQuantity(
+                          item, ingredientPacks, Boolean(previewingVersionId || draftSourceVersionId),
+                        );
                         const isGramMode = parseFloat(String(item.unit_quantity)) === -1;
                         const unit = (group.type === "product" || group.type === "intermediate") ? (isGramMode ? "g" : "個") : "g";
 
@@ -4353,14 +4408,14 @@ function RecipeDetailContent() {
                             <td className="py-0 text-gray-400 text-[10px]">
                               {idx + 1}
                             </td>
-                            <td className="py-0 font-medium text-[10px] leading-tight">
+                            <td className="py-0 pr-2 font-medium text-[10px] leading-tight break-words">
                               {item.item_name}
-                              {unitQty > 0 && group.type !== "product" && group.type !== "intermediate" && (
-                                <span className="text-gray-400 ml-1">
-                                  ({formatNumber(unitQty, 0)}g/pk)
-                                </span>
-                              )}
                             </td>
+                            {group.type === "ingredient" && (
+                              <td className="py-0 pr-2 text-right font-mono text-[10px]">
+                                {packQuantity === null ? "未設定" : packQuantity.toLocaleString("ja-JP", { maximumFractionDigits: 4 })}
+                              </td>
+                            )}
                             <td className="py-0 text-right font-mono text-[10px]">
                               {formatNumber(unitUsage, group.type === "ingredient" ? 2 : 1)}
                               {unit}
@@ -4370,10 +4425,8 @@ function RecipeDetailContent() {
                                 {formatNumber(b1Usage, group.type === "ingredient" ? 2 : 0)}
                                 {unit}
                               </span>
-                              {b1Bags > 0 && group.type !== "product" && group.type !== "intermediate" && (
-                                <span className="text-gray-500 ml-1">
-                                  ({formatNumber(b1Bags, 2)}pk)
-                                </span>
+                              {group.type === "ingredient" && (
+                                <IngredientPackRequirement usage={item.usage_amount} batchSize={batchSize1} packQuantity={packQuantity} compact />
                               )}
                             </td>
                             <td className="py-0 text-right font-mono">
@@ -4381,10 +4434,8 @@ function RecipeDetailContent() {
                                 {formatNumber(b2Usage, group.type === "ingredient" ? 2 : 0)}
                                 {unit}
                               </span>
-                              {b2Bags > 0 && group.type !== "product" && group.type !== "intermediate" && (
-                                <span className="text-gray-500 ml-1">
-                                  ({formatNumber(b2Bags, 2)}pk)
-                                </span>
+                              {group.type === "ingredient" && (
+                                <IngredientPackRequirement usage={item.usage_amount} batchSize={batchSize2} packQuantity={packQuantity} compact />
                               )}
                             </td>
                           </tr>
@@ -4394,7 +4445,7 @@ function RecipeDetailContent() {
                     <tfoot>
                       <tr className="border-t border-gray-300 font-bold text-[10px]">
                         <td
-                          colSpan={2}
+                          colSpan={group.type === "ingredient" ? 3 : 2}
                           className="py-1 text-right text-gray-500"
                         >
                           計

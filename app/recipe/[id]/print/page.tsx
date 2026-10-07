@@ -6,6 +6,8 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { getIngredientPackQuantity, type IngredientPackSource } from "@/lib/recipe-ingredient-pack";
+import IngredientPackRequirement from "../../_components/IngredientPackRequirement";
 
 interface Recipe {
   id: string;
@@ -34,6 +36,7 @@ interface RecipeItem {
   recipe_id: string;
   item_name: string;
   item_type: string;
+  ingredient_id?: string | null;
   unit_quantity: number | string | null;
   unit_price: number | string | null;
   unit_weight: number | null;
@@ -58,6 +61,7 @@ export default function RecipePrintPage() {
   const id = params.id as string;
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [items, setItems] = useState<RecipeItem[]>([]);
+  const [ingredients, setIngredients] = useState<IngredientPackSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [latestVersion, setLatestVersion] = useState<VersionInfo | null>(null);
 
@@ -79,13 +83,17 @@ export default function RecipePrintPage() {
       }
       setRecipe(recipeData);
 
-      const { data: itemsData } = await supabase
-        .from("recipe_items")
-        .select("*")
-        .eq("recipe_id", id)
-        .order("id");
+      const [{ data: itemsData }, { data: ingredientsData }] = await Promise.all([
+        supabase
+          .from("recipe_items")
+          .select("*")
+          .eq("recipe_id", id)
+          .order("id"),
+        supabase.from("ingredients").select("id, name, unit_quantity"),
+      ]);
 
       if (itemsData) setItems(itemsData);
+      if (ingredientsData) setIngredients(ingredientsData);
 
       // 最新バージョン取得
       const { data: versionData } = await supabase
@@ -121,7 +129,7 @@ export default function RecipePrintPage() {
   ];
 
   return (
-    <div className="bg-white text-black text-sm p-4 m-0 w-full font-sans" style={{ minHeight: '100vh' }}>
+    <div className="recipe-print-page bg-white text-black text-sm p-4 m-0 w-full font-sans" style={{ minHeight: '100vh' }}>
       {/* Header */}
       <div className="border-b border-black pb-0 mb-0">
         <h1 className="text-sm font-bold leading-none">{recipe.name}</h1>
@@ -182,46 +190,65 @@ export default function RecipePrintPage() {
               <div className="text-[10px] font-bold bg-gray-100 px-1 py-0 inline-block rounded mb-0">
                 {group.title}
               </div>
-              <table className="w-full text-xs border-collapse">
+              <table className="w-full text-xs border-collapse table-fixed">
+                <colgroup>
+                  <col style={{ width: "3%" }} />
+                  <col style={{ width: group.type === "ingredient" ? "31%" : "43%" }} />
+                  {group.type === "ingredient" && <col style={{ width: "12%" }} />}
+                  <col style={{ width: "10%" }} />
+                  <col style={{ width: "22%" }} />
+                  <col style={{ width: "22%" }} />
+                </colgroup>
                 <thead>
                   <tr className="border-b border-gray-400 text-gray-600">
-                    <th className="text-left py-0 w-4 text-[10px]">#</th>
+                    <th className="text-left py-0 text-[10px]">#</th>
                     <th className="text-left py-0 text-[10px]">名称</th>
-                    <th className="text-right py-0 w-16 text-[10px]">基本(1)</th>
-                    <th className="text-right py-1 w-28">A ({batchSize1})</th>
-                    <th className="text-right py-1 w-28">B ({batchSize2})</th>
+                    {group.type === "ingredient" && (
+                      <th className="text-right py-0 text-[10px]">DB入数(g/個)</th>
+                    )}
+                    <th className="text-right py-0 text-[10px]">基本(1)</th>
+                    <th className="text-right py-1">
+                      A ({batchSize1})
+                      {group.type === "ingredient" && <div className="text-[9px] font-normal">使用量 / 必要個数</div>}
+                    </th>
+                    <th className="text-right py-1">
+                      B ({batchSize2})
+                      {group.type === "ingredient" && <div className="text-[9px] font-normal">使用量 / 必要個数</div>}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {group.items.map((item, idx) => {
                     const unitUsage = parseFloat(String(item.usage_amount)) || 0;
-                    const unitQty = parseFloat(String(item.unit_quantity)) || 0;
+                    const packQuantity = group.type === "ingredient"
+                      ? getIngredientPackQuantity(item, ingredients)
+                      : null;
                     const b1Usage = unitUsage * batchSize1;
-                    const b1Bags = unitQty > 0 ? b1Usage / unitQty : 0;
                     const b2Usage = unitUsage * batchSize2;
-                    const b2Bags = unitQty > 0 ? b2Usage / unitQty : 0;
                     const unit = (group.type === "product" || group.type === "intermediate") ? "個" : "g";
 
                     return (
                       <tr key={item.id} className="border-b border-gray-200">
                         <td className="py-0 text-gray-400 text-[10px]">{idx + 1}</td>
-                        <td className="py-0 font-medium text-[10px] leading-tight">
+                        <td className="py-0 pr-2 font-medium text-[10px] leading-tight break-words align-top">
                           {item.item_name}
-                          {unitQty > 0 && group.type !== "product" && group.type !== "intermediate" && (
-                            <span className="text-gray-400 ml-1">({formatNumber(unitQty, 0)}g/pk)</span>
-                          )}
                         </td>
+                        {group.type === "ingredient" && (
+                          <td className="py-0 text-right font-mono text-[10px] align-top">
+                            {packQuantity !== null ? packQuantity.toLocaleString("ja-JP", { maximumFractionDigits: 4 }) : "未設定"}
+                          </td>
+                        )}
                         <td className="py-0 text-right font-mono text-[10px]">{formatNumber(unitUsage, group.type === "ingredient" ? 2 : 1)}{unit}</td>
                         <td className="py-0 text-right font-mono">
                           <span className="font-bold">{formatNumber(b1Usage, group.type === "ingredient" ? 2 : 0)}{unit}</span>
-                          {b1Bags > 0 && group.type !== "product" && group.type !== "intermediate" && (
-                            <span className="text-gray-500 ml-1">({formatNumber(b1Bags, 2)}pk)</span>
+                          {group.type === "ingredient" && (
+                            <IngredientPackRequirement usage={item.usage_amount} batchSize={batchSize1} packQuantity={packQuantity} compact />
                           )}
                         </td>
                         <td className="py-0 text-right font-mono">
                           <span className="font-bold">{formatNumber(b2Usage, group.type === "ingredient" ? 2 : 0)}{unit}</span>
-                          {b2Bags > 0 && group.type !== "product" && group.type !== "intermediate" && (
-                            <span className="text-gray-500 ml-1">({formatNumber(b2Bags, 2)}pk)</span>
+                          {group.type === "ingredient" && (
+                            <IngredientPackRequirement usage={item.usage_amount} batchSize={batchSize2} packQuantity={packQuantity} compact />
                           )}
                         </td>
                       </tr>
@@ -230,7 +257,7 @@ export default function RecipePrintPage() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-gray-300 font-bold text-[10px]">
-                    <td colSpan={2} className="py-1 text-right text-gray-500">計</td>
+                    <td colSpan={group.type === "ingredient" ? 3 : 2} className="py-1 text-right text-gray-500">計</td>
                     <td className="py-0 text-right font-mono text-[10px]">
                       {formatNumber(group.items.reduce((s, i) => s + (parseFloat(String(i.usage_amount)) || 0), 0), group.type === "ingredient" ? 2 : 0)
                         + (group.type === "product" || group.type === "intermediate" ? "個" : "g")}
@@ -306,6 +333,41 @@ export default function RecipePrintPage() {
           <p className="text-[10px] whitespace-pre-wrap leading-tight">{recipe.manufacturing_notes}</p>
         </div>
       )}
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4 landscape;
+            margin: 8mm;
+          }
+          .recipe-print-page {
+            min-height: 0 !important;
+            padding: 0 !important;
+          }
+          .recipe-print-page th,
+          .recipe-print-page td {
+            padding: 0 2px;
+            vertical-align: top;
+          }
+          .recipe-print-page .text-right {
+            text-align: right;
+          }
+          .recipe-print-page h1 {
+            font-size: 14px;
+            margin-bottom: 0;
+          }
+          .recipe-print-page h2 {
+            font-size: 12px;
+            margin-bottom: 0;
+          }
+          .recipe-print-page h3 {
+            font-size: 10px;
+            margin-bottom: 0;
+          }
+          .recipe-print-page thead {
+            display: table-header-group;
+          }
+        }
+      `}</style>
     </div>
   );
 }
