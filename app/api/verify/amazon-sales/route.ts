@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 // /app/api/verify/amazon-sales/route.ts ver.6 (CSV対応版)
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -34,6 +35,8 @@ function parseAmazonCsvLine(line: string): string[] {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
   try {
     const { csvContent, saleMonth } = await request.json();
     const reportMonth = `${saleMonth}-01`;

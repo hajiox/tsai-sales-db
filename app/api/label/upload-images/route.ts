@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 // app/api/label/upload-images/route.ts
 import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
@@ -13,6 +14,8 @@ interface LabelImageEntry {
 }
 
 export async function POST(request: Request) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
     try {
         const contentType = request.headers.get("content-type") || "";
 

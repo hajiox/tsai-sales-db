@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -45,7 +46,10 @@ async function fetchAll<T>(
     return rows;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     try {
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 

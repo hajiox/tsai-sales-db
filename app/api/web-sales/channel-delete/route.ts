@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 // /app/api/web-sales/channel-delete/route.ts
 // ECチャネル別データ削除API（RLSバイパス対応）
 import { NextRequest, NextResponse } from 'next/server'
@@ -9,6 +10,8 @@ const supabase = createClient(
 )
 
 export async function POST(request: NextRequest) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
     try {
         const { channel, month } = await request.json()
 

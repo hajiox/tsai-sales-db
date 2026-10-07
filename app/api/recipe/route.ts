@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { taxIncludedFromExcluded } from "@/lib/money";
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -11,6 +12,9 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 // GET: レシピ一覧取得
 export async function GET(request: NextRequest) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     try {
         const searchParams = request.nextUrl.searchParams;
         const category = searchParams.get("category");
@@ -103,6 +107,9 @@ export async function GET(request: NextRequest) {
 
 // POST: 新規レシピ作成
 export async function POST(request: NextRequest) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     try {
         const body = await request.json();
 

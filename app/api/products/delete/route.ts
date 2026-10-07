@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 // /app/api/products/delete/route.ts ver.2 (カスケード削除対応)
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -8,6 +9,8 @@ const supabase = createClient(
 )
 
 export async function DELETE(request: NextRequest) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
   try {
     const { id } = await request.json()
 

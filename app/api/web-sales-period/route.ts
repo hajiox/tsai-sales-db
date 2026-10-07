@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { WEB_SALES_CHANNELS, resolveWebSalesAmount, sumWebSalesAmounts } from '@/lib/web-sales-amounts';
@@ -9,6 +10,8 @@ const supabase = createClient(
 );
 
 export async function POST(req: Request) {
+  const authError = await requireRecipeAdminRequest(req);
+  if (authError) return authError;
   try {
     const { base_month, period_months } = await req.json();
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(base_month) || !Number.isInteger(period_months) || period_months < 1 || period_months > 120) {

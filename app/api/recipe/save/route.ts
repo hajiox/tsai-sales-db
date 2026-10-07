@@ -5,6 +5,7 @@ import {
     recalculateRecipeTotalCost,
 } from "@/lib/recipe-cost-sync";
 import { dispatchRecipePriceTsgNotifications } from "@/lib/recipe-price-tsg-notification";
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 import {
     buildUnifiedEcProductNames,
     normalizeCommonEcProductName,
@@ -65,6 +66,9 @@ function withCanonicalCost(item: any) {
 
 // POST: Save recipe changes (items + recipe metadata)
 export async function POST(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     try {

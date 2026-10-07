@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 // /api/web-sales-analyze/route.ts ver.Gemini2.0Flash (3項目特化版)
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -37,6 +38,8 @@ function getMonthStatus(targetMonth: string) {
 }
 
 export async function POST(req: Request) {
+  const authError = await requireRecipeAdminRequest(req);
+  if (authError) return authError;
   try {
     // ------- input -------
     const { month } = await req.json();

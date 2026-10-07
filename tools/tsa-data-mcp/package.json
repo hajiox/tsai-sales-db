@@ -1,0 +1,12 @@
+{
+  "name": "@aizu/tsa-data-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Scoped TSA business-data MCP adapter. No repository or database credentials.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "files": ["server.mjs", "api-client.mjs", "change-schemas.mjs", "package-lock.json", "codex-config.example.toml", "skill"],
+  "scripts": { "start": "node server.mjs", "test": "node --test test/*.test.mjs" },
+  "dependencies": { "@modelcontextprotocol/server": "2.3.1", "zod": "4.6.5" },
+  "devDependencies": { "@modelcontextprotocol/client": "2.3.1" }
+}

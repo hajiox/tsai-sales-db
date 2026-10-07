@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { syncRecipeItemsForMaster } from "@/lib/recipe-cost-sync";
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -11,6 +12,9 @@ const normalizeName = (value: unknown) =>
 // Generic database write operations for recipe-related tables
 // Handles: ingredients, materials, expenses, recipe_items, recipes
 export async function POST(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     try {

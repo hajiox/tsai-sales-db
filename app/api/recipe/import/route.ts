@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import * as XLSX from "xlsx";
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -155,6 +156,9 @@ async function determineCategory(sheetName: string, productName: string): Promis
 }
 
 export async function POST(request: NextRequest) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     try {
         const formData = await request.formData();
         const files = formData.getAll("files") as File[];

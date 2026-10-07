@@ -1,17 +1,18 @@
 // /lib/supabase/browser.ts
 import { createBrowserClient, type SupabaseClient } from "@supabase/ssr";
+import { getNextAuthSupabaseAccessToken } from "./nextauth-access-token";
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })();
 const KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY is not set"); })();
 
 // HMRや複数バンドルでも単一化
 declare global {
-  // eslint-disable-next-line no-var
   var __SB_SINGLETON__: SupabaseClient | undefined;
 }
 
 function _newClient(): SupabaseClient {
   return createBrowserClient(URL, KEY, {
+    accessToken: getNextAuthSupabaseAccessToken,
     auth: {
       storageKey: "sb-auth",
       autoRefreshToken: true,

@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { syncRecipeLinkedProductPrices } from "@/lib/recipe-linked-product-prices";
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 import {
     buildUnifiedEcProductNames,
     normalizeCommonEcProductName,
@@ -43,6 +44,9 @@ function normalizeSelfShelfLife(value?: string | null) {
 
 // PATCH: Update recipe fields (category, date, name, series, product_code, etc.)
 export async function PATCH(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     try {
@@ -138,6 +142,9 @@ export async function PATCH(request: Request) {
 
 // POST: Copy/duplicate a recipe
 export async function POST(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     try {

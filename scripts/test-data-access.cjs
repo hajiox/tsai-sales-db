@@ -1,0 +1,42 @@
+const fs=require('node:fs');
+const path=require('node:path');
+const assert=require('node:assert/strict');
+const vm=require('node:vm');
+const ts=require('typescript');
+const source=fs.readFileSync(path.join(__dirname,'..','lib','data-access','contracts.ts'),'utf8');
+const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+const exportsObject={};vm.runInNewContext(js,{exports:exportsObject,Object,Date,Number,Array,Error,JSON});
+const {validateReadInput,validateChangeInput}=exportsObject;
+const id='00000000-0000-4000-8000-000000000001',version='a'.repeat(32);
+function invalid(run){assert.throws(run,error=>error.code==='INVALID_INPUT')}
+assert.equal(validateReadInput({resource:'recipes',id}).limit,25);
+invalid(()=>validateReadInput({resource:'users'}));
+invalid(()=>validateReadInput({resource:'recipes',table:'users'}));
+invalid(()=>validateReadInput({resource:'recipes',limit:101}));
+invalid(()=>validateReadInput({resource:'recipes',limit:1.5}));
+invalid(()=>validateReadInput({resource:'sales',from:'2026-02-30'}));
+invalid(()=>validateReadInput({resource:'sales',from:'bad'}));
+invalid(()=>validateReadInput({resource:'sales',from:'2026-03-02',to:'2026-03-01'}));
+invalid(()=>validateReadInput({resource:'recipes',from:'2026-03-01'}));
+invalid(()=>validateReadInput({resource:'sales',query:'customer'}));
+const base={resource:'ingredients',operation:'update',id,expectedVersion:version,idempotencyKey:'stable-key-0001',values:{product_description:'new'}};
+assert.equal(validateChangeInput(base).values.product_description,'new');
+invalid(()=>validateChangeInput({...base,expectedVersion:undefined}));
+invalid(()=>validateChangeInput({...base,values:{price:999}}));
+invalid(()=>validateChangeInput({...base,values:{unit_quantity:999}}));
+invalid(()=>validateChangeInput({...base,values:{label_images:[]}}));
+invalid(()=>validateChangeInput({...base,values:{id}}));
+invalid(()=>validateChangeInput({...base,values:{}}));
+invalid(()=>validateChangeInput({...base,idempotencyKey:'short'}));
+invalid(()=>validateChangeInput({...base,values:{product_description:'x'.repeat(10001)}}));
+invalid(()=>validateChangeInput({...base,values:{product_description:'unsafe\u0000'}}));
+for(const resource of ['ingredients','materials','expenses','recipes']){
+  const values=resource==='recipes'?{name:'new',category:'OEM'}:{name:'new',unit_quantity:null,[resource==='expenses'?'unit_price':'price']:null,tax_included:true};
+  assert.equal(validateChangeInput({resource,operation:'create',values,idempotencyKey:'create-key-0001'}).operation,'create');
+}
+invalid(()=>validateChangeInput({resource:'ingredients',operation:'create',values:{name:'new',price:-1},idempotencyKey:'create-key-0001'}));
+invalid(()=>validateChangeInput({resource:'ingredients',operation:'create',values:{name:'new',unit_quantity:0},idempotencyKey:'create-key-0001'}));
+invalid(()=>validateChangeInput({resource:'recipes',operation:'create',values:{name:'new'},idempotencyKey:'create-key-0001'}));
+invalid(()=>validateChangeInput({resource:'ingredients',operation:'create',values:{name:'new'},idempotencyKey:'create-key-0001'}));
+invalid(()=>validateChangeInput({resource:'recipes',operation:'update',id,expectedVersion:version,values:{catchcopy:'mismatched sites'},idempotencyKey:'stable-key-0001'}));
+console.log('data-access input and field boundaries passed');

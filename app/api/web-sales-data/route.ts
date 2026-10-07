@@ -1,13 +1,17 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 // /app/api/web-sales-data/route.ts
 // ver.10 (単価スナップショット対応)
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createRecipeDataAdminClient } from "@/lib/recipe-data-server";
+const supabase = createRecipeDataAdminClient();
 import { getProductUnitPrice } from '@/lib/unitPriceHelper'
 import { WEB_SALES_CHANNELS, sumWebSalesAmounts, getWebSalesMissingAmountChannels } from '@/lib/web-sales-amounts'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
   const month = new URL(request.url).searchParams.get('month')
   try {
 
@@ -70,6 +74,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
   try {
     const body = await request.json()
     const { product_id, report_month, site, count, amount } = body
@@ -185,6 +191,8 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
   try {
     const { searchParams } = new URL(request.url)
     const month = searchParams.get('month')

@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { del, put } from "@vercel/blob";
 import { createClient } from "@supabase/supabase-js";
@@ -48,6 +49,9 @@ function extensionForImageType(contentType: string) {
 }
 
 export async function GET(request: NextRequest) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
+
   const recipeId = request.nextUrl.searchParams.get("recipeId");
   if (!recipeId) return NextResponse.json({ error: "recipeId が必要です" }, { status: 400 });
 
@@ -101,6 +105,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
+
   let uploadedUrl: string | null = null;
   try {
     const formData = await request.formData();
@@ -179,6 +186,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
+
   let uploadedUrl: string | null = null;
   try {
     const body = await request.json();
@@ -306,6 +316,9 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
+
   try {
     const body = await request.json();
     const recipeId = String(body.recipeId || "");
@@ -334,6 +347,9 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
+
   try {
     const { imageId, imageIds, recipeId } = await request.json();
     const requestedIds = Array.isArray(imageIds)

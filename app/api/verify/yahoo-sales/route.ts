@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 // /app/api/verify/yahoo-sales/route.ts   ver.19
 // 2025-07-01  Yahoo 整合性チェック最終版
 //  - Shift-JIS / UTF-8 自動判定（detectAndDecode）
@@ -39,6 +40,8 @@ function parseCsvLine(line: string): string[] {
 }
 
 export async function POST(req: NextRequest) {
+  const authError = await requireRecipeAdminRequest(req);
+  if (authError) return authError;
   try {
     /* ---------------- 1. multipart/form-data 受信 ---------------- */
     const fd = await req.formData();

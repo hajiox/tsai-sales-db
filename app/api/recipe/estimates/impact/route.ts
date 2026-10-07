@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 // app/api/recipe/estimates/impact/route.ts
 // 材料価格変更時の影響レシピ一覧と原価変動を返す
 
@@ -9,6 +10,9 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function GET(request: NextRequest) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const { searchParams } = new URL(request.url);
     const ingredientId = searchParams.get("ingredientId");

@@ -1,6 +1,8 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 // /app/api/import/amazon/route.ts ver.1
 import { NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { createRecipeDataAdminClient } from "@/lib/recipe-data-server";
+const supabase = createRecipeDataAdminClient();
 
 export const dynamic = 'force-dynamic'
 
@@ -87,6 +89,8 @@ function findBestMatch(amazonTitle: string, products: any[]): any | null {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File

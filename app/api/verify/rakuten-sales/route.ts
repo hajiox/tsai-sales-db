@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 // /app/api/verify/rakuten-sales/route.ts ver.1
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -33,6 +34,8 @@ function parseCsvLine(line: string): string[] {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
   try {
     const { csvContent, saleMonth } = await request.json();
     const reportMonth = `${saleMonth}-01`;

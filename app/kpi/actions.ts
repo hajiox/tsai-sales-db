@@ -5,6 +5,13 @@ import { createClient } from '@supabase/supabase-js';
 import { addMonths, format, subYears, parseISO } from 'date-fns';
 import { revalidatePath } from 'next/cache';
 import { resolveKpiWebActual } from '@/lib/kpi-amounts';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+
+async function hasKpiAdminSession(): Promise<boolean> {
+  const session = await getServerSession(authOptions);
+  return session?.user?.email?.toLowerCase() === 'aizubrandhall@gmail.com';
+}
 
 // ----------------------------------------------------------------------
 // Types & Interfaces
@@ -87,6 +94,7 @@ function getFiscalYearFromMonth(month: string): number | null {
 // ----------------------------------------------------------------------
 
 export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
+  if (!(await hasKpiAdminSession())) throw new Error('KPI管理者のログインが必要です');
   const fyMonths = generateMonths(fiscalYear);
   const startCurrent = fyMonths[0]; // YYYY-08-01
   const endCurrent = format(addMonths(parseISO(fyMonths[11]), 1), 'yyyy-MM-01'); // Upper bound
@@ -243,6 +251,7 @@ export async function getKpiSummary(fiscalYear: number): Promise<KpiSummary> {
 }
 
 export async function getAvailableKpiFiscalYears(currentFiscalYear: number): Promise<number[]> {
+  if (!(await hasKpiAdminSession())) throw new Error('KPI管理者のログインが必要です');
   const queryStart = '2000-01-01';
   const queryEnd = `${currentFiscalYear}-08-01`;
 
@@ -277,6 +286,7 @@ export async function getAvailableKpiFiscalYears(currentFiscalYear: number): Pro
 }
 
 export async function saveKpiTarget(data: { metric?: string, channel: string, month: string, amount: number }) {
+  if (!(await hasKpiAdminSession())) return { success: false, error: 'KPI管理者のログインが必要です' };
   const supabase = getSupabase();
 
   const { error } = await supabase
@@ -364,6 +374,7 @@ export async function updateKpiEntry(
   month: string,
   amount: number
 ) {
+  if (!(await hasKpiAdminSession())) throw new Error('KPI管理者のログインが必要です');
   const supabase = getSupabase(); // Use the existing helper
 
   // 2. Upsert the entry

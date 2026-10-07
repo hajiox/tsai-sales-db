@@ -46,6 +46,8 @@ Module._load = function (request, parent, isMain) {
     } }),
   };
   if (request === 'next/cache') return { revalidatePath: () => {} };
+  if (request === 'next-auth') return { getServerSession: async () => ({ user: { email: 'aizubrandhall@gmail.com' } }) };
+  if (request === '@/app/api/auth/[...nextauth]/route') return { authOptions: {} };
   if (request === '@/lib/kpi-amounts') return amounts;
   return originalLoad.call(this, request, parent, isMain);
 };

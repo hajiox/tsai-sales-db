@@ -1,6 +1,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireRecipeAdminRequest } from '@/lib/recipe-request-auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 // Use Service Role Key if available to bypass RLS for admin tasks
@@ -8,7 +9,10 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PU
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // GET: Fetch unlinked items grouped by name and type
-export async function GET() {
+export async function GET(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     try {
         // Fetch all recipe_items
         const { data: items, error } = await supabase
@@ -66,6 +70,9 @@ export async function GET() {
 
 // POST: Link items to a master
 export async function POST(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     try {
         const {
             targetName, // The old name to find

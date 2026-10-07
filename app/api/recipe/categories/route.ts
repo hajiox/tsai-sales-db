@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 // app/api/recipe/categories/route.ts
 // カテゴリAPI
 
@@ -9,7 +10,10 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PU
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // GET: カテゴリ一覧取得
-export async function GET() {
+export async function GET(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     try {
         const { data, error } = await supabase
             .from("recipe_categories")
@@ -30,6 +34,9 @@ export async function GET() {
 
 // POST: カテゴリ作成
 export async function POST(request: NextRequest) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     try {
         const body = await request.json();
 

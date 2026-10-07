@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { listDriveFiles, readDriveFileByName, uploadDriveFile } from '@/lib/google-drive';
+import { requireRecipeAdminRequest } from '@/lib/recipe-request-auth';
 
 export async function GET(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const { searchParams } = new URL(request.url);
     const fileName = searchParams.get('file');
     try {
@@ -21,6 +25,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     try {
         const { fileName, content } = await request.json();
         if (!fileName || !content) {

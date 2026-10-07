@@ -1,6 +1,8 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 // /app/api/import/amazon/route.ts ver.1
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase'; // Supabaseクライアントのインポート
+import { createRecipeDataAdminClient } from "@/lib/recipe-data-server";
+const supabase = createRecipeDataAdminClient();
 
 // CSVパース関数 (簡易版 - Amazon固定フォーマット向け)
 function parseAmazonCsv(csvContent: string): any[] {
@@ -68,6 +70,8 @@ function parseAmazonCsv(csvContent: string): any[] {
 }
 
 export async function POST(req: NextRequest) {
+  const authError = await requireRecipeAdminRequest(req);
+  if (authError) return authError;
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;

@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
@@ -15,7 +16,10 @@ function normalize(s: string): string {
 }
 
 // GET: Find duplicate recipes
-export async function GET() {
+export async function GET(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     try {
@@ -90,6 +94,9 @@ export async function GET() {
 
 // POST: Merge/delete duplicates
 export async function POST(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     try {
@@ -173,7 +180,8 @@ export async function POST(request: Request) {
 
         if (body.action === "auto_cleanup") {
             // Auto-merge all groups: keep the best, delete the rest
-            const res = await fetch(new URL("/api/recipe/duplicates", request.url).toString());
+            const res = await GET(request);
+            if (!res.ok) return res;
             const data = await res.json();
 
             let totalDeleted = 0;

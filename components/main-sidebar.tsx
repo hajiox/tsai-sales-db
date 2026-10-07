@@ -20,7 +20,8 @@ type Module =
   | "shipping-labels"
   | "backup"
   | "label-check"
-  | "ai-tools";
+  | "ai-tools"
+  | "data-access";
 
 export default function MainSidebar() {
   const pathname = usePathname();
@@ -42,6 +43,7 @@ export default function MainSidebar() {
     else if (pathname.startsWith("/shipping-labels")) setActiveModule("shipping-labels");
     else if (pathname.startsWith("/system/label-check")) setActiveModule("label-check");
     else if (pathname.startsWith("/system/backup")) setActiveModule("backup");
+    else if (pathname.startsWith("/system/data-access")) setActiveModule("data-access");
     else if (pathname.startsWith("/ai-tools")) setActiveModule("ai-tools");
     else setActiveModule("sales");
   }, [pathname]);
@@ -62,6 +64,7 @@ export default function MainSidebar() {
       backup: "/system/backup",
       "label-check": "/system/label-check",
       "ai-tools": "/ai-tools",
+      "data-access": "/system/data-access",
     } as const;
     router.push(map[module]);
   };
@@ -209,6 +212,13 @@ export default function MainSidebar() {
             onClick={() => goto("backup")}
           >
             バックアップ管理
+          </Button>
+          <Button
+            variant={activeVariant("data-access")}
+            className={baseBtn("data-access")}
+            onClick={() => goto("data-access")}
+          >
+            AIデータ接続
           </Button>
           <Button
             variant={activeVariant("label-check")}

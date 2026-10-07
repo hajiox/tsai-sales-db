@@ -1,12 +1,16 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 // /app/api/import/register/route.ts
 // ver.9 (データ集約版)
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { createRecipeDataAdminClient } from "@/lib/recipe-data-server";
+const supabase = createRecipeDataAdminClient();
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
   try {
     const body = await request.json();
     console.log('受信データ:', JSON.stringify(body, null, 2));

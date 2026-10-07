@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 // /api/recipe/sync-oem/route.ts
 // OEMレシピ → OEM卸販売商品 紐付けAPI
 import { createClient } from "@supabase/supabase-js";
@@ -81,6 +82,9 @@ function normalizeForExact(s: string): string {
 
 // GET: Fetch all OEM recipes and all OEM wholesale_products + auto-match suggestions
 export async function GET(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const url = new URL(request.url);
     const autoMatch = url.searchParams.get("autoMatch") === "true";
@@ -341,6 +345,9 @@ async function mirrorOemProductForSalesInput(
 
 // POST: Link/unlink, batch-link, or create-and-link
 export async function POST(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     try {
@@ -437,7 +444,10 @@ export async function POST(request: Request) {
 }
 
 // PUT: Batch sync all linked OEM recipes
-export async function PUT() {
+export async function PUT(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     try {

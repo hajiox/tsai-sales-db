@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
@@ -22,6 +23,8 @@ const ALLOWED_FIELDS = [
 ];
 
 export async function POST(request: Request) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
     try {
         const { target_id, updates } = await request.json();
 

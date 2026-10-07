@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 // /api/recipe/sync-wholesale/route.ts
 // 自社レシピ → 卸販売商品 紐付けAPI
 import { createClient } from "@supabase/supabase-js";
@@ -81,6 +82,9 @@ function normalizeForExact(s: string): string {
 
 // GET: Fetch all 自社 recipes and all wholesale_products + auto-match suggestions
 export async function GET(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const url = new URL(request.url);
     const autoMatch = url.searchParams.get("autoMatch") === "true";
@@ -240,6 +244,9 @@ async function syncPriceToWholesaleProduct(
 
 // POST: Link/unlink, batch-link, or create-and-link
 export async function POST(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     try {
@@ -337,7 +344,10 @@ export async function POST(request: Request) {
 }
 
 // PUT: Batch sync all linked recipes
-export async function PUT() {
+export async function PUT(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     try {

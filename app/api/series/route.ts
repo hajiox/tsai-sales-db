@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 // app/api/series/route.ts
 // シリーズマスターの CRUD API
 
@@ -20,6 +21,8 @@ export async function GET() {
 
 // POST: シリーズ追加
 export async function POST(request: Request) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const body = await request.json();
     const { code, name } = body;
@@ -40,6 +43,8 @@ export async function POST(request: Request) {
 
 // PATCH: シリーズ更新
 export async function PATCH(request: Request) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const body = await request.json();
     const { id, code, name } = body;
@@ -66,6 +71,8 @@ export async function PATCH(request: Request) {
 
 // DELETE: シリーズ削除
 export async function DELETE(request: Request) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");

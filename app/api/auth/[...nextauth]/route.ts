@@ -6,6 +6,8 @@ import jwt from "jsonwebtoken"; // <- 追加
 
 // ログインを許可するメールアドレス
 const ALLOWED_EMAIL = "aizubrandhall@gmail.com";
+const SUPABASE_TOKEN_LIFETIME_SECONDS = 30 * 24 * 60 * 60;
+const SUPABASE_TOKEN_REFRESH_WINDOW_SECONDS = 24 * 60 * 60;
 
 // ステップ1で設定した環境変数を取得
 const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET;
@@ -42,13 +44,35 @@ export const authOptions: NextAuthOptions = {
 
     // --- ここからが重要な変更点 ---
     async jwt({ token, user }) {
-      // ログイン直後（userオブジェクトが存在する）の場合に実行
-      if (user && user.email?.toLowerCase() === ALLOWED_EMAIL) {
+      const email = user ? user.email : token.email;
+      if (email?.toLowerCase() !== ALLOWED_EMAIL) return token;
+
+      const now = Math.floor(Date.now() / 1000);
+      let refresh = Boolean(user);
+      if (!refresh && typeof token.supabaseAccessToken === "string") {
+        try {
+          // NextAuth still owns session validity. Only renew our signed Supabase token.
+          const previous = jwt.verify(token.supabaseAccessToken, SUPABASE_JWT_SECRET, {
+            algorithms: ["HS256"],
+            ignoreExpiration: true,
+          });
+          refresh = typeof previous !== "string"
+            && previous.email?.toLowerCase() === ALLOWED_EMAIL
+            && previous.role === "authenticated"
+            && typeof previous.exp === "number"
+            && Number.isFinite(previous.exp)
+            && previous.exp <= now + SUPABASE_TOKEN_REFRESH_WINDOW_SECONDS;
+        } catch {
+          // Invalid or foreign tokens require a fresh sign-in; never trust decoded expiry.
+          return token;
+        }
+      }
+      if (refresh) {
         const payload = {
-          email: user.email,
+          email,
           role: "authenticated",
           // ★トークンの有効期限を30日に設定 (60秒 * 60分 * 24時間 * 30日)
-          exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30,
+          exp: now + SUPABASE_TOKEN_LIFETIME_SECONDS,
         };
         // Supabaseの秘密鍵で署名した新しいトークンを生成
         token.supabaseAccessToken = jwt.sign(payload, SUPABASE_JWT_SECRET);

@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 // /app/api/import/csv-confirm/route.ts ver.4 (単価スナップショット対応)
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -24,6 +25,8 @@ interface ConfirmItem {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
   try {
     console.log("=== CSV Confirm API開始 (uuid対応版 ver.3) ===")
 

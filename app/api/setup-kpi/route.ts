@@ -1,8 +1,17 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 
 import { NextResponse } from 'next/server';
 import { pool } from '@/lib/db';
 
 export async function GET() {
+  return NextResponse.json({ error: "Use an authenticated same-origin POST request" }, {
+    status: 405, headers: { Allow: "POST" },
+  });
+}
+
+export async function POST(request: Request) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -21,12 +30,16 @@ export async function GET() {
       );
     `);
     await client.query(`
-      CREATE OR REPLACE FUNCTION get_web_sales_monthly(start_date text, end_date text)
+      CREATE OR REPLACE FUNCTION public.get_web_sales_monthly(start_date text, end_date text)
       RETURNS TABLE (
         month text,
         amount numeric
       ) AS $$
       BEGIN
+        IF coalesce(auth.jwt()->>'role', '') <> 'service_role'
+           AND coalesce(lower(auth.jwt()->>'email'), '') <> 'aizubrandhall@gmail.com' THEN
+          RAISE EXCEPTION 'Administrator access required' USING ERRCODE = '42501';
+        END IF;
         RETURN QUERY
         SELECT 
           to_char(s.report_month, 'YYYY-MM-01')::text as month,
@@ -47,12 +60,14 @@ export async function GET() {
             public.web_sales_reported_amount(s.qoo10_count,s.qoo10_amount) +
             public.web_sales_reported_amount(s.tiktok_count,s.tiktok_amount)
           ),0)::numeric END as amount
-        FROM web_sales_summary s
-        JOIN products p ON s.product_id = p.id
+        FROM public.web_sales_summary s
+        JOIN public.products p ON s.product_id = p.id
         WHERE s.report_month >= CAST(start_date AS DATE) AND s.report_month < CAST(end_date AS DATE)
         GROUP BY month;
       END;
-      $$ LANGUAGE plpgsql SECURITY DEFINER;
+      $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+      REVOKE EXECUTE ON FUNCTION public.get_web_sales_monthly(text,text) FROM PUBLIC, anon;
+      GRANT EXECUTE ON FUNCTION public.get_web_sales_monthly(text,text) TO authenticated, service_role;
     `);
 
     // 2. Wholesale Aggregation Function

@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -176,6 +177,9 @@ async function loadDiningData() {
 }
 
 export async function GET(request: NextRequest) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
+
   try {
     const data = await loadDiningData();
     const id = request.nextUrl.searchParams.get("id");
@@ -190,6 +194,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
+
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   try {
     const body = await request.json();
@@ -251,6 +258,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
+
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   try {
     const body = await request.json();
@@ -280,6 +290,9 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
+
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   try {
     const id = request.nextUrl.searchParams.get("id");

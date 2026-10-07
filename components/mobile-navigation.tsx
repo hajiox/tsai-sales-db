@@ -76,6 +76,7 @@ const titleRoutes = [
   ["/ai-tools", "使用可能AI"],
   ["/links", "自社リンク集"],
   ["/system/backup", "バックアップ管理"],
+  ["/system/data-access", "AIデータ接続"],
   ["/mobile", "モバイルホーム"],
 ] as const
 
@@ -155,6 +156,7 @@ const navigationSections: NavigationSection[] = [
       { label: "自社リンク集", href: "/links", icon: Link2 },
       { label: "使用可能AI", href: "/ai-tools", icon: Bot },
       { label: "バックアップ管理", href: "/system/backup", icon: HardDrive },
+      { label: "AIデータ接続", href: "/system/data-access", icon: Bot },
       { label: "裏ラベルチェック", href: "/system/label-check", icon: Zap },
       {
         label: "TS Groupware",

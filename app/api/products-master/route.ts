@@ -1,7 +1,10 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 export async function POST(request: Request) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
   try {
     const { product_name, series_id, product_number, price } = await request.json()
     
@@ -113,6 +116,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
   try {
     const { product_id, force_delete = false } = await request.json()
     

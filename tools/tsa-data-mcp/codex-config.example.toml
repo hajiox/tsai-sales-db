@@ -1,0 +1,13 @@
+# Merge this server table into the data-only account's trusted project config.
+# Replace paths after running install.ps1. Never paste a token into this file.
+[mcp_servers.tsa_data]
+command = "C:/Program Files/nodejs/node.exe"
+args = ["C:/Users/DATA_USER/AppData/Local/TSADataMCP/1.0.0/server.mjs"]
+cwd = "C:/Users/DATA_USER/AppData/Local/TSADataMCP/1.0.0"
+env_vars = ["TSA_DATA_API_TOKEN"]
+startup_timeout_sec = 15
+tool_timeout_sec = 25
+enabled = true
+
+[mcp_servers.tsa_data.env]
+TSA_DATA_API_URL = "https://v0-tsa-19.vercel.app"

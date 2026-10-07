@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import {
@@ -114,6 +115,9 @@ export const maxDuration = 60;
 
 // GET: pending_estimate_items 取得（高速・DB読み取りのみ）
 export async function GET(request: NextRequest) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") || "pending";
@@ -161,6 +165,9 @@ export async function GET(request: NextRequest) {
 
 // POST: AIマッチングを実行（明示的に呼び出し）
 export async function POST(request: NextRequest) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // 未マッチのpending品目を取得
@@ -216,6 +223,9 @@ export async function POST(request: NextRequest) {
 
 // PATCH: 見積もり項目に対するアクション
 export async function PATCH(request: NextRequest) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const body = await request.json();
     const { action, itemId, ingredientId, newIngredientData } = body;

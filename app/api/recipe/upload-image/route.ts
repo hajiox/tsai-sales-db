@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { put, del } from '@vercel/blob';
 import { createClient } from '@supabase/supabase-js';
+import { requireRecipeAdminRequest } from '@/lib/recipe-request-auth';
 
 const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,6 +9,9 @@ const supabaseAdmin = createClient(
 );
 
 export async function POST(request: NextRequest) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     try {
         const formData = await request.formData();
         const file = formData.get('file') as File | null;
@@ -88,6 +92,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     try {
         const { imageId, recipeId } = await request.json();
 
@@ -143,6 +150,9 @@ export async function DELETE(request: NextRequest) {
 
 // GET: fetch images for a recipe
 export async function GET(request: NextRequest) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     try {
         const { searchParams } = new URL(request.url);
         const recipeId = searchParams.get('recipeId');
@@ -169,6 +179,9 @@ export async function GET(request: NextRequest) {
 
 // PATCH: 画像の並び替え
 export async function PATCH(request: NextRequest) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
   try {
     const { recipeId, imageOrder } = await request.json();
     // imageOrder: [{ id: string, sort_order: number }]

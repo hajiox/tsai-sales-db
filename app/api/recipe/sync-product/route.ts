@@ -1,3 +1,4 @@
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { taxIncludedFromExcluded } from "@/lib/money";
@@ -124,6 +125,9 @@ function normalizeForExact(s: string): string {
 
 // GET: Fetch all recipes (ネット専用) and all products + auto-match suggestions
 export async function GET(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const url = new URL(request.url);
     const autoMatch = url.searchParams.get("autoMatch") === "true";
@@ -290,6 +294,9 @@ async function syncPriceToProduct(
 
 // POST: Link/unlink, batch-link, or create-and-link（1:1制約付き）
 export async function POST(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     try {
@@ -391,7 +398,10 @@ export async function POST(request: Request) {
 }
 
 // PUT: Sync all linked recipes to products (batch sync)
-export async function PUT() {
+export async function PUT(request: Request) {
+    const authError = await requireRecipeAdminRequest(request);
+    if (authError) return authError;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     try {

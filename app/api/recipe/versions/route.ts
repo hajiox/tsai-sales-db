@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -37,6 +38,9 @@ async function ensureTable(supabase: any) {
 
 // GET: レシピのバージョン一覧を取得
 export async function GET(request: Request) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
+
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const { searchParams } = new URL(request.url);
   const recipeId = searchParams.get("recipeId");
@@ -65,6 +69,9 @@ export async function GET(request: Request) {
 
 // POST: バージョンスナップショットを保存
 export async function POST(request: Request) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
+
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
@@ -140,6 +147,9 @@ export async function POST(request: Request) {
 
 // PATCH: バージョンメモを更新
 export async function PATCH(request: Request) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
+
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
@@ -175,6 +185,9 @@ export async function PATCH(request: Request) {
 
 // DELETE: バージョンを削除
 export async function DELETE(request: Request) {
+  const authError = await requireRecipeAdminRequest(request);
+  if (authError) return authError;
+
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const { searchParams } = new URL(request.url);
   const versionId = searchParams.get("id");
