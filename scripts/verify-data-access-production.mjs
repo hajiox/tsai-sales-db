@@ -54,8 +54,9 @@ try {
   await db.query('update public.data_access_connections set revoked_at=now() where id=$1', [connectionId]);
   const revoked = payload(await client.callTool({ name: 'tsa_search_recipes', arguments: {} }));
   assert.ok(!revoked.ok && revoked.error.code === 'UNAUTHORIZED', 'Immediate revocation failed.');
-  for (const pathname of ['/api/data-access/connections', '/api/recipe', '/api/web-sales-period']) {
-    const response = await fetch(origin + pathname, { redirect: 'manual', signal: AbortSignal.timeout(15000) });
+  for (const [pathname, method] of [['/api/data-access/connections', 'GET'], ['/api/recipe', 'GET'], ['/api/web-sales-period', 'POST']]) {
+    const response = await fetch(origin + pathname, { method, redirect: 'manual', signal: AbortSignal.timeout(15000),
+      ...(method === 'POST' ? { headers: { 'content-type': 'application/json' }, body: '{}' } : {}) });
     assert.equal(response.status, 401, 'Anonymous legacy access was not rejected.');
   }
   console.log(JSON.stringify({ production: true, mcpHandshake: true, tools: 17, scopedRead: true, versionedDetail: true,
