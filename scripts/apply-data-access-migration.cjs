@@ -14,7 +14,7 @@ async function verify(client) {
   assert.deepEqual(acl.rows[0], { anon_rpc:false, authenticated_rpc:false, service_rpc:true, anon_tokens:false, authenticated_plans:false });
   return { tables:3, rlsEnabled:true, publicPrivilegesClosed:true };
 }
-async function fixtures(client) {
+async function fixtures(client, { approvalRequired = true } = {}) {
   assert.equal((await client.query("select public.tsa_data_access_name_key($1) value",['　ＡＢＣ　 商品　'])).rows[0].value,'abc 商品');
   const tokenHash = createHash('sha256').update(randomUUID()).digest('hex');
   const id = randomUUID(), recipeId = randomUUID();
@@ -50,15 +50,20 @@ async function fixtures(client) {
   await client.query("update public.ingredients set product_description='concurrent' where id=$1",[id]);
   await denied(()=>call('apply',{id:stale.id}),'DA_CONFLICT');
   const create=await call('prepare',{resource:'ingredients',operation:'create',values:{name:`__data_access_created_${id}`,unit_quantity:250,price:75,tax_included:true},idempotencyKey:'test-new-registration'});
-  assert.equal(create.requiresApproval,true);
-  await denied(()=>call('apply',{id:create.id}),'DA_APPROVAL_REQUIRED');
-  await client.query('select public.tsa_data_access_review_plan($1,$2,$3)',[create.id,'approve','test admin']);
+  assert.equal(create.requiresApproval,approvalRequired);
+  if (approvalRequired) {
+    await denied(()=>call('apply',{id:create.id}),'DA_APPROVAL_REQUIRED');
+    await client.query('select public.tsa_data_access_review_plan($1,$2,$3)',[create.id,'approve','test admin']);
+  }
   const created=await call('apply',{id:create.id}); assert.equal(created.record.unit_quantity,250); assert.equal(created.record.price,75);
   // Stable master identity drives related name synchronization, with an audit snapshot of both sides.
   const forRename=await call('read',{resource:'ingredients',id});
   const rename=await call('prepare',{...input,expectedVersion:forRename.items[0]._version,idempotencyKey:'test-sensitive-name',values:{name:`__data_access_renamed_${id}`}});
-  await denied(()=>call('apply',{id:rename.id}),'DA_APPROVAL_REQUIRED');
-  await client.query('select public.tsa_data_access_review_plan($1,$2,$3)',[rename.id,'approve','test admin']);
+  assert.equal(rename.requiresApproval,approvalRequired);
+  if (approvalRequired) {
+    await denied(()=>call('apply',{id:rename.id}),'DA_APPROVAL_REQUIRED');
+    await client.query('select public.tsa_data_access_review_plan($1,$2,$3)',[rename.id,'approve','test admin']);
+  }
   await call('apply',{id:rename.id});
   const changedDetail=await call('read',{resource:'recipes',id:recipeId});
   assert.equal(changedDetail.items[0].recipe_items[0].item_name,`__data_access_renamed_${id}`);
@@ -68,7 +73,8 @@ async function fixtures(client) {
   for(const resource of ['recipes','materials','expenses']) {
     const values=resource==='recipes'?{name:`__data_access_${resource}_${id}`,category:'OEM',manufacturing_notes:'fixture'}:resource==='materials'?{name:`__data_access_${resource}_${id}`,unit_quantity:'100枚',price:50,tax_included:true}:{name:`__data_access_${resource}_${id}`,unit_quantity:1,unit_price:2,tax_included:false};
     const createPlan=await call('prepare',{resource,operation:'create',values,idempotencyKey:`test-create-${resource}`});
-    await client.query('select public.tsa_data_access_review_plan($1,$2,$3)',[createPlan.id,'approve','test admin']);
+    assert.equal(createPlan.requiresApproval,approvalRequired);
+    if (approvalRequired) await client.query('select public.tsa_data_access_review_plan($1,$2,$3)',[createPlan.id,'approve','test admin']);
     const newRecord=(await call('apply',{id:createPlan.id})).record;
     const field=resource==='recipes'?'manufacturing_notes':'notes';
     const updatePlan=await call('prepare',{resource,operation:'update',id:newRecord.id,expectedVersion:newRecord._version,values:{[field]:'normal metadata'},idempotencyKey:`test-update-${resource}`});
@@ -92,7 +98,7 @@ async function fixtures(client) {
   await denied(()=>client.query("update public.data_access_changes set values='{}'::jsonb where id=$1",[atomic.id]),'DA_INVALID_INPUT');
   await client.query('update public.data_access_connections set revoked_at=now() where id=$1',[connection]);
   await denied(()=>call('apply',{id:atomic.id}),'DA_UNAUTHORIZED');
-  return { authDenial:true, scopedReads:true, resultLimit:true, normalUpdate:true, approvedRegistration:true, allFourWriteDomains:true, immutablePlans:true, immutableAudit:true, relatedNameAudit:true, staleConflict:true, idempotency:true, auditAtomicity:true, revocation:true };
+  return { authDenial:true, scopedReads:true, resultLimit:true, normalUpdate:true, registration:true, requiresApproval:approvalRequired, allFourWriteDomains:true, immutablePlans:true, immutableAudit:true, relatedNameAudit:true, staleConflict:true, idempotency:true, auditAtomicity:true, revocation:true };
 }
 async function main() {
   if(!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not configured');
