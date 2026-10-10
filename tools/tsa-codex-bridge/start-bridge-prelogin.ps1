@@ -88,7 +88,11 @@ function Prepare-HeadlessWorkerStart {
     }
     $expectedVersion = $versionMatch.Groups[1].Value
     if ([string]$state.version -eq $expectedVersion) {
-      Write-LauncherLog "skipped because Bridge $expectedVersion is already running as PID $statePid"
+      $script:verifiedHeadlessWorker = [pscustomobject]@{
+        ProcessId = $statePid
+        StartedAtUtc = $existing.StartTime.ToUniversalTime()
+      }
+      Write-LauncherLog "observing existing Bridge $expectedVersion PID $statePid without restarting it"
       return "already-running"
     }
 
@@ -111,7 +115,49 @@ function Prepare-HeadlessWorkerStart {
   }
 }
 
-$startupDisposition = Prepare-HeadlessWorkerStart
+function Wait-VerifiedHeadlessWorkerExit($Identity) {
+  while ($true) {
+    try {
+      $observed = Get-Process -Id $Identity.ProcessId -ErrorAction Stop
+    } catch {
+      if ($_.CategoryInfo.Category -eq [System.Management.Automation.ErrorCategory]::ObjectNotFound) {
+        Write-LauncherLog "observed Bridge PID $($Identity.ProcessId) exit; rechecking state before launch"
+        return
+      }
+      throw
+    }
+    if (
+      $observed.ProcessName -ne "node" -or
+      $observed.StartTime.ToUniversalTime() -ne $Identity.StartedAtUtc
+    ) {
+      Write-LauncherLog "observed Bridge PID $($Identity.ProcessId) identity changed; rechecking state before launch"
+      return
+    }
+    # Jobs may begin while this supervisor is attached. Observe only; do not
+    # stop a live worker or delete its state/lock, even when it becomes busy.
+    Start-Sleep -Seconds 5
+  }
+}
+
+function Wait-HeadlessWorkerStart {
+  while ($true) {
+    $script:verifiedHeadlessWorker = $null
+    $disposition = Prepare-HeadlessWorkerStart
+    if ($disposition -ne "already-running") { return $disposition }
+    if (-not $script:verifiedHeadlessWorker) {
+      Write-LauncherLog "START BLOCKED existing worker identity is unavailable; no process was stopped"
+      return "blocked"
+    }
+    try {
+      Wait-VerifiedHeadlessWorkerExit $script:verifiedHeadlessWorker
+    } catch {
+      Write-LauncherLog "START BLOCKED existing worker cannot be observed safely; no process was stopped"
+      return "blocked"
+    }
+  }
+}
+
+$startupDisposition = Wait-HeadlessWorkerStart
 if ($startupDisposition -ne "start") {
   exit 0
 }

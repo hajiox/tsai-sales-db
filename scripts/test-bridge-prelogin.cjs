@@ -110,6 +110,8 @@ assert.match(launcher, /Prepare-HeadlessWorkerStart/);
 assert.match(launcher, /\$state\.currentJobId/);
 assert.match(launcher, /\[string\]\$state\.workerId -ne \[string\]\$config\.workerId/);
 assert.match(launcher, /already-running/);
+assert.match(launcher, /function Wait-VerifiedHeadlessWorkerExit/);
+assert.match(launcher, /\$startupDisposition = Wait-HeadlessWorkerStart/);
 assert.match(launcher, /removed stale state for reused PID/);
 assert.match(registration, /-RuntimeName \$RuntimeName/);
 assert.match(registration, /New-ScheduledTaskTrigger -AtStartup/);
@@ -124,6 +126,8 @@ assert.match(automationPage, /worker\.capabilities\?\.workerRole === "analysis"/
 assert.match(automationPage, /事務所PC Bridge 4体/);
 
 if (process.platform === "win32") {
+  const supervised = childProcess.spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-File", path.join(__dirname, "test-bridge-prelogin-supervisor.ps1")], { encoding: "utf8", windowsHide: true });
+  assert.equal(supervised.status, 0, supervised.stderr || supervised.stdout);
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tsa-bridge-prelogin-"));
   try {
     for (const [name, source] of [
