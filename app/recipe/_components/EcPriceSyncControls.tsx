@@ -486,19 +486,27 @@ export default function EcPriceSyncControls({
         <button
           type="button"
           onClick={() => setDispatchMode("immediate")}
-          className={`rounded-md px-3 py-2 transition-colors ${dispatchMode === "immediate" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+          aria-pressed={dispatchMode === "immediate"}
+          className={`rounded-md px-3 py-2 transition-colors ${dispatchMode === "immediate" ? "bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-400" : "text-slate-500 hover:text-slate-700"}`}
         >
           今すぐ実行
         </button>
         <button
           type="button"
           onClick={() => setDispatchMode("reserved")}
-          className={`flex items-center justify-center gap-1 rounded-md px-3 py-2 transition-colors ${dispatchMode === "reserved" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+          aria-pressed={dispatchMode === "reserved"}
+          className={`flex items-center justify-center gap-1 rounded-md px-3 py-2 transition-colors ${dispatchMode === "reserved" ? "bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-400" : "text-slate-500 hover:text-slate-700"}`}
         >
           <CalendarClock className="h-3.5 w-3.5" />
           一括実行へ予約
         </button>
       </div>
+
+      {dispatchMode === "reserved" && (
+        <p className="mb-3 text-xs font-medium text-blue-700">
+          下のECを選ぶと、一括実行予約に追加します。
+        </p>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {EC_PRICE_TARGETS.filter(target => isEcChannelOperational(target.id)).map((target) => (
@@ -514,7 +522,7 @@ export default function EcPriceSyncControls({
                 : `${target.label}へ反映`}
             className={`rounded px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 ${TARGET_STYLES[target.id]}`}
           >
-            {target.label}
+            {dispatchMode === "reserved" ? `${target.label}を予約` : target.label}
           </button>
         ))}
         <button
@@ -524,7 +532,7 @@ export default function EcPriceSyncControls({
           className="inline-flex items-center rounded bg-slate-900 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
         >
           {submitting && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-          全EC
+          {dispatchMode === "reserved" ? "全ECを予約" : "全EC"}
         </button>
         <span className="rounded border border-dashed px-3 py-2 text-xs text-gray-500">makeshop 開店準備中</span>
       </div>
