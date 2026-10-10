@@ -16,6 +16,7 @@ import {
   getEcPriceVerifiedIdentifiers,
 } from "@/lib/ec-price-verified-registry";
 import { isReservedEcPriceJob } from "@/lib/ec-price-reservations";
+import { getEcPriceReservationComparisons } from "@/lib/ec-price-reservation-comparison";
 import { inactiveEcOperationTargets, ecOperationBlockedMessage } from "@/lib/ec-operation-policy";
 
 export const runtime = "nodejs";
@@ -39,6 +40,7 @@ function toReservationView(row: Record<string, unknown>) {
     ecProductName: snapshot.ecProductName ? String(snapshot.ecProductName) : null,
     targets: normalizeEcPriceTargets(parameters.targets),
     newPriceInclTax: Number(parameters.newPriceInclTax) || 0,
+    priceComparisons: getEcPriceReservationComparisons(parameters),
     createdAt: String(row.created_at || ""),
   };
 }

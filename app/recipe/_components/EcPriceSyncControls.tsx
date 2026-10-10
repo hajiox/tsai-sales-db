@@ -27,6 +27,7 @@ import {
 } from "@/lib/ec-price-codex";
 import type { EcProductRegisterJobView } from "@/lib/ec-product-registration-codex";
 import type { EcPriceDispatchMode } from "@/lib/ec-price-reservations";
+import type { EcPriceReservationComparison } from "@/lib/ec-price-reservation-comparison";
 
 const TARGET_STYLES: Record<EcPriceTarget, string> = {
   amazon: "bg-orange-500 hover:bg-orange-600",
@@ -48,6 +49,7 @@ type ReservationView = {
   ecProductName: string | null;
   targets: EcPriceTarget[];
   newPriceInclTax: number;
+  priceComparisons?: EcPriceReservationComparison[];
   createdAt: string;
 };
 
@@ -804,6 +806,7 @@ export default function EcPriceSyncControls({
               {!queueLoading && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px]">{reservations.length}件</span>}
             </h4>
             <p className="mt-1 text-[11px] text-slate-400">予約した商品は下のボタンで順番に実行します。</p>
+            <p className="mt-1 text-[11px] text-slate-400">元価格は予約時の基準価格（税込）です。ECの実価格は送料・セット数により異なる場合があります。</p>
           </div>
           <button
             type="button"
@@ -821,14 +824,20 @@ export default function EcPriceSyncControls({
             <Loader2 className="h-3.5 w-3.5 animate-spin" />予約を確認中...
           </div>
         ) : reservations.length > 0 ? (
-          <ul className="mt-3 max-h-56 space-y-2 overflow-y-auto pr-1">
+          <ul className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
             {reservations.map((reservation) => (
               <li key={reservation.id} className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
                 <div className="min-w-0 text-xs">
                   <p className="truncate font-bold text-slate-700">{reservation.ecProductName || reservation.recipeName}</p>
-                  <p className="mt-0.5 text-slate-500">
-                    税込 ¥{reservation.newPriceInclTax.toLocaleString("ja-JP")} ・ {getEcPriceTargetLabel(reservation.targets)}
-                  </p>
+                  {(reservation.priceComparisons || [{
+                    targets: reservation.targets,
+                    previousPriceInclTax: null,
+                    newPriceInclTax: reservation.newPriceInclTax,
+                    differenceInclTax: null,
+                    changePercent: null,
+                  }]).map((comparison) => (
+                    <ReservationPriceSummary key={comparison.targets.join(",")} comparison={comparison} />
+                  ))}
                 </div>
                 <button
                   type="button"
@@ -847,6 +856,36 @@ export default function EcPriceSyncControls({
         )}
       </div>
     </section>
+  );
+}
+
+function ReservationPriceSummary({ comparison }: { comparison: EcPriceReservationComparison }) {
+  const { previousPriceInclTax, newPriceInclTax, differenceInclTax, changePercent } = comparison;
+  const percentageLabel = differenceInclTax !== null && differenceInclTax < 0
+    ? "値下げ率"
+    : differenceInclTax === 0 ? "変更率" : "値上げ率";
+  return (
+    <div className="mt-1.5">
+      <p className="text-[11px] text-slate-500">{getEcPriceTargetLabel(comparison.targets)}</p>
+      <dl className="mt-0.5 flex flex-wrap gap-x-4 gap-y-1 tabular-nums text-slate-600">
+        <div className="flex items-center gap-1">
+          <dt>元価格（基準）</dt>
+          <dd className="font-bold">{previousPriceInclTax === null ? "未確認" : `¥${previousPriceInclTax.toLocaleString("ja-JP")}`}<span className="ml-2" aria-hidden="true">→</span></dd>
+        </div>
+        <div className="flex items-center gap-1">
+          <dt>変更後</dt>
+          <dd className="font-bold text-blue-700">¥{newPriceInclTax.toLocaleString("ja-JP")}</dd>
+        </div>
+        <div className="flex gap-1">
+          <dt>差額</dt>
+          <dd className="font-bold">{differenceInclTax === null ? "—" : `${differenceInclTax > 0 ? "+" : differenceInclTax < 0 ? "−" : ""}¥${Math.abs(differenceInclTax).toLocaleString("ja-JP")}`}</dd>
+        </div>
+        <div className="flex gap-1">
+          <dt>{percentageLabel}</dt>
+          <dd className="font-bold">{changePercent === null ? "—" : `${Math.abs(changePercent).toLocaleString("ja-JP", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`}</dd>
+        </div>
+      </dl>
+    </div>
   );
 }
 
