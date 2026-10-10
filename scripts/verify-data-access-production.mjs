@@ -21,6 +21,11 @@ const client = new Client({ name: 'tsa-data-production-verification', version: '
 let connectionId;
 let connected = false;
 const payload = result => result.structuredContent ?? JSON.parse(result.content.find(item => item.type === 'text').text);
+const diagnostic = result => JSON.stringify({
+  ok: typeof result?.ok === 'boolean' ? result.ok : null,
+  code: /^[A-Z_]{1,64}$/.test(result?.error?.code ?? '') ? result.error.code : null,
+  requestId: /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(result?.requestId ?? '') ? result.requestId : null,
+});
 await db.connect();
 try {
   const record = (await db.query('select id from public.recipes order by id limit 1')).rows[0];
@@ -41,7 +46,7 @@ try {
   const businessCatalog = payload(await client.callTool({ name: 'tsa_business_catalog', arguments: {} }));
   assert.ok(!businessCatalog.ok && businessCatalog.error.code === 'FORBIDDEN', 'Limited connection unexpectedly accessed the full business catalog.');
   const limitedComposition = payload(await client.callTool({ name: 'tsa_get_recipe_items', arguments: { recipeId: record.id } }));
-  assert.ok(!limitedComposition.ok && limitedComposition.error.code === 'FORBIDDEN', 'Limited connection unexpectedly accessed whole-composition replacement data.');
+  assert.ok(!limitedComposition.ok && limitedComposition.error?.code === 'FORBIDDEN', `Limited composition denial failed: ${diagnostic(limitedComposition)}`);
   const read = payload(await client.callTool({ name: 'tsa_search_recipes', arguments: { limit: 100 } }));
   assert.ok(read.ok && read.data.items.length === 1 && read.data.items[0].id === record.id, 'Scoped read failed.');
   const detail = payload(await client.callTool({ name: 'tsa_get_recipe', arguments: { id: record.id } }));
@@ -62,7 +67,7 @@ try {
   await db.query("update public.data_access_connections set scopes=array['recipes:read','business:full']::text[],resource_ids='{}'::jsonb where id=$1", [connectionId]);
   const composition = payload(await client.callTool({ name: 'tsa_get_recipe_items', arguments: { recipeId: record.id } }));
   assert.ok(composition.ok && composition.data.recipeId === record.id && composition.data.recipe?.id === record.id,
-    'Whole-composition read failed for the explicitly full synthetic connection.');
+    `Whole-composition read failed for the explicitly full synthetic connection: ${diagnostic(composition)}`);
   assert.ok(Array.isArray(composition.data.items) && composition.data.items.every(item => item.recipe_id === record.id), 'Whole-composition rows do not belong to the selected recipe.');
   assert.ok(/^[a-f0-9]{32}$/.test(composition.data._version), 'Whole-composition version failed.');
   const replacementPlans = (await db.query('select count(*)::int n from public.recipe_items_replacement_changes where connection_id=$1', [connectionId])).rows[0].n;
@@ -71,7 +76,7 @@ try {
   const revoked = payload(await client.callTool({ name: 'tsa_search_recipes', arguments: {} }));
   assert.ok(!revoked.ok && revoked.error.code === 'UNAUTHORIZED', 'Immediate revocation failed.');
   const revokedComposition = payload(await client.callTool({ name: 'tsa_get_recipe_items', arguments: { recipeId: record.id } }));
-  assert.ok(!revokedComposition.ok && revokedComposition.error.code === 'UNAUTHORIZED', 'Composition access ignored immediate revocation.');
+  assert.ok(!revokedComposition.ok && revokedComposition.error?.code === 'UNAUTHORIZED', `Composition access ignored immediate revocation: ${diagnostic(revokedComposition)}`);
   for (const [pathname, method] of [['/api/data-access/connections', 'GET'], ['/api/recipe', 'GET'], ['/api/web-sales-period', 'POST']]) {
     const response = await fetch(origin + pathname, { method, redirect: 'manual', signal: AbortSignal.timeout(15000),
       ...(method === 'POST' ? { headers: { 'content-type': 'application/json' }, body: '{}' } : {}) });
