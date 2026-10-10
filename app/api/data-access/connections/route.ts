@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { dataAccessAdmin, dataAccessAdminDb, isDataAccessAdminOrigin, isDataAccessId, validateDataConnection } from "@/lib/data-access-admin";
+import { dataAccessAdmin, dataAccessAdminDb, isDataAccessAdminOrigin, isDataAccessId, validateDataConnection, validateDataConnectionPermissions } from "@/lib/data-access-admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +49,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, data: { connection: data, token: created.token }, requestId }, { headers });
   }
   if (!isDataAccessId(body.id)) return error("VALIDATION", "対象IDが正しくありません", 400, requestId);
+  if (body.action === "permissions") {
+    let permissions;
+    try { permissions = validateDataConnectionPermissions(body); }
+    catch (cause) { return error("VALIDATION", cause instanceof Error ? cause.message : "権限が正しくありません", 400, requestId); }
+    const { data, error: failure } = await db.from("data_access_connections").update(permissions).eq("id", body.id).is("revoked_at", null).gt("expires_at", new Date().toISOString()).select(connectionColumns).maybeSingle();
+    if (failure) return error("UNAVAILABLE", "権限を更新できませんでした", 503, requestId);
+    if (!data) return error("CONFLICT", "有効な接続が見つかりません", 409, requestId);
+    return NextResponse.json({ ok: true, data: { connection: data }, requestId }, { headers });
+  }
   if (body.action === "revoke") {
     const { data, error: failure } = await db.from("data_access_connections").update({ revoked_at: new Date().toISOString() }).eq("id", body.id).is("revoked_at", null).select("id");
     if (failure) return error("UNAVAILABLE", "接続を停止できませんでした", 503, requestId);

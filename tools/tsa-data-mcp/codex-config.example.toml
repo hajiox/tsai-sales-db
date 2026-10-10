@@ -2,7 +2,7 @@
 # Replace paths after running install.ps1. Never paste a token into this file.
 [mcp_servers.tsa_data]
 command = "C:/Program Files/nodejs/node.exe"
-args = ["C:/Users/DATA_USER/AppData/Local/TSADataMCP/1.0.0/server.mjs"]
+args = ["C:/Users/DATA_USER/AppData/Local/TSADataMCP/1.1.0/server.mjs"]
 cwd = "C:/Users/DATA_USER/AppData/Local/TSADataMCP/1.0.0"
 env_vars = ["TSA_DATA_API_TOKEN"]
 startup_timeout_sec = 15

@@ -26,7 +26,7 @@ function query(table) {
       return (...args) => {
         operations.push({ table, method, args });
         if (method === "select") state.columns = args[0];
-        if (method === "single") state.single = true;
+        if (method === "single" || method === "maybeSingle") state.single = true;
         if (method === "insert") { state.action = "insert"; savedConnection = args[0]; }
         if (method === "update") state.action = "update";
         return chain;
@@ -140,6 +140,17 @@ async function main() {
   assert.equal(listed.status, 200);
   assert.equal(JSON.stringify(listing).includes(payload.data.token), false, "Tokens are shown only at creation");
   assert.equal(JSON.stringify(listing).includes(savedConnection.token_hash), false);
+
+  assert.deepEqual(admin.validateDataConnectionPermissions({ scopes: ["business:full", "business:full"] }), { scopes: ["business:full"], resource_ids: {} });
+  assert.throws(() => admin.validateDataConnectionPermissions({ scopes: ["business:full"], resourceIds: { recipes: [recordId] } }));
+  operations = [];
+  const changedPermissions = await route.POST(post({ action: "permissions", id: recordId, scopes: ["recipes:read", "recipes:write", "business:full"], resourceIds: {}, token_hash: "forged", expires_at: "2099-01-01" }));
+  assert.equal(changedPermissions.status, 200);
+  const writtenPermissions = operations.find(entry => entry.method === "update").args[0];
+  assert.deepEqual(writtenPermissions, { scopes: ["recipes:read", "recipes:write", "business:full"], resource_ids: {} }, "Permission updates never rotate the key or extend its expiry");
+  assert.ok(operations.some(entry => entry.method === "is" && entry.args[0] === "revoked_at" && entry.args[1] === null));
+  assert.ok(operations.some(entry => entry.method === "gt" && entry.args[0] === "expires_at"));
+  assert.equal(JSON.stringify(await changedPermissions.json()).includes(savedConnection.token_hash), false);
 
   operations = [];
   assert.equal((await route.POST(post({ action: "revoke", id: recordId }))).status, 200);

@@ -45,14 +45,16 @@ test('fixed routes, no redirects, response limits and sanitized errors', async (
   await assert.rejects(requestOversized.prepare({ data: 'x'.repeat(32 * 1024) }), error => error.code === 'REQUEST_TOO_LARGE');
 });
 
-test('declared mutation fields: no arbitrary patch, no price/pack/tax update, immutable version and idempotency required', () => {
+test('declared mutation fields: price/pack/tax update with validation, immutable version and idempotency required', () => {
   const update = { operation: 'update', id, expectedVersion: 'a'.repeat(32), values: { manufacturing_notes: '確認済みの更新' }, idempotencyKey: 'test-update-1' };
   assert.equal(changeSchema('recipes').safeParse(update).success, true);
-  for (const values of [{ selling_price: 123 }, { catchcopy: 'external synchronization required' }, { sql: 'DROP TABLE recipes' }, {}, { manufacturing_notes: 'a\u0000b' }]) {
+  assert.equal(changeSchema('recipes').safeParse({ ...update, values: { selling_price: 123, category: 'OEM', amazon_fee_enabled: undefined } }).success, false);
+  assert.equal(changeSchema('recipes').safeParse({ ...update, values: { selling_price: 123, category: 'OEM' } }).success, true);
+  for (const values of [{ selling_price: -1 }, { catchcopy: 'external synchronization required' }, { sql: 'DROP TABLE recipes' }, {}, { manufacturing_notes: 'a\u0000b' }]) {
     assert.equal(changeSchema('recipes').safeParse({ ...update, values }).success, false);
   }
   for (const values of [{ price: 50 }, { unit_quantity: 500 }, { tax_included: true }]) {
-    assert.equal(changeSchema('ingredients').safeParse({ ...update, values }).success, false);
+    assert.equal(changeSchema('ingredients').safeParse({ ...update, values }).success, true);
   }
   assert.equal(changeSchema('recipes').safeParse({ ...update, expectedVersion: undefined }).success, false);
   assert.equal(changeSchema('recipes').safeParse({ ...update, idempotencyKey: 'bad' }).success, false);
@@ -112,8 +114,9 @@ test('real STDIO initialize, tools/list, mock API read and rejection before any 
   try {
     await client.connect(transport);
     assert.equal(client.getServerVersion().name, 'tsa-data');
+    assert.equal(client.getServerVersion().version, '1.1.0');
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 17);
+    assert.equal(tools.length, 21);
     assert.equal(new Set(tools.map(tool => tool.name)).size, tools.length);
     assert.ok(tools.every(tool => tool.annotations.openWorldHint === false));
     assert.ok(tools.filter(tool => tool.name.includes('search_') || tool.name.includes('get_')).every(tool => tool.annotations.readOnlyHint === true));
@@ -155,6 +158,122 @@ test('real STDIO initialize, tools/list, mock API read and rejection before any 
     assert.equal(forbidden.isError, true);
     assert.equal(JSON.parse(forbidden.content[0].text).error.code, 'FORBIDDEN');
     assert.ok(!forbidden.content[0].text.includes(token));
+    assert.ok(!stderr.includes(token));
+  } finally {
+    await client.close();
+    await new Promise(resolve => http.close(resolve));
+  }
+});
+
+test('business tools over real STDIO: catalog, bounded reads, versioned CRUD plans, fixed apply ID and pre-HTTP validation', async () => {
+  const requests = [];
+  let forbidden = false;
+  const record = { id, recipe_id: id, unit_price: 250, _version: 'a'.repeat(32) };
+  const http = createHttpServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    const parsed = JSON.parse(body);
+    requests.push({ url: req.url, body: parsed, auth: req.headers.authorization });
+    res.setHeader('Content-Type', 'application/json');
+    if (forbidden) {
+      res.statusCode = 403;
+      res.end(JSON.stringify({ ok: false, error: { code: 'FORBIDDEN', message: token }, requestId: 'business_denied_1' }));
+      return;
+    }
+    const data = parsed.action === 'catalog'
+      ? { tables: [{ table: 'recipe_items', primaryKey: ['id'], fields: [{ name: 'unit_price', type: 'numeric', writable: true, creatable: true }], writable: true }] }
+      : parsed.action === 'read' ? { items: [record], nextOffset: 25 }
+      : parsed.action === 'prepare' ? { id: changeId, table: parsed.table, operation: parsed.operation, key: parsed.key ?? {}, status: 'pending', requiresApproval: false, values: parsed.values, before: parsed.operation === 'create' ? null : record }
+      : { id: changeId, status: 'applied', record, related: {} };
+    res.end(JSON.stringify({ ok: true, data, requestId: 'business_request_1' }));
+  });
+  http.listen(0, '127.0.0.1');
+  await once(http, 'listening');
+  const client = new Client({ name: 'tsa-business-mcp-test', version: '1.1.0' });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [fileURLToPath(new URL('../server.mjs', import.meta.url))],
+    env: { TSA_DATA_API_URL: `http://127.0.0.1:${http.address().port}`, TSA_DATA_API_TOKEN: token, TSA_DATA_ALLOW_LOCALHOST: '1' },
+    stderr: 'pipe',
+  });
+  let stderr = '';
+  transport.stderr?.on('data', data => { stderr += data.toString(); });
+  const payload = result => result.structuredContent ?? JSON.parse(result.content[0].text);
+  try {
+    await client.connect(transport);
+    const { tools } = await client.listTools();
+    for (const name of ['tsa_business_catalog', 'tsa_business_read']) {
+      assert.deepEqual(tools.find(tool => tool.name === name).annotations, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    }
+    assert.equal(tools.find(tool => tool.name === 'tsa_prepare_business_change').annotations.destructiveHint, false);
+    assert.equal(tools.find(tool => tool.name === 'tsa_apply_business_change').annotations.destructiveHint, true);
+    assert.equal(tools.find(tool => tool.name === 'tsa_apply_business_change').annotations.readOnlyHint, false);
+
+    const catalog = await client.callTool({ name: 'tsa_business_catalog', arguments: {} });
+    assert.equal(catalog.isError, undefined);
+    assert.equal(payload(catalog).data.tables[0].table, 'recipe_items');
+    assert.deepEqual(requests[0].body, { action: 'catalog' });
+    await client.callTool({ name: 'tsa_business_catalog', arguments: { table: 'recipe_items' } });
+    assert.deepEqual(requests[1].body, { action: 'catalog', table: 'recipe_items' });
+
+    const readArgs = { table: 'recipe_items', filters: { recipe_id: id, unit_price: 250 }, columns: ['id', 'unit_price'], limit: 25, offset: 50 };
+    const read = await client.callTool({ name: 'tsa_business_read', arguments: readArgs });
+    assert.equal(read.isError, undefined);
+    assert.equal(payload(read).data.items[0]._version, record._version);
+    assert.deepEqual(requests[2].body, { action: 'read', ...readArgs });
+    await client.callTool({ name: 'tsa_business_read', arguments: { table: 'recipes' } });
+    assert.deepEqual(requests[3].body, { action: 'read', table: 'recipes', limit: 25, offset: 0 });
+
+    const plans = [
+      { table: 'recipe_items', operation: 'create', values: { recipe_id: id, unit_price: 250, name: '検証用明細', metadata: { labels: ['確認'], enabled: true } }, idempotencyKey: 'business-create-001' },
+      { table: 'recipe_items', operation: 'update', key: { id }, expectedVersion: record._version, values: { unit_price: 300 }, idempotencyKey: 'business-update-001' },
+      { table: 'recipe_items', operation: 'delete', key: { id }, expectedVersion: record._version, idempotencyKey: 'business-delete-001' },
+    ];
+    for (const plan of plans) {
+      const prepared = await client.callTool({ name: 'tsa_prepare_business_change', arguments: plan });
+      assert.equal(prepared.isError, undefined);
+      assert.equal(payload(prepared).data.id, changeId);
+      assert.equal(payload(prepared).data.requiresApproval, false);
+      assert.deepEqual(requests.at(-1).body, { action: 'prepare', ...plan });
+    }
+    const applied = await client.callTool({ name: 'tsa_apply_business_change', arguments: { changeId } });
+    assert.equal(applied.isError, undefined);
+    assert.equal(payload(applied).data.status, 'applied');
+    assert.deepEqual(requests.at(-1).body, { action: 'apply', id: changeId });
+    assert.ok(requests.every(request => request.url === '/api/data-access/v1/business' && request.auth === `Bearer ${token}`));
+
+    const requestsBeforeRejections = requests.length;
+    const invalid = [
+      ['tsa_business_catalog', { table: 'recipes;drop_table' }],
+      ['tsa_business_catalog', { sql: 'select * from recipes' }],
+      ['tsa_business_read', { table: 'recipes', limit: 101 }],
+      ['tsa_business_read', { table: 'recipes', offset: -1 }],
+      ['tsa_business_read', { table: 'recipes', columns: ['*'] }],
+      ['tsa_business_read', { table: 'recipes', filters: { id: { eq: id } } }],
+      ['tsa_business_read', { table: 'recipes', url: 'https://other.example.test' }],
+      ['tsa_prepare_business_change', { ...plans[1], expectedVersion: undefined }],
+      ['tsa_prepare_business_change', { ...plans[1], expectedVersion: 'stale' }],
+      ['tsa_prepare_business_change', { ...plans[1], key: {} }],
+      ['tsa_prepare_business_change', { ...plans[1], values: {} }],
+      ['tsa_prepare_business_change', { ...plans[1], idempotencyKey: 'bad' }],
+      ['tsa_prepare_business_change', { ...plans[1], sql: 'update recipes set selling_price=0' }],
+      ['tsa_prepare_business_change', { ...plans[0], key: { id } }],
+      ['tsa_prepare_business_change', { ...plans[2], values: { unit_price: 1 } }],
+      ['tsa_apply_business_change', { changeId: '../secrets' }],
+      ['tsa_apply_business_change', { changeId, values: { unit_price: 1 } }],
+    ];
+    for (const [name, args] of invalid) {
+      const rejected = await client.callTool({ name, arguments: args });
+      assert.equal(rejected.isError, true, `${name}: invalid business request was accepted`);
+    }
+    assert.equal(requests.length, requestsBeforeRejections, 'Invalid business inputs must not issue HTTP requests.');
+
+    forbidden = true;
+    const denied = await client.callTool({ name: 'tsa_business_catalog', arguments: {} });
+    assert.equal(denied.isError, true);
+    assert.equal(payload(denied).error.code, 'FORBIDDEN');
+    assert.equal(payload(denied).requestId, 'business_denied_1');
+    assert.ok(!denied.content[0].text.includes(token));
     assert.ok(!stderr.includes(token));
   } finally {
     await client.close();

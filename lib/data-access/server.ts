@@ -13,13 +13,13 @@ export function tokenHashFromRequest(request: Request): string {
   if (!match) throw new DataAccessError("UNAUTHORIZED", "専用のデータ接続トークンが必要です", 401);
   return createHash("sha256").update(match[1]).digest("hex");
 }
-const RPC_ERRORS: Record<string, [number, string]> = {
+export const RPC_ERRORS: Record<string, [number, string]> = {
   UNAUTHORIZED: [401, "接続が無効または期限切れです"], FORBIDDEN: [403, "この操作の権限がありません"],
   NOT_FOUND: [404, "対象が見つかりません"], CONFLICT: [409, "対象が変更されています。再取得してください"],
   IDEMPOTENCY_CONFLICT: [409, "同じ実行キーが別の内容で使用されています"], APPROVAL_REQUIRED: [409, "管理者による変更内容の確認が必要です"],
   EXPIRED: [409, "変更案の有効期限が切れています"], REJECTED: [409, "この変更案は却下されています"], INVALID_INPUT: [400, "指定された操作または値を確認してください"],
 };
-async function body(request: Request) {
+export async function readDataAccessBody(request: Request) {
   if (!(request.headers.get("content-type") || "").toLowerCase().startsWith("application/json")) throw new DataAccessError("INVALID_INPUT", "JSON形式で送信してください");
   if (Number(request.headers.get("content-length") || 0) > 32768) throw new DataAccessError("INVALID_INPUT", "送信内容が大きすぎます", 413);
   const reader = request.body?.getReader();
@@ -41,9 +41,9 @@ export async function handleDataAccess(request: Request, action: "read" | "prepa
     if (action === "apply") {
       if (!isUuid(planId)) throw new DataAccessError("INVALID_INPUT", "変更案のidを確認してください");
       // apply accepts no replacement values; its only input is the bound immutable plan ID.
-      if (request.body) { const input = await body(request); if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length) throw new DataAccessError("INVALID_INPUT", "実行時に変更内容を差し替えることはできません"); }
+      if (request.body) { const input = await readDataAccessBody(request); if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length) throw new DataAccessError("INVALID_INPUT", "実行時に変更内容を差し替えることはできません"); }
       payload = { id: planId };
-    } else payload = action === "read" ? validateReadInput(await body(request)) : validateChangeInput(await body(request));
+    } else payload = action === "read" ? validateReadInput(await readDataAccessBody(request)) : validateChangeInput(await readDataAccessBody(request));
     const { data, error } = await createDataAccessAdminClient().rpc("tsa_data_access_v1", { p_token_hash: tokenHash, p_action: action, p_payload: payload });
     if (error) {
       const code = /^DA_([A-Z_]+)$/.exec(error.message || "")?.[1];

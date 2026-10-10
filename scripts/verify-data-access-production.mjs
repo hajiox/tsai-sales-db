@@ -16,7 +16,7 @@ const resolveMcp = createRequire(path.join(mcpDir, 'package.json'));
 const { Client } = await import(pathToFileURL(resolveMcp.resolve('@modelcontextprotocol/client')).href);
 const { StdioClientTransport } = await import(pathToFileURL(resolveMcp.resolve('@modelcontextprotocol/client/stdio')).href);
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
-const client = new Client({ name: 'tsa-data-production-verification', version: '1.0.0' });
+const client = new Client({ name: 'tsa-data-production-verification', version: '1.1.0' });
 let connectionId;
 let connected = false;
 const payload = result => result.structuredContent ?? JSON.parse(result.content.find(item => item.type === 'text').text);
@@ -35,7 +35,10 @@ try {
   await client.connect(transport);
   connected = true;
   const tools = await client.listTools();
-  assert.equal(tools.tools.length, 17, 'Unexpected MCP tool list.');
+  assert.equal(tools.tools.length, 21, 'Unexpected MCP tool list.');
+  assert.equal(client.getServerVersion().version, '1.1.0', 'Unexpected MCP adapter version.');
+  const businessCatalog = payload(await client.callTool({ name: 'tsa_business_catalog', arguments: {} }));
+  assert.ok(!businessCatalog.ok && businessCatalog.error.code === 'FORBIDDEN', 'Limited connection unexpectedly accessed the full business catalog.');
   const read = payload(await client.callTool({ name: 'tsa_search_recipes', arguments: { limit: 100 } }));
   assert.ok(read.ok && read.data.items.length === 1 && read.data.items[0].id === record.id, 'Scoped read failed.');
   const detail = payload(await client.callTool({ name: 'tsa_get_recipe', arguments: { id: record.id } }));
@@ -59,8 +62,8 @@ try {
       ...(method === 'POST' ? { headers: { 'content-type': 'application/json' }, body: '{}' } : {}) });
     assert.equal(response.status, 401, 'Anonymous legacy access was not rejected.');
   }
-  console.log(JSON.stringify({ production: true, mcpHandshake: true, tools: 17, scopedRead: true, versionedDetail: true,
-    recordRestriction: true, resourceRestriction: true, readOnlyWriteDenied: true, preparedChanges: 0, immediateRevocation: true, anonymousLegacyAccessDenied: true }));
+  console.log(JSON.stringify({ production: true, mcpHandshake: true, tools: 21, adapterVersion: '1.1.0', scopedRead: true, versionedDetail: true,
+    recordRestriction: true, resourceRestriction: true, limitedBusinessCatalogDenied: true, readOnlyWriteDenied: true, preparedChanges: 0, immediateRevocation: true, anonymousLegacyAccessDenied: true }));
 } finally {
   try {
     if (connectionId) await db.query('update public.data_access_connections set revoked_at=coalesce(revoked_at,now()) where id=$1', [connectionId]);

@@ -5,6 +5,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 export const DATA_RESOURCES = ["recipes", "ingredients", "materials", "expenses", "reviews", "sales"] as const;
 export const DATA_SCOPES = [
+  "business:full",
   ...DATA_RESOURCES.map(resource => `${resource}:read`),
   ...["recipes", "ingredients", "materials", "expenses"].map(resource => `${resource}:write`),
 ];
@@ -32,8 +33,7 @@ export function isDataAccessId(value: unknown): value is string {
   return typeof value === "string" && uuid.test(value);
 }
 
-export function validateDataConnection(body: Record<string, unknown>) {
-  if (typeof body.label !== "string" || !body.label.trim() || body.label.trim().length > 80) throw new Error("接続名は1〜80文字で入力してください");
+export function validateDataConnectionPermissions(body: Record<string, unknown>) {
   if (!Array.isArray(body.scopes) || !body.scopes.length || body.scopes.length > DATA_SCOPES.length || body.scopes.some(scope => typeof scope !== "string" || !DATA_SCOPES.includes(scope))) throw new Error("許可する操作を選んでください");
   const scopes = body.scopes as string[];
   if (scopes.some(scope => scope.endsWith(":write") && !scopes.includes(scope.replace(/:write$/, ":read")))) throw new Error("更新を許可するデータ種類には閲覧も許可してください");
@@ -42,6 +42,13 @@ export function validateDataConnection(body: Record<string, unknown>) {
   for (const [resource, ids] of Object.entries(resourceIds)) {
     if (!(DATA_RESOURCES as readonly string[]).includes(resource) || !Array.isArray(ids) || ids.length > 200 || ids.some(id => !isDataAccessId(id))) throw new Error("対象IDはデータ種類ごとにUUIDの配列を指定してください（最大200件）");
   }
+  if (scopes.includes("business:full") && Object.keys(resourceIds).length) throw new Error("業務フルアクセスと対象IDの制限は同時に指定できません");
+  return { scopes: [...new Set(scopes)], resource_ids: Object.fromEntries(Object.entries(resourceIds).map(([resource, ids]) => [resource, [...new Set((ids as string[]).map(id => id.toLowerCase()))]])) };
+}
+
+export function validateDataConnection(body: Record<string, unknown>) {
+  if (typeof body.label !== "string" || !body.label.trim() || body.label.trim().length > 80) throw new Error("接続名は1〜80文字で入力してください");
+  const permissions = validateDataConnectionPermissions(body);
   const days = body.expiresInDays ?? 30;
   if (typeof days !== "number" || !Number.isInteger(days) || days < 1 || days > 90) throw new Error("有効期間は1〜90日です");
   const token = `tsa_data_${randomBytes(32).toString("base64url")}`;
@@ -49,7 +56,7 @@ export function validateDataConnection(body: Record<string, unknown>) {
     token,
     connection: {
       id: randomUUID(), label: body.label.trim(), token_hash: createHash("sha256").update(token).digest("hex"),
-      scopes: [...new Set(scopes)], resource_ids: Object.fromEntries(Object.entries(resourceIds).map(([resource, ids]) => [resource, [...new Set((ids as string[]).map(id => id.toLowerCase()))]])), max_limit: 50,
+      ...permissions, max_limit: 50,
       expires_at: new Date(Date.now() + days * 86400000).toISOString(),
     },
   };

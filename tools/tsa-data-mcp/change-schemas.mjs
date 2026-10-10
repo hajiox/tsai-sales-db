@@ -22,7 +22,6 @@ const version = z.string().regex(/^[a-f0-9]{32}$/);
 function valuesSchema(resource, operation) {
   const fields = {};
   for (const field of textFields[resource]) {
-    if (operation === 'update' && (field === 'category' || (resource === 'materials' && field === 'unit_quantity'))) continue;
     const text = z.string().max(field === 'name' ? 300 : 10000).refine(value => !value.includes('\u0000'), 'NUL は使用できません。');
     fields[field] = field === 'name' || field === 'category'
       ? text.refine(value => value.trim().length > 0, '空欄にはできません。').optional()
@@ -31,15 +30,15 @@ function valuesSchema(resource, operation) {
   if (operation === 'create') {
     fields.name = z.string().trim().min(1).max(300).refine(value => !value.includes('\u0000'));
     if (resource === 'recipes') fields.category = z.string().trim().min(1).max(10000).refine(value => !value.includes('\u0000'));
+  }
     for (const field of createNumberFields[resource]) {
       let value = z.number().min(0).max(1e9);
       if (['unit_quantity', 'yield_rate'].includes(field)) value = value.positive();
       if (['lot_size', 'case_quantity'].includes(field)) value = value.int();
-      fields[field] = requiredCreateFields[resource].includes(field) ? value.nullable() : value.nullable().optional();
+      fields[field] = operation === 'create' && requiredCreateFields[resource].includes(field) ? value.nullable() : value.nullable().optional();
     }
-    for (const field of createBooleanFields[resource]) fields[field] = requiredCreateFields[resource].includes(field) ? z.boolean() : z.boolean().optional();
-    if (resource === 'materials') fields.unit_quantity = z.string().max(10000).refine(value => !value.includes('\u0000')).nullable();
-  }
+    for (const field of createBooleanFields[resource]) fields[field] = operation === 'create' && requiredCreateFields[resource].includes(field) ? z.boolean() : z.boolean().optional();
+    if (resource === 'materials' && operation === 'create') fields.unit_quantity = z.string().max(10000).refine(value => !value.includes('\u0000')).nullable();
   return z.object(fields).strict().refine(value => Object.keys(value).length > 0, '変更項目を指定してください。');
 }
 

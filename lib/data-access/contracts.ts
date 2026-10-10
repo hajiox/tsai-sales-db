@@ -78,11 +78,9 @@ export function validateChangeInput(value: unknown): ChangeInput {
   const values = object(input.values);
   if (!Object.keys(values).length) throw new DataAccessError("INVALID_INPUT", "変更する項目が必要です");
   const textFields: readonly string[] = TEXT_FIELDS[resource];
-  const numericFields: readonly string[] = operation === "create" ? CREATE_NUMBER_FIELDS[resource] : [];
-  const booleanFields: readonly string[] = operation === "create" ? CREATE_BOOLEAN_FIELDS[resource] : [];
-  // Existing cost/price propagation is deliberately unavailable through this gateway.
-  const allowed = [...textFields.filter((field) => operation === "create" || field !== "category"), ...numericFields, ...booleanFields];
-  if (resource === "materials" && operation === "update") allowed.splice(allowed.indexOf("unit_quantity"), 1);
+  const numericFields: readonly string[] = CREATE_NUMBER_FIELDS[resource];
+  const booleanFields: readonly string[] = CREATE_BOOLEAN_FIELDS[resource];
+  const allowed = [...textFields, ...numericFields, ...booleanFields];
   keys(values, allowed);
   for (const [field, fieldValue] of Object.entries(values)) {
     if (textFields.includes(field)) {
