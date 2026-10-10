@@ -18,6 +18,7 @@ function load(relativePath, additionalModules = {}) {
   const loaded = { exports: {} };
   const requireStub = (name) => {
     if (Object.hasOwn(additionalModules, name)) return additionalModules[name];
+    if (name === "node:crypto") return require("node:crypto");
     if (name === "next/server") return { NextResponse: { json: Response.json } };
     if (name === "next-auth") return { getServerSession: async () => session };
     if (name === "@/app/api/auth/[...nextauth]/route") return { authOptions: {} };
