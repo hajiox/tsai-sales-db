@@ -1,10 +1,13 @@
+// @ts-ignore Native Node tests import the TypeScript source directly.
+import { isEcChannelOperational } from "./ec-channel-lifecycle.ts";
+
 export type AcquisitionKind = "sales" | "ec_profit" | "advertising";
 export type AcquisitionRoute = "api" | "bridge" | "manual" | "none";
 export type SavedAcquisitionRoute = Exclude<AcquisitionRoute, "none"> | "unknown";
 
 /** Limit new acquisition controls without removing historical task definitions. */
-export function activeAcquisitionTasks<T extends { channel: string }>(tasks: T[]): T[] {
-  return tasks.filter((task) => !["mercari", "tiktok", "qoo10"].includes(task.channel));
+export function activeAcquisitionTasks<T extends { channel: string }>(tasks: T[], period?: string | Date): T[] {
+  return tasks.filter((task) => isEcChannelOperational(task.channel, period));
 }
 
 export type SavedAcquisitionResult = { status: string; period_start?: string | null; period_end?: string | null; finished_at?: string | null };

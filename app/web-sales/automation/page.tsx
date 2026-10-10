@@ -1,5 +1,7 @@
 "use client";
 
+import { getVisibleEcChannels, isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
+import { EcOpeningPlaceholder } from "@/components/EcOpeningPlaceholder";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -216,10 +218,10 @@ export default function WebSalesAutomationPage() {
   const workflowTasks = useMemo(() => workflow === "ads"
     ? (data?.adTasks || [])
     : workflow === "profit"
-      ? activeAcquisitionTasks(data?.profitTasks || [])
-      : activeAcquisitionTasks(data?.tasks || []), [workflow, data?.adTasks, data?.profitTasks, data?.tasks]);
+      ? activeAcquisitionTasks(data?.profitTasks || [], endDate)
+      : activeAcquisitionTasks(data?.tasks || [], endDate), [workflow, data?.adTasks, data?.profitTasks, data?.tasks, endDate]);
   const allTasks = [...(data?.tasks || []), ...(data?.adTasks || []), ...(data?.profitTasks || [])];
-  const workflowChannels = useMemo(() => workflowTasks.map((task) => task.channel), [workflowTasks]);
+  const workflowChannels = useMemo(() => workflowTasks.filter(task => isEcChannelOperational(task.channel)).map((task) => task.channel), [workflowTasks]);
 
   const activeJobs = useMemo(
     () => {
@@ -433,6 +435,7 @@ export default function WebSalesAutomationPage() {
   };
 
   const enqueue = async (channels: string[], incompleteOnly = false) => {
+    channels = channels.filter(channel => isEcChannelOperational(channel));
     if (channels.length === 0) {
       toast.error(workflow === "ads" ? "実行する広告媒体を選択してください" : "実行するECを選択してください");
       return;
@@ -785,6 +788,7 @@ export default function WebSalesAutomationPage() {
                       </div>
                     );
                   })}
+                  {workflow !== "ads" && getVisibleEcChannels(endDate).includes("makeshop") && <EcOpeningPlaceholder />}
                 </div>
               </div>
 

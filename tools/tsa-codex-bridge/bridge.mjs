@@ -1,4 +1,5 @@
 import { taskModelPolicy, acceptsTaskModelParameters, applyTaskModelPolicy, TASK_MODEL_POLICIES, TASK_MODEL_POLICY_VERSION, BROWSER_COMPLETION_POLICY } from "./task-model-policy.mjs";
+import { ecJobLifecycleStop, isRetiredEcArchiveJob } from "./ec-channel-lifecycle.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -90,6 +91,7 @@ const SKILL_CONTRACT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "sk
 const SKILL_CONTRACT = loadSkillContract(SKILL_CONTRACT_PATH);
 const TASK_CONTRACTS = Object.freeze(SKILL_CONTRACT.tasks);
 const EC_PRICE_TARGETS = new Set(["amazon", "rakuten", "yahoo", "mercari", "base", "qoo10", "tiktok"]);
+const ACTIVE_EC_PRODUCT_TARGETS = new Set(["amazon", "rakuten", "yahoo", "base"]);
 const EC_PRODUCT_NAME_MAX_LENGTHS = {
   amazon: 75, rakuten: 127, yahoo: 75, mercari: 130, base: 255, qoo10: 100, tiktok: 255,
 };
@@ -337,6 +339,17 @@ async function runCarrierCodex({prompt, workDir, resultPath, schemaPath, addDirs
 
 async function executeJob(job) {
   assertNoConversationContext(job);
+  // Revalidate archived originals only. Never fall through to an official API/browser.
+  if (isRetiredEcArchiveJob(job)) {
+    if (job.task_key === "web_sales_import" && CHANNELS[job.channel]
+      && await tryReuseSalesArtifacts(job, CHANNELS[job.channel].archiveFolder)) return;
+    if (job.task_key === "ec_profit_import" && EC_PROFIT_CHANNELS[job.channel]) {
+      const workDir = join(config.jobRoot, job.id);
+      mkdirSync(workDir, { recursive: true });
+      if (await tryReuseEcProfitJson(job, EC_PROFIT_CHANNELS[job.channel].archiveFolder, workDir)) return;
+    }
+  }
+  if (await stopInactiveEcJob(job)) return;
   if (job.task_key === "connection_test") {
     const version = spawnSync(refreshCodexPath(), ["--version"], { encoding: "utf8", windowsHide: true });
     if (version.status !== 0) throw new Error(version.stderr || "Codex CLIを起動できません");
@@ -691,6 +704,19 @@ async function executeJob(job) {
     result,
     errorMessage: status === "failed" ? finalSummary : null,
   });
+}
+
+async function stopInactiveEcJob(job, packet = null) {
+  const stop = ecJobLifecycleStop(job, packet);
+  if (!stop) return false;
+  await updateJob(job.id, {
+    status: "needs_review", progress: 100,
+    currentStep: "退店・開店準備中のため実行対象外",
+    message: stop.message, errorMessage: null,
+    eventType: "ec_channel_inactive",
+    result: { summary: stop.message, inactiveChannels: stop.channels },
+  });
+  return true;
 }
 
 function validateDocScannerFaxSummaryJobParameters(input) {
@@ -3720,12 +3746,15 @@ function validateEcProductNameGenerateJobParameters(input) {
   }
   const unifiedTargets = Array.isArray(unifiedRule.targets)
     ? unifiedRule.targets.map((entry) => String(entry?.id || "").trim()).sort() : [];
+  // Retain old saved generation snapshots; new packets contain only operational ECs.
+  const supportedTargetSet = [[...ACTIVE_EC_PRODUCT_TARGETS], [...EC_PRICE_TARGETS]]
+    .some((targets) => unifiedTargets.join("|") === targets.sort().join("|"));
   if (unifiedRule.exactSameValueForAllSites !== true
     || Number(unifiedRule.maxLength) !== EC_COMMON_PRODUCT_NAME_MAX_LENGTH
-    || unifiedTargets.join("|") !== [...EC_PRICE_TARGETS].sort().join("|")) {
+    || !supportedTargetSet) {
     throw new Error("全EC共通商品名の生成ルールが正しくありません");
   }
-  for (const site of EC_PRICE_TARGETS) {
+  for (const site of unifiedTargets) {
     const rule = siteRules[site] && typeof siteRules[site] === "object" && !Array.isArray(siteRules[site])
       ? siteRules[site] : {};
     const platformMax = Number(rule.platformMaxLength);
@@ -4289,6 +4318,7 @@ async function executeRecipeReviewJob(job) {
   const collecting = job.task_key === "recipe_reviews_collect";
   const endpoint = `/api/web-sales/codex-bridge/jobs/${job.id}/reviews`;
   const { packet } = await api(endpoint, { method: "POST", body: {workerId:config.workerId,mode:"packet"} });
+  if (collecting && await stopInactiveEcJob(job, packet)) return;
   const workDir = join(config.jobRoot, job.id); mkdirSync(workDir,{recursive:true});
   const schema = resolve(dirname(fileURLToPath(import.meta.url)), collecting ? "review-collection.schema.json" : "review-analysis.schema.json");
   const skillPrompt = collecting ? "Use $collect-aizu-reviews." : "Use $analyze-aizu-reviews.";

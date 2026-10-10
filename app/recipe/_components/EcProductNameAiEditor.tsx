@@ -153,7 +153,7 @@ export default function EcProductNameAiEditor({ recipeId, onChange }: Props) {
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-200 pt-3">
         <div>
           <p className="text-sm font-bold text-gray-800">全EC共通の商品名をAI生成</p>
-          <p className="text-[11px] text-gray-500">7サイトのSEO・禁止表現・文字数制限をまとめて考慮し、同じ1件を作成します。</p>
+          <p className="text-[11px] text-gray-500">稼働中4サイトのSEO・禁止表現・文字数制限をまとめて考慮し、同じ1件を作成します。</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {generation && !generating && <button
@@ -190,7 +190,7 @@ export default function EcProductNameAiEditor({ recipeId, onChange }: Props) {
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-hidden p-0">
           <DialogHeader className="border-b px-5 pb-4 pt-5 pr-12">
             <DialogTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-blue-600" />全EC共通商品名 AI分析</DialogTitle>
-            <DialogDescription>GPT-5.6 Solが7サイトの条件を横断して作成した1件です。採用後、レシピを保存するまではECへ反映されません。</DialogDescription>
+            <DialogDescription>Solが稼働中4サイトの条件を横断して作成した1件です。採用後、レシピを保存するまではECへ反映されません。</DialogDescription>
           </DialogHeader>
           {generation && <div className="overflow-y-auto px-5 py-4">
             <div className="border-l-4 border-blue-500 bg-blue-50 px-4 py-3 text-sm text-blue-950">
@@ -202,7 +202,7 @@ export default function EcProductNameAiEditor({ recipeId, onChange }: Props) {
             </div>
             <div className="mt-4 border-y py-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs font-bold text-gray-500">Amazon・楽天・Yahoo・メルカリ・BASE・Qoo10・TikTok 共通</p>
+                <p className="text-xs font-bold text-gray-500">Amazon・楽天・Yahoo・BASE 共通</p>
                 <span className="font-mono text-xs text-gray-500">{generation.suggestion.name.length}/{EC_COMMON_PRODUCT_NAME_MAX_LENGTH}文字</span>
               </div>
               <p className="mt-2 break-words text-base font-bold leading-relaxed text-gray-950">{generation.suggestion.name}</p>

@@ -12,6 +12,7 @@ import {
 } from "@/lib/ec-product-name-codex";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import type { CodexJobStatus } from "@/lib/web-sales-codex/types";
+import { isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,7 +85,8 @@ async function loadGenerationInput(recipeId: string) {
     janCode: clip(recipe.jan_code, 32),
     productCode: clip(recipe.product_code, 100),
   };
-  const siteRules = Object.fromEntries(EC_PRODUCT_NAME_TARGETS.map(({ id, label }) => [id, {
+  const operationalTargets = EC_PRODUCT_NAME_TARGETS.filter(({ id }) => isEcChannelOperational(id));
+  const siteRules = Object.fromEntries(operationalTargets.map(({ id, label }) => [id, {
     label,
     platformMaxLength: EC_PRODUCT_NAME_RULES[id].platformMaxLength,
     preferredMaxLength: EC_PRODUCT_NAME_RULES[id].generationMaxLength,
@@ -93,7 +95,7 @@ async function loadGenerationInput(recipeId: string) {
   const unifiedRule = {
     exactSameValueForAllSites: true,
     maxLength: EC_COMMON_PRODUCT_NAME_MAX_LENGTH,
-    targets: EC_PRODUCT_NAME_TARGETS.map(({ id, label }) => ({ id, label })),
+    targets: operationalTargets.map(({ id, label }) => ({ id, label })),
   };
   return { supabase, recipe, sourceSnapshot, siteRules, unifiedRule };
 }

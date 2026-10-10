@@ -3,6 +3,10 @@ name: tsa-web-sales-analysis
 description: Analyze TSA's compact WEB sales packet for either the 1st-15th interim snapshot or the monthly final, then produce evidence-backed management actions and a short floor-staff summary. Use only for TSA Codex Bridge WEB sales analysis jobs.
 ---
 
+## EC運用範囲（2026-10-01以降）
+
+メルカリShops・Qoo10・TikTok Shopは2026年9月末に退店済み。過去の保存データを分析・比較から削除しない。10月以降の新規取得を促したり、退店先の未取得を現行運用の不足として扱ったりしない。makeshopは開店準備中で、売上0円・取得済み・稼働中と推測しない。対象期間と渡されたpacketの範囲を守る。
+
 # TSA WEB Sales Analysis
 
 ## Bridge Input Contract

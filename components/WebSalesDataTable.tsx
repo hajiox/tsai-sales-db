@@ -2,6 +2,8 @@
 "use client"
 
 import React, { useState, useRef, useEffect, useMemo } from "react"
+import { isEcChannelOperational, getVisibleEcChannels } from "@/lib/ec-channel-lifecycle"
+import { EcOpeningPlaceholder } from "@/components/EcOpeningPlaceholder"
 import { Input } from "@nextui-org/react"
 import { WebSalesData } from "@/types/db"
 import { Plus, Trash2, Edit, EyeOff, Link2, ChevronRight, ChevronDown, ChevronsUpDown, GripVertical, Search, X } from "lucide-react"
@@ -508,7 +510,8 @@ export default function WebSalesDataTable({
     { key: 'base_count', label: 'BASE', bgColor: 'bg-green-100' },
     { key: 'qoo10_count', label: 'Qoo10', bgColor: 'bg-pink-100' },
     { key: 'tiktok_count', label: 'TikTok', bgColor: 'bg-teal-100' },
-  ]
+  ].filter(site => isEcChannelOperational(site.key.replace('_count', ''), month)
+    || filteredItems.some(row => [row[site.key as keyof WebSalesData], row[site.key.replace('_count', '_amount') as keyof WebSalesData]].some(value => value != null && Number(value) !== 0)))
 
   const siteNames: Record<string, string> = {
     'amazon_count': 'Amazon',
@@ -817,7 +820,7 @@ export default function WebSalesDataTable({
                               return (
                                 <div key={`mobile-${cellKey}`} className={`rounded-md border border-slate-200 p-2 ${site.bgColor}`}>
                                   <div className="mb-2 flex items-center justify-between gap-2">
-                                    <span className="text-xs font-semibold text-slate-700">{site.label}</span>
+                                    <span className="text-xs font-semibold text-slate-700">{site.label}{!isEcChannelOperational(site.key.replace("_count", ""), month) && "（退店・保存済み）"}</span>
                                     <button
                                       type="button"
                                       onClick={(event) => {
@@ -851,7 +854,7 @@ export default function WebSalesDataTable({
                                   ) : (
                                     <button
                                       type="button"
-                                      onClick={() => onEdit(row.product_id, site.key, count)}
+                                      onClick={() => { if (isEcChannelOperational(site.key.replace("_count", ""), month)) onEdit(row.product_id, site.key, count) }}
                                       className="min-h-11 w-full rounded bg-white/80 px-3 text-center text-base font-bold text-slate-900"
                                       aria-label={`${site.label}の販売数${count}を編集`}
                                     >
@@ -1088,7 +1091,7 @@ export default function WebSalesDataTable({
                                       </button>
                                     </div>
                                   ) : (
-                                    <span onClick={() => onEdit(row.product_id, site.key, count)}>
+                                    <span onClick={() => { if (isEcChannelOperational(site.key.replace("_count", ""), month)) onEdit(row.product_id, site.key, count) }}>
                                       {count}
                                     </span>
                                   )}
@@ -1254,6 +1257,7 @@ export default function WebSalesDataTable({
       )}
 
       {/* 🔥 商品追加モーダル */}
+      {getVisibleEcChannels(month).includes("makeshop") && <EcOpeningPlaceholder className="my-3" />}
       {isAddingProduct && (
         <ProductAddModal
           isOpen={isAddingProduct}

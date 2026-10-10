@@ -176,6 +176,7 @@ export default function DashboardView({ initialDate }: DashboardViewProps) {
                 <section id="sales-summary" className="order-1 min-w-0 scroll-mt-24 lg:order-none">
                     <SalesSummaryTable
                         dailyData={dailyData}
+                        period={selectedDate}
                         monthlyData={monthlyData}
                         isLoading={dailyLoading}
                     />

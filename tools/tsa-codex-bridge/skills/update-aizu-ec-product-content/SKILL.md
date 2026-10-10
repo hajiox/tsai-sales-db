@@ -1,7 +1,13 @@
 ---
 name: update-aizu-ec-product-content
-description: TSAが固定した商品識別子、商品ポイント、Web商品説明を使い、ログイン済みAmazon、楽天、Yahoo、メルカリShops、BASE、Qoo10、TikTokへ安全に反映するCodex Bridge専用Skill。
+description: TSAが固定した商品識別子、商品ポイント、Web商品説明を使い、ログイン済みAmazon、楽天、Yahoo、BASEへ安全に反映するCodex Bridge専用Skill。
 ---
+
+## EC運用範囲（2026-10-01以降）
+
+- 現行対象はAmazon・楽天・Yahoo・BASEだけ。メルカリShops・Qoo10・TikTok Shopは2026年9月末で退店済みで、新たなAPI取得、ブラウザ巡回、ログイン、登録・更新を実行しない。保存済みの商品紐付け・レビュー・履歴は削除しない。
+- makeshopは開店準備中。表示用の枠を残し、商品操作・収集・接続確認はまだ実行しない。
+- 入力に退店先やmakeshopが含まれる場合は勝手に別ECへ置換せず、対象外の理由を返す。以下の旧EC向け資料は過去の記録であり、この運用範囲を優先する。
 
 ## Browser route order (2026-09-21)
 
@@ -28,7 +34,7 @@ TSA管理者が保存・確認した1商品の商品ポイントとWeb商品説�
 - Amazonは `fieldLayout=separate` とし、商品ポイントを「商品の仕様・特長」等の複数のbullet欄へ1行ずつ、Web商品説明を商品説明欄へ別々に登録する。
 - Amazon以外は `fieldLayout=combined` とし、同一の商品説明欄へ商品ポイントを上、空行、Web商品説明を下の順で登録する。
 - 楽天とYahooは `markerStyle=square` の `■` 版を一字一句使う。絵文字 `✅️` を登録しない。
-- Amazon、メルカリShops、BASE、Qoo10、TikTokは `markerStyle=check` の `✅️` 版を一字一句使う。
+- Amazon、BASEは `markerStyle=check` の `✅️` 版を一字一句使う。
 - `productMappings`、`verifiedProductIdentifiers`、JAN、内容量、保存方法を使って同一商品を確認する。類似商品へ変更しない。
 - 変更可能なのは商品ポイント欄と商品説明欄だけ。商品名、キャッチコピー、価格、セール価格、ポイント施策、在庫、配送、送料、税、画像、カテゴリ、バリエーション、広告を変更しない。
 - 一括選択・一括編集を使わない。

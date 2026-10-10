@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { getVisibleEcChannels, isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
 import { nf } from "@/lib/utils";
 
 type ValueConfig = {
@@ -31,6 +32,7 @@ interface SalesSummaryTableProps {
   dailyData: Record<string, any> | null;
   monthlyData: Record<string, any> | null;
   isLoading: boolean;
+  period?: string | Date;
 }
 
 const toNumber = (value: unknown): number | null => {
@@ -76,6 +78,7 @@ const SalesSummaryTable: React.FC<SalesSummaryTableProps> = ({
   dailyData,
   monthlyData,
   isLoading,
+  period,
 }) => {
   if (isLoading) {
     return (
@@ -482,7 +485,15 @@ const SalesSummaryTable: React.FC<SalesSummaryTableProps> = ({
                     {section.title}
                   </td>
                 </tr>
-                {section.rows.map((row) => {
+                {section.title === "EC売上" && getVisibleEcChannels(period).includes("makeshop") && <tr>
+                  <td className="border border-slate-300 px-3 py-2">makeshop</td>
+                  <td colSpan={8} className="border border-slate-300 px-3 py-2 text-center text-slate-500">開店準備中</td>
+                </tr>}
+                {section.rows.filter((row) => {
+                  const channel = row.daily?.key?.replace(/_amount$/, "");
+                  if (!channel || isEcChannelOperational(channel, period)) return true;
+                  return [getValue(row.daily), getValue(row.monthly)].some(value => value !== null && value !== 0);
+                }).map((row) => {
                   const dailyValue = getValue(row.daily);
                   const monthlyValue = getValue(row.monthly);
                   const targetValue = getValue(row.target);

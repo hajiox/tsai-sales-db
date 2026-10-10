@@ -1,6 +1,8 @@
 // components/web-sales-input-view.tsx ver.2
 'use client';
 
+import { getVisibleEcChannels, isEcChannelOperational } from '@/lib/ec-channel-lifecycle';
+import { EcOpeningPlaceholder } from '@/components/EcOpeningPlaceholder';
 import { useEffect, useState } from 'react';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 import { WEB_SALES_CHANNELS, sumWebSalesAmounts } from '@/lib/web-sales-amounts';
@@ -84,7 +86,7 @@ const WebSalesInputView = () => {
   const supabase = getSupabaseBrowserClient();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
-  const [ym, setYm] = useState('2025-04');
+  const [ym, setYm] = useState(() => new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 7));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showProductForm, setShowProductForm] = useState(false);
@@ -304,6 +306,9 @@ const WebSalesInputView = () => {
            row.mercari_count + row.base_count + row.qoo10_count + row.tiktok_count;
   }, 0);
 
+  const inputChannels = WEB_SALES_CHANNELS.filter(channel => isEcChannelOperational(channel, ym)
+    || rows.some(row => row[`${channel}_count`] !== 0));
+  const channelNames: Record<string, string> = { amazon: 'Amazon', rakuten: '楽天', yahoo: 'Yahoo!', mercari: 'メルカリ', base: 'BASE', qoo10: 'Qoo10', tiktok: 'TikTok' };
   return (
     <AcquisitionRouteProvider reportMonth={ym}>
     <div className="p-4 space-y-3">
@@ -457,6 +462,7 @@ const WebSalesInputView = () => {
       )}
 
       {/* メインテーブル */}
+      {getVisibleEcChannels(ym).includes("makeshop") && <EcOpeningPlaceholder className="mb-3" />}
       {!loading && (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse border text-xs">
@@ -466,13 +472,7 @@ const WebSalesInputView = () => {
                 <th className="border px-1 py-1 text-center w-12">シリーズ</th>
                 <th className="border px-1 py-1 text-center w-12">商品番号</th>
                 <th className="border px-1 py-1 text-right w-16">通常価格</th>
-                <th className="border px-1 py-1 text-center w-16">Amazon</th>
-                <th className="border px-1 py-1 text-center w-16">楽天</th>
-                <th className="border px-1 py-1 text-center w-16">Yahoo!</th>
-                <th className="border px-1 py-1 text-center w-16">メルカリ</th>
-                <th className="border px-1 py-1 text-center w-16">BASE</th>
-                <th className="border px-1 py-1 text-center w-16">Qoo10</th>
-                <th className="border px-1 py-1 text-center w-16">TikTok</th>
+                {inputChannels.map(channel => <th key={channel} className="border px-1 py-1 text-center w-16">{channelNames[channel]}</th>)}
                 <th className="border px-1 py-1 text-center w-16">合計数</th>
                 <th className="border px-1 py-1 text-right w-20">売上</th>
                 <th className="border px-1 py-1 text-center w-12">操作</th>
@@ -481,7 +481,7 @@ const WebSalesInputView = () => {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="border px-4 py-6 text-center text-gray-500 text-sm">
+                  <td colSpan={inputChannels.length + 7} className="border px-4 py-6 text-center text-gray-500 text-sm">
                     選択した月のデータがありません
                   </td>
                 </tr>
@@ -504,69 +504,11 @@ const WebSalesInputView = () => {
                       <td className="border px-1 py-0.5 text-center">{r.series_name}</td>
                       <td className="border px-1 py-0.5 text-center">{r.product_number}</td>
                       <td className="border px-1 py-0.5 text-right">¥{r.price.toLocaleString()}</td>
-                      <td className="border px-0.5 py-0.5">
-                        <input
-                          type="number"
-                          value={r.amazon_count}
-                          onChange={(e) => updateCount(i, 'amazon_count', e.target.value)}
-                          className="w-full text-right border-0 bg-transparent px-1 py-0.5 focus:bg-white focus:border focus:border-blue-500 rounded text-xs"
-                          min="0"
-                        />
-                      </td>
-                      <td className="border px-0.5 py-0.5">
-                        <input
-                          type="number"
-                          value={r.rakuten_count}
-                          onChange={(e) => updateCount(i, 'rakuten_count', e.target.value)}
-                          className="w-full text-right border-0 bg-transparent px-1 py-0.5 focus:bg-white focus:border focus:border-blue-500 rounded text-xs"
-                          min="0"
-                        />
-                      </td>
-                      <td className="border px-0.5 py-0.5">
-                        <input
-                          type="number"
-                          value={r.yahoo_count}
-                          onChange={(e) => updateCount(i, 'yahoo_count', e.target.value)}
-                          className="w-full text-right border-0 bg-transparent px-1 py-0.5 focus:bg-white focus:border focus:border-blue-500 rounded text-xs"
-                          min="0"
-                        />
-                      </td>
-                      <td className="border px-0.5 py-0.5">
-                        <input
-                          type="number"
-                          value={r.mercari_count}
-                          onChange={(e) => updateCount(i, 'mercari_count', e.target.value)}
-                          className="w-full text-right border-0 bg-transparent px-1 py-0.5 focus:bg-white focus:border focus:border-blue-500 rounded text-xs"
-                          min="0"
-                        />
-                      </td>
-                      <td className="border px-0.5 py-0.5">
-                        <input
-                          type="number"
-                          value={r.base_count}
-                          onChange={(e) => updateCount(i, 'base_count', e.target.value)}
-                          className="w-full text-right border-0 bg-transparent px-1 py-0.5 focus:bg-white focus:border focus:border-blue-500 rounded text-xs"
-                          min="0"
-                        />
-                      </td>
-                      <td className="border px-0.5 py-0.5">
-                        <input
-                          type="number"
-                          value={r.qoo10_count}
-                          onChange={(e) => updateCount(i, 'qoo10_count', e.target.value)}
-                          className="w-full text-right border-0 bg-transparent px-1 py-0.5 focus:bg-white focus:border focus:border-blue-500 rounded text-xs"
-                          min="0"
-                        />
-                      </td>
-                      <td className="border px-0.5 py-0.5">
-                        <input
-                          type="number"
-                          value={r.tiktok_count}
-                          onChange={(e) => updateCount(i, 'tiktok_count', e.target.value)}
-                          className="w-full text-right border-0 bg-transparent px-1 py-0.5 focus:bg-white focus:border focus:border-blue-500 rounded text-xs"
-                          min="0"
-                        />
-                      </td>
+                      {inputChannels.map(channel => <td key={channel} className="border px-0.5 py-0.5">
+                        <input type="number" value={r[`${channel}_count`]} disabled={!isEcChannelOperational(channel, ym)}
+                          onChange={e => updateCount(i, `${channel}_count`, e.target.value)}
+                          className="w-full text-right border-0 bg-transparent px-1 py-0.5 focus:bg-white rounded text-xs disabled:text-slate-500" min="0" />
+                      </td>)}
                       <td className="border px-1 py-0.5 text-center font-semibold">
                         {total_count}
                       </td>

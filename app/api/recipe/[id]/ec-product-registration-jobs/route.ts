@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { inactiveEcOperationTargets, ecOperationBlockedMessage } from "@/lib/ec-operation-policy";
 import { randomUUID } from "node:crypto";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
@@ -116,6 +117,8 @@ export async function POST(
 ) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const inactiveTargets = inactiveEcOperationTargets([EC_PRODUCT_REGISTER_TARGET]);
+  if (inactiveTargets.length) return NextResponse.json({ error: ecOperationBlockedMessage(inactiveTargets), code: "EC_CHANNEL_INACTIVE" }, { status: 409 });
   try {
     const { id: recipeId } = await params;
     const body = await request.json();

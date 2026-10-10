@@ -21,6 +21,7 @@ let configuredCapabilities = [{ kind: 'sales', channel: 'yahoo', preferred_route
 const writes = [];
 const originalLoad = Module._load;
 Module._load = function (request, parent, isMain) {
+  if (request === '@/lib/ec-channel-lifecycle') return originalLoad.call(this, path.join(__dirname, '../lib/ec-channel-lifecycle.ts'), parent, isMain);
   if (request === '../web-sales-automation/sync' && parent.filename.endsWith(`${path.sep}dispatch.ts`)) return {
     getWebSalesAutomationServiceClient: () => db,
     runChannelSync: async () => { salesCalls++; return salesOutcome; },
@@ -138,6 +139,21 @@ async function main() {
     assert.equal(writes.at(-1).result.persisted, false);
     assert.equal(salesCalls, salesCallsBeforePolicy, 'Stale queued Yahoo sales must not call the API provider');
     assert.equal(officialFinanceCalls, officialFinanceCallsBeforePolicy, 'Stale queued Yahoo costs must not call a finance API provider');
+  }
+  for (const channel of ['mercari', 'qoo10', 'tiktok', 'makeshop']) {
+    configuredCapabilities = [{ kind: 'sales', channel, preferred_route: 'api', api_ready: true }];
+    const callsBefore = { inserted, salesCalls, officialFinanceCalls, bridge: bridgeCalls.length };
+    for (const lockedPeriod of [period, { startDate: '2026-10-01', endDate: '2026-10-09', reportMonth: '2026-10-01' }]) {
+      const blocked = await enqueueFinanceAcquisitions({ kind: 'sales', channels: [channel], period: lockedPeriod, allowBridge: true });
+      assert.equal(blocked.results[0].status, 'skipped', 'Retirement must be enforced even if a stale capability advertises an API');
+      assert.equal(blocked.results[0].route, 'none');
+      queuedRow.channel = channel; queuedRow.kind = 'sales';
+      queuedRow.period_start = lockedPeriod.startDate; queuedRow.period_end = lockedPeriod.endDate;
+      queuedRow.report_month = lockedPeriod.reportMonth;
+      assert.equal((await executeAcquisitionRun('api-run')).status, 'skipped', 'Previously queued work cannot contact a retired/preparing store');
+    }
+    assert.deepEqual({ inserted, salesCalls, officialFinanceCalls, bridge: bridgeCalls.length }, callsBefore,
+      'Blocked acquisition performs no provider calls or new queue inserts');
   }
   await assert.rejects(enqueueFinanceAcquisitions({kind:'sales',channels:['yahoo'],period:{startDate:'2099-01-01',endDate:'2099-01-31',reportMonth:'2099-01-01'}}), /未来の期間/, 'future periods cannot be saved as empty completed results');
   console.log('Finance dispatch regression tests passed: auth waits, actual persistence, retry prevention, Yahoo Bridge selection and abandoned API runs.');

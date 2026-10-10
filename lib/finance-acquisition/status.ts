@@ -7,7 +7,7 @@ export async function getAcquisitionStatus(month:string) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error("対象月が正しくありません");
   const db=getWebSalesAutomationServiceClient();const reportMonth=`${month}-01`;
   const [capabilities,runs,sales,profit,jobs,summary,adCosts]=await Promise.all([
-    getFinanceCapabilities(),
+    getFinanceCapabilities(month),
     db.from("web_sales_acquisition_runs").select("kind,channel,route,status,result,error_message,period_start,period_end,started_at,completed_at").eq("report_month",reportMonth).order("started_at",{ascending:false}).limit(100),
     db.from("web_sales_sync_runs").select("channel,status,metadata,period_start,period_end,completed_at").eq("report_month",reportMonth).eq("status","success").order("completed_at",{ascending:false}).limit(100),
     db.from("ec_profit_monthly").select("channel,coverage_level,source_job_id,raw_summary,period_start,period_end,imported_at").eq("report_month",reportMonth),

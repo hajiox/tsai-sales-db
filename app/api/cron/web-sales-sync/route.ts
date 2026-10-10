@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { getReportMonth } from "@/lib/web-sales-automation/date";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
-import { ACTIVE_EC_CHANNELS } from "@/lib/web-sales-abcd/monthly";
-const activeChannel = (channel: string) => (ACTIVE_EC_CHANNELS as readonly string[]).includes(channel);
+import { getOperationalEcChannels, isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
 import { enqueueFinanceAcquisitions } from "@/lib/finance-acquisition/dispatch";
 import { validatePeriod } from "@/lib/web-sales-automation/date";
 import type { AcquisitionKind } from "@/lib/finance-acquisition/capabilities";
@@ -49,7 +48,7 @@ async function enqueueIncompleteSettlementRetryPeriod(input: {
 }) {
   const period = settlementPeriodMonthsAgo(input.year, input.monthIndex, input.monthsAgo);
   const dueChannels = EC_PROFIT_CODEX_TASKS
-    .filter((task) => activeChannel(task.channel))
+    .filter((task) => isEcChannelOperational(task.channel))
     .map((task) => task.channel as EcProfitRetryChannel)
     .filter((channel) => isAutomaticSettlementRetryDue({
       channel,
@@ -189,7 +188,7 @@ export async function GET(request: Request) {
     const [salesJobs, adJobs] = await Promise.all([
       enqueueFinancialJobs({
         kind: "sales",
-        channels: [...ACTIVE_EC_CHANNELS],
+        channels: getOperationalEcChannels(),
         startDate: periodStart,
         endDate: periodEnd,
         triggerType,
@@ -211,7 +210,7 @@ export async function GET(request: Request) {
     const profitJobs = shouldQueueMonthlyExpenses
       ? await enqueueFinancialJobs({
           kind: "ec_profit",
-          channels: EC_PROFIT_CODEX_TASKS.filter((task) => activeChannel(task.channel)).map((task) => task.channel),
+          channels: EC_PROFIT_CODEX_TASKS.filter((task) => isEcChannelOperational(task.channel)).map((task) => task.channel),
           startDate: periodStart,
           endDate: periodEnd,
           triggerType,
@@ -222,7 +221,7 @@ export async function GET(request: Request) {
     const estimateResults = [];
     if (shouldQueueMonthlyExpenses) {
       const supabase = getWebSalesAutomationServiceClient();
-      for (const task of EC_PROFIT_CODEX_TASKS.filter((task) => activeChannel(task.channel))) {
+      for (const task of EC_PROFIT_CODEX_TASKS.filter((task) => isEcChannelOperational(task.channel))) {
         estimateResults.push(await upsertEcProfitEstimate({
           supabase,
           channel: task.channel as EcProfitChannel,

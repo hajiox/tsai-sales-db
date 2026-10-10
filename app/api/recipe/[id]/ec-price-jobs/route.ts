@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { inactiveEcOperationTargets, ecOperationBlockedMessage } from "@/lib/ec-operation-policy";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
@@ -384,6 +385,8 @@ export async function POST(
         return NextResponse.json({ error: "再実行が必要なEC・商品LPはありません" }, { status: 409 });
       }
     }
+    const inactiveTargets = inactiveEcOperationTargets(targets);
+    if (inactiveTargets.length) return NextResponse.json({ error: ecOperationBlockedMessage(inactiveTargets), code: "EC_CHANNEL_INACTIVE" }, { status: 409 });
     const productMappings = await loadEcPriceProductMappings(
       supabase,
       recipeSnapshot.linkedProductId,

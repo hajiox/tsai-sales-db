@@ -5,6 +5,7 @@ import { validatePeriod } from "@/lib/web-sales-automation/date";
 import type { WebSalesChannel } from "@/lib/web-sales-automation/types";
 import type { EnqueueCodexJobsInput } from "./types";
 import { assertAnalysisPeriod } from "@/lib/web-sales-analysis/period";
+import { isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
 
 export function isCodexBridgeAuthorized(request: Request) {
   const expected = process.env.TSA_CODEX_BRIDGE_TOKEN?.trim();
@@ -19,19 +20,21 @@ export function isCodexBridgeAuthorized(request: Request) {
 export async function enqueueCodexJobs(input: EnqueueCodexJobsInput) {
   const taskKey = input.taskKey || "web_sales_import";
   const period = validatePeriod(input.startDate, input.endDate);
+  const channels = input.channels.filter(channel => isEcChannelOperational(channel) && isEcChannelOperational(channel, period.endDate));
+  if (channels.length === 0) return [];
   const supabase = getWebSalesAutomationServiceClient();
   const now = new Date().toISOString();
   const { data: activeJobs, error: activeError } = await supabase
     .from("web_sales_codex_jobs")
     .select("channel")
     .eq("task_key", taskKey)
-    .in("channel", input.channels)
+    .in("channel", channels)
     .eq("period_start", period.startDate)
     .eq("period_end", period.endDate)
     .in("status", ["queued", "running"]);
   if (activeError) throw new Error(`実行中タスクを確認できません: ${activeError.message}`);
   const activeChannels = new Set((activeJobs || []).map((job) => String(job.channel)));
-  const rows = input.channels
+  const rows = channels
     .filter((channel) => !activeChannels.has(channel))
     .map((channel) => ({
     task_key: taskKey,

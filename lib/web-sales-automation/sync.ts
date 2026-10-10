@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { findBestMatchSimplified, type Product } from "@/lib/csvHelpers";
 import { getBulkProductUnitPrices } from "@/lib/unitPriceHelper";
 import { hasPackConflict } from "@/lib/sales-price-reconciliation";
+import { ecChannelUnavailableReason, isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
 import { getChannelConfigStatusAsync } from "./config";
 import { fetchChannelSales } from "./connectors";
 import { ActualSalesAmountUnavailableError } from "./actual-sales-policy";
@@ -43,6 +44,10 @@ export async function runChannelSync(
   period: SyncPeriod,
   triggerType: WebSalesTrigger,
 ): Promise<ChannelSyncResult> {
+  if (!isEcChannelOperational(channel) || !isEcChannelOperational(channel, period.endDate)) {
+    return { runId: "", channel, status: "skipped", itemCount: 0, quantityTotal: 0,
+      matchedCount: 0, unmatchedCount: 0, error: ecChannelUnavailableReason(channel) };
+  }
   const supabase = serviceClient();
   const config = await getChannelConfigStatusAsync(channel);
   const skippedReason = config.missing.length ? `未設定: ${config.missing.join(", ")}` : "運用方針によりBridgeで公式ファイルを取得します";

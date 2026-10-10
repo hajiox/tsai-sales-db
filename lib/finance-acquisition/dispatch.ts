@@ -8,6 +8,7 @@ import { getFinanceCapabilities, type AcquisitionKind } from "./capabilities";
 import { runOfficialFinanceAcquisition } from "./run";
 import { safeAcquisitionError } from "./provenance";
 import { hasPersistedFinanceImport,selectEffectiveFinanceJob } from "../web-sales-codex/finance-job-state";
+import { ecChannelUnavailableReason, isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
 
 export const TASK_KIND = { web_sales_import: "sales", ad_cost_import: "advertising", ec_profit_import: "ec_profit" } as const;
 const KIND_TASK = { sales: "web_sales_import", advertising: "ad_cost_import", ec_profit: "ec_profit_import" } as const;
@@ -19,10 +20,13 @@ export async function enqueueFinanceAcquisitions(input: EnqueueInput) {
   const period = validatePeriod(input.period.startDate,input.period.endDate);
   const todayJst = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0,10);
   if (period.endDate > todayJst) throw new Error("未来の期間は取得できません。終了日を本日以前にしてください");
-  const capabilities = await getFinanceCapabilities();
+  const capabilities = await getFinanceCapabilities(period.endDate);
   const supabase = getWebSalesAutomationServiceClient();
   const jobs: unknown[] = []; const results: DispatchResult[] = [];
   for (const channel of [...new Set(input.channels)]) {
+    if (!isEcChannelOperational(channel) || !isEcChannelOperational(channel, period.endDate)) {
+      results.push({ channel, route: "none", status: "skipped", message: ecChannelUnavailableReason(channel) }); continue;
+    }
     const capability = capabilities.find(row => row.kind === input.kind && row.channel === channel);
     if (!capability || capability.preferred_route === "none") {
       results.push({channel,route:"none",status:"skipped",message:"新規取得の対象外です"}); continue;
@@ -96,8 +100,9 @@ export async function executeAcquisitionRun(id: string) {
   if (!claimed) return {id,status:"skipped",persisted:false};
   let status="failed"; let result: Record<string,unknown>={persisted:false}; let message: string|null=null;
   try {
-    const capability=(await getFinanceCapabilities()).find(c=>c.kind===row.kind && c.channel===row.channel);
-    if (capability?.api_disabled_by_policy) { status="skipped";message=capability.reason;result={persisted:false,policy_route:capability.preferred_route}; }
+    const capability=(await getFinanceCapabilities(row.period_end)).find(c=>c.kind===row.kind && c.channel===row.channel);
+    if (!isEcChannelOperational(row.channel) || !isEcChannelOperational(row.channel, row.period_end)) { status="skipped";message=ecChannelUnavailableReason(row.channel); }
+    else if (capability?.api_disabled_by_policy) { status="skipped";message=capability.reason;result={persisted:false,policy_route:capability.preferred_route}; }
     else if (!capability?.api_ready) { status="waiting_for_user";message="API接続情報が不足しています"; }
     else if (row.kind === "sales") {
       const outcome=await runChannelSync(row.channel as WebSalesChannel,{startDate:row.period_start,endDate:row.period_end,reportMonth:row.report_month},"manual");

@@ -42,6 +42,7 @@ $requiredSourceFiles = @(
   "download-artifact-recovery.mjs",
   "ec-profit-artifact-policy.mjs",
   "qoo10-official-sales.mjs",
+  "ec-channel-lifecycle.mjs",
   "docscanner-fax-artifact.mjs",
   "recipe-sns-publish-policy.mjs",
   "sns-browser-confirmation.mjs",
@@ -500,6 +501,7 @@ Copy-Item -LiteralPath (Join-Path $sourceDir "codex-event-log.mjs") -Destination
 Copy-Item -LiteralPath (Join-Path $sourceDir "download-artifact-recovery.mjs") -Destination (Join-Path $installDir "download-artifact-recovery.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "ec-profit-artifact-policy.mjs") -Destination (Join-Path $installDir "ec-profit-artifact-policy.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "qoo10-official-sales.mjs") -Destination (Join-Path $installDir "qoo10-official-sales.mjs") -Force
+Copy-Item -LiteralPath (Join-Path $sourceDir "ec-channel-lifecycle.mjs") -Destination (Join-Path $installDir "ec-channel-lifecycle.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "docscanner-fax-artifact.mjs") -Destination (Join-Path $installDir "docscanner-fax-artifact.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "recipe-sns-publish-policy.mjs") -Destination (Join-Path $installDir "recipe-sns-publish-policy.mjs") -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir "sns-browser-confirmation.mjs") -Destination (Join-Path $installDir "sns-browser-confirmation.mjs") -Force

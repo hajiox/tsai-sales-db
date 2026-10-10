@@ -16,6 +16,7 @@ import {
   getEcPriceVerifiedIdentifiers,
 } from "@/lib/ec-price-verified-registry";
 import { isReservedEcPriceJob } from "@/lib/ec-price-reservations";
+import { inactiveEcOperationTargets, ecOperationBlockedMessage } from "@/lib/ec-operation-policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -124,6 +125,7 @@ export async function POST(request: Request) {
         )
         : null;
       const currentTargets = normalizeEcPriceTargets(parameters.targets);
+      const inactiveTargets = inactiveEcOperationTargets(currentTargets);
       const currentVerifiedIdentifiers = currentSnapshot
         ? getEcPriceVerifiedIdentifiers(currentSnapshot.janCode, currentTargets)
         : null;
@@ -131,7 +133,8 @@ export async function POST(request: Request) {
         ? getEcPriceLpSource(currentSnapshot.productLpUrl)
         : null;
       if (
-        !currentSnapshot
+        inactiveTargets.length > 0
+        || !currentSnapshot
         || !ecPriceSnapshotsMatch(parameters.recipeSnapshot, currentSnapshot)
         || !currentMappings
         || !ecPriceProductMappingsMatch(parameters.productMappings, currentMappings)
@@ -142,7 +145,9 @@ export async function POST(request: Request) {
         )
         || !ecPriceLpSourcesMatch(parameters.lpSource, currentLpSource)
       ) {
-        const message = "予約後に価格または商品情報が変更されました。内容を確認して予約し直してください";
+        const message = inactiveTargets.length > 0
+          ? ecOperationBlockedMessage(inactiveTargets)
+          : "予約後に価格または商品情報が変更されました。内容を確認して予約し直してください";
         const { data: updated } = await supabase
           .from("web_sales_codex_jobs")
           .update({

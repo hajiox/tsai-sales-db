@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { ecChannelUnavailableReason, isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
 
 export const EC_PROFIT_CHANNELS = [
   "amazon",
@@ -111,6 +112,7 @@ export async function upsertEcProfitEstimate(input: {
   const reportDate = `${input.reportMonth}-01`;
   const periodStart = input.periodStart || reportDate;
   const periodEnd = input.periodEnd || lastDayOfMonth(input.reportMonth);
+  if (!isEcChannelOperational(channel, periodEnd)) return skipped(channel, ecChannelUnavailableReason(channel));
   const { data: existing, error: existingError } = await supabase
     .from("ec_profit_monthly")
     .select("*")

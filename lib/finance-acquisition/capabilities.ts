@@ -1,4 +1,5 @@
 import { getConfiguredApiCredentialNames } from "./credential-store";
+import { ecChannelUnavailableReason, isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
 
 export type AcquisitionKind = "sales" | "ec_profit" | "advertising";
 export const ACTIVE_FINANCE_CHANNELS = ["amazon", "rakuten", "yahoo", "base"] as const;
@@ -25,10 +26,11 @@ const identityRequirements: Record<string, string[]> = {
   "sales:yahoo": ["YAHOO_SHOPPING_SELLER_ID"], "sales:base": ["BASE_SHOP_ID"], "ec_profit:base": ["BASE_SHOP_ID"],
 };
 
-export function financeCapability(kind: AcquisitionKind, channel: string, configured: ReadonlySet<string>): AcquisitionCapability {
+export function financeCapability(kind: AcquisitionKind, channel: string, configured: ReadonlySet<string>, period?: string | Date): AcquisitionCapability {
   const key = `${kind}:${channel}`;
-  if (["mercari", "tiktok", "qoo10"].includes(channel)) {
-    return { kind, channel, preferred_route: "none", api_supported: false, api_ready: false, missing_config: [], reason: "退店予定・新規取得対象外" };
+  if (!isEcChannelOperational(channel) || !isEcChannelOperational(channel, period)) {
+    return { kind, channel, preferred_route: "none", api_supported: false, api_ready: false,
+      api_disabled_by_policy: true, missing_config: [], reason: ecChannelUnavailableReason(channel) };
   }
   // Yahoo finance acquisition remains on Bridge by the operator's choice,
   // regardless of saved OAuth credentials or the inventory server's API use.
@@ -52,13 +54,13 @@ export function financeCapability(kind: AcquisitionKind, channel: string, config
     reason: ready ? "API設定済み。保存前に対象アカウント・期間・金額を検証します" : "API接続情報が不足しています。接続後はAPIを優先します" };
 }
 
-export async function getFinanceCapabilities(): Promise<AcquisitionCapability[]> {
+export async function getFinanceCapabilities(period?: string | Date): Promise<AcquisitionCapability[]> {
   const configured = await getConfiguredApiCredentialNames();
   for (const alternatives of Object.values(requirements)) for (const names of alternatives) {
     for (const name of names) if (process.env[name]?.trim()) configured.add(name);
   }
   return [
-    ...[...ACTIVE_FINANCE_CHANNELS, "mercari", "qoo10", "tiktok"].flatMap(channel => [financeCapability("sales", channel, configured), financeCapability("ec_profit", channel, configured)]),
-    ...ADVERTISING_CHANNELS.map(channel => financeCapability("advertising", channel, configured)),
+    ...[...ACTIVE_FINANCE_CHANNELS, "mercari", "qoo10", "tiktok", "makeshop"].flatMap(channel => [financeCapability("sales", channel, configured, period), financeCapability("ec_profit", channel, configured, period)]),
+    ...ADVERTISING_CHANNELS.map(channel => financeCapability("advertising", channel, configured, period)),
   ];
 }

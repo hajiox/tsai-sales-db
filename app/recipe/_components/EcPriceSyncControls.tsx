@@ -1,5 +1,6 @@
 "use client";
 
+import { isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -338,7 +339,7 @@ export default function EcPriceSyncControls({
   };
 
   const registerMissingQoo10Product = async () => {
-    if (!qoo10Missing || registrationSubmitting || registrationIsActive || registrationCompleted || registrationNeedsReview || hasUnsavedChanges || isSaving) return;
+    if (!isEcChannelOperational("qoo10") || !qoo10Missing || registrationSubmitting || registrationIsActive || registrationCompleted || registrationNeedsReview || hasUnsavedChanges || isSaving) return;
     const productName = ecProductName || recipeName;
     const confirmed = window.confirm([
       "Qoo10に未登録の商品を新規登録します。",
@@ -419,7 +420,7 @@ export default function EcPriceSyncControls({
     }
   };
 
-  const allTargets = EC_PRICE_TARGETS.map((target) => target.id);
+  const allTargets = EC_PRICE_TARGETS.filter(target => isEcChannelOperational(target.id)).map((target) => target.id);
   const activeProgress = clampProgress(job?.progress);
   const heartbeatAt = job?.heartbeatAt ? Date.parse(job.heartbeatAt) : Number.NaN;
   const startedAt = job?.startedAt ? Date.parse(job.startedAt) : Date.parse(job?.createdAt || "");
@@ -500,7 +501,7 @@ export default function EcPriceSyncControls({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {EC_PRICE_TARGETS.map((target) => (
+        {EC_PRICE_TARGETS.filter(target => isEcChannelOperational(target.id)).map((target) => (
           <button
             key={target.id}
             type="button"
@@ -525,6 +526,7 @@ export default function EcPriceSyncControls({
           {submitting && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
           全EC
         </button>
+        <span className="rounded border border-dashed px-3 py-2 text-xs text-gray-500">makeshop 開店準備中</span>
       </div>
 
       {blockingJob && (
@@ -656,7 +658,7 @@ export default function EcPriceSyncControls({
         </div>
       )}
 
-      {(qoo10Missing || registrationJob || registrationIntent) && (
+      {(registrationJob || registrationIntent || (isEcChannelOperational("qoo10") && qoo10Missing)) && (
         <div className="mt-4 border-t border-slate-200 pt-4 text-xs">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
@@ -682,7 +684,7 @@ export default function EcPriceSyncControls({
               )}
               {registrationJob?.summary && <p className="mt-1 leading-relaxed text-slate-600">{registrationJob.summary}</p>}
             </div>
-            {qoo10Missing && !registrationCompleted && !registrationNeedsReview && (
+            {isEcChannelOperational("qoo10") && qoo10Missing && !registrationCompleted && !registrationNeedsReview && (
               <button
                 type="button"
                 onClick={registerMissingQoo10Product}

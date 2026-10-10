@@ -1,7 +1,13 @@
 ---
 name: tsa-web-sales-csv
-description: Download, validate, archive, and import TSA product-sales CSV files for Amazon, Rakuten, Yahoo Shopping, Mercari Shops, BASE, Qoo10, and TikTok Shop. Use for TSA Codex Bridge EC sales jobs and for validating whether an existing CSV is the exact report TSA expects.
+description: Download, validate, archive, and import TSA product-sales CSV files for active Amazon, Rakuten, Yahoo Shopping and BASE; reimport verified archives for retired shops. Use for TSA Codex Bridge EC sales jobs and for validating whether an existing CSV is the exact report TSA expects.
 ---
+
+## EC運用範囲（2026-10-01以降）
+
+- メルカリShops・Qoo10・TikTok Shopは2026年9月末で退店済み。対象月が9月以前でも、新たなAPI取得、ブラウザ巡回、ログイン、帳票生成・ダウンロードは実行しない。
+- 9月までの既存データ、原本、履歴は保持する。対象期間と内容を検証済みの保存CSV・JSON・原本の再取込だけを許可し、資料不足を0円・0件で埋めない。以下の退店先手順は過去資料の読み方として残すが、現行の取得手順として使わない。
+- 現行のEC対象はAmazon・楽天・Yahoo・BASE。makeshopは開店準備中で、取得・登録・更新や接続確認は実行しない。
 
 ## Browser route order (2026-09-21)
 

@@ -1,7 +1,13 @@
 ---
 name: update-aizu-ec-prices
-description: Update 会津ブランド館 product prices across logged-in Amazon, 楽天, Yahoo!ショッピング, メルカリShops, BASE, Qoo10, and BASE-managed TikTok Shop, then find and update matching company LPs from TSAの自社リンク集, deploy them, and verify the live price. Use for requests mentioning 価格改定, EC価格変更, 商品価格変更, Amazon・楽天・Yahoo・メルカリShops・BASE・Qoo10・TikTokショップ, 自社LP, or TSAリンク集.
+description: Update 会津ブランド館 product prices across logged-in Amazon, 楽天, Yahoo!ショッピング and BASE, then find and update matching company LPs from TSAの自社リンク集, deploy them, and verify the live price. Use for requests mentioning 価格改定, EC価格変更, 商品価格変更, Amazon・楽天・Yahoo・BASE, 自社LP, or TSAリンク集.
 ---
+
+## EC運用範囲（2026-10-01以降）
+
+- 現行対象はAmazon・楽天・Yahoo・BASEだけ。メルカリShops・Qoo10・TikTok Shopは2026年9月末で退店済みで、新たなAPI取得、ブラウザ巡回、ログイン、登録・更新を実行しない。保存済みの商品紐付け・レビュー・履歴は削除しない。
+- makeshopは開店準備中。表示用の枠を残し、商品操作・収集・接続確認はまだ実行しない。
+- 入力に退店先やmakeshopが含まれる場合は勝手に別ECへ置換せず、対象外の理由を返す。以下の旧EC向け資料は過去の記録であり、この運用範囲を優先する。
 
 ## Browser route order (2026-09-21)
 
@@ -32,7 +38,7 @@ Chrome連係 → Chrome DevTools MCP → 最後にPC操作。同じ未完了の�
 - 対象チャネル
 - TSAレシピの `product_lp_url`。URLがあればユーザーが毎回「LPも」と書かなくても必須更新対象にする。URLが空の時だけLPを対象外にする
 
-ユーザーが「前回と同じ」「各サイト」「も」と指定した場合、既定対象を Amazon、楽天、Yahoo、メルカリShops、BASE、Qoo10、TikTokショップ、TSAレシピに登録された商品LPとする。
+ユーザーが「前回と同じ」「各サイト」「も」と指定した場合、既定対象を Amazon、楽天、Yahoo、BASE、TSAレシピに登録された商品LPとする。
 
 ## 2. 対象商品を照合する
 

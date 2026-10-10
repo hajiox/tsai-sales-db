@@ -4,6 +4,7 @@ import { fetchAmazonApiSales, fetchRakutenApiSales, fetchYahooApiSales, fetchBas
 import { requireEnv } from "./config";
 import { compactText, fetchJson, numberValue } from "./http";
 import { requireReportedAmount } from "./actual-sales-policy";
+import { ecChannelUnavailableReason, isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
 import type {
   ChannelFetchResult,
   NormalizedSalesItem,
@@ -17,6 +18,7 @@ export async function fetchChannelSales(
   channel: WebSalesChannel,
   period: SyncPeriod,
 ): Promise<ChannelFetchResult> {
+  if (!isEcChannelOperational(channel) || !isEcChannelOperational(channel, period.endDate)) throw new Error(ecChannelUnavailableReason(channel));
   switch (channel) {
     case "amazon":
       return fetchAmazonApiSales(period);

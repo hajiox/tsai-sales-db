@@ -1,4 +1,5 @@
 import type { CodexTaskDefinition } from "./types";
+import { isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
 
 const ARCHIVE_ROOT = String.raw`\\tshdd\disk\OneDrive共有\【共有】【事業】ネット通販総合\各サイト売上個数集計`;
 const AD_ARCHIVE_ROOT = String.raw`\\tshdd\disk\OneDrive共有\【共有】【事業】ネット通販総合\【WEBマーケティング】\広告費取込`;
@@ -186,4 +187,9 @@ export const EC_PROFIT_CODEX_TASKS: CodexTaskDefinition[] = [
 
 export function getCodexTask(channel: string) {
   return WEB_SALES_CODEX_TASKS.find((task) => task.channel === channel);
+}
+
+/** Keep definitions for historical jobs; filter only new execution choices. */
+export function getOperationalCodexTasks(tasks: CodexTaskDefinition[], period?: string | Date) {
+  return tasks.filter(task => isEcChannelOperational(task.channel) && isEcChannelOperational(task.channel, period));
 }

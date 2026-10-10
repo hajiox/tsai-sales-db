@@ -17,6 +17,7 @@ import {
   getEcPriceVerifiedIdentifiers,
 } from "@/lib/ec-price-verified-registry";
 import { isReservedEcPriceJob } from "@/lib/ec-price-reservations";
+import { inactiveEcOperationTargets, ecOperationBlockedMessage } from "@/lib/ec-operation-policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -101,15 +102,19 @@ export async function POST(request: Request) {
       const recipe = recipeMap.get(recipeId);
       const snapshot = recipe ? buildEcProductNameRecipeSnapshot(recipe as Record<string, unknown>) : null;
       const targets = normalizeEcProductNameTargets(parameters.targets);
+      const inactiveTargets = inactiveEcOperationTargets(targets);
       const mappings = snapshot ? await loadEcPriceProductMappings(supabase, snapshot.linkedProductId, targets) : null;
       const identifiers = snapshot ? getEcPriceVerifiedIdentifiers(snapshot.janCode, targets) : null;
-      if (!snapshot
+      if (inactiveTargets.length > 0
+        || !snapshot
         || !ecProductNameSnapshotsMatch(parameters.recipeSnapshot, snapshot)
         || !mappings
         || !ecPriceProductMappingsMatch(parameters.productMappings, mappings)
         || !identifiers
         || !ecPriceVerifiedIdentifiersMatch(parameters.verifiedProductIdentifiers, identifiers)) {
-        const message = "予約後にEC用商品名または商品情報が変更されました。内容を確認して予約し直してください";
+        const message = inactiveTargets.length > 0
+          ? ecOperationBlockedMessage(inactiveTargets)
+          : "予約後にEC用商品名または商品情報が変更されました。内容を確認して予約し直してください";
         const { data: updated } = await supabase
           .from("web_sales_codex_jobs")
           .update({ status: "needs_review", current_step: "予約内容の再確認が必要です", error_message: message, result: { summary: message, sites: [] }, completed_at: releasedAt, updated_at: releasedAt })

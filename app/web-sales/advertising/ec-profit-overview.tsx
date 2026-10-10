@@ -1,5 +1,7 @@
 "use client";
 
+import { getVisibleEcChannels, isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
+import { EcOpeningPlaceholder } from "@/components/EcOpeningPlaceholder";
 import { useEffect, useState } from "react";
 import { AcquisitionRouteMark } from "@/components/AcquisitionRouteBadge";
 import { activeAcquisitionTasks } from "@/lib/web-sales-acquisition-display";
@@ -174,7 +176,7 @@ export default function EcProfitOverview({ month }: { month: string }) {
   }, [month]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const hasActiveSettlementJob = activeAcquisitionTasks(data?.completeness.settlementIssues || []).some(
+    const hasActiveSettlementJob = activeAcquisitionTasks(data?.completeness.settlementIssues || [], month).some(
       (issue) => issue.status === "queued" || issue.status === "running",
     );
     if (!hasActiveSettlementJob) {
@@ -209,6 +211,8 @@ export default function EcProfitOverview({ month }: { month: string }) {
     );
   }
 
+  const visibleChannels = data.channels.filter(row => isEcChannelOperational(row.channel, month)
+    || row.quantity !== 0 || (row.sales != null && row.sales !== 0) || row.ecDeductions !== 0 || row.directAdCost !== 0 || row.hasSettlement);
   const acquisitionSettlementIssues = activeAcquisitionTasks(data.completeness.settlementIssues);
   const acquisitionMissingChannels = activeAcquisitionTasks(
     data.completeness.missingChannels.map((channel) => ({ channel })),
@@ -469,7 +473,8 @@ export default function EcProfitOverview({ month }: { month: string }) {
           <div className="text-[11px] text-slate-500">金額下は売上比</div>
         </div>
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-4 2xl:grid-cols-7">
-          {data.channels.map((row) => <ChannelExpenseCard key={row.channel} row={row} />)}
+          {visibleChannels.map((row) => <ChannelExpenseCard key={row.channel} row={row} />)}
+          {getVisibleEcChannels(month).includes("makeshop") && <EcOpeningPlaceholder />}
         </div>
         <p className="mt-2 text-[10px] text-slate-500">Google・Meta・その他の共通広告費はEC別カードへ重複配賦せず、広告費合計と最終利益で控除しています。</p>
       </section>
@@ -581,7 +586,7 @@ export default function EcProfitOverview({ month }: { month: string }) {
               </tr>
             </thead>
             <tbody>
-              {data.channels.map((row) => (
+              {visibleChannels.map((row) => (
                 <DesktopChannelRows key={row.channel} row={row} open={expanded === row.channel} onToggle={() => setExpanded(expanded === row.channel ? null : row.channel)} />
               ))}
             </tbody>
@@ -589,7 +594,7 @@ export default function EcProfitOverview({ month }: { month: string }) {
         </div>
 
         <div className="divide-y divide-slate-200 lg:hidden">
-          {data.channels.map((row) => (
+          {visibleChannels.map((row) => (
             <MobileChannel key={row.channel} row={row} open={expanded === row.channel} onToggle={() => setExpanded(expanded === row.channel ? null : row.channel)} />
           ))}
         </div>

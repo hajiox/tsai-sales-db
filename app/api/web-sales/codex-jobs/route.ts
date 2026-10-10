@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ecChannelUnavailableReason, isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { validatePeriod } from "@/lib/web-sales-automation/date";
@@ -48,6 +49,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: taskKey === "ad_cost_import" ? "実行する広告媒体を選択してください" : "実行するECを選択してください" }, { status: 400 });
     }
     const period = validatePeriod(String(body.startDate || ""), String(body.endDate || ""));
+    const unavailable = channels.find(channel => !isEcChannelOperational(channel) || !isEcChannelOperational(channel, period.endDate));
+    if (unavailable) return NextResponse.json({ error: ecChannelUnavailableReason(unavailable) }, { status: 400 });
     if (taskKey !== "web_sales_import" && period.startDate.slice(0, 7) !== period.endDate.slice(0, 7)) {
       return NextResponse.json({ error: "広告費・EC控除は同じ月の期間を指定してください" }, { status: 400 });
     }

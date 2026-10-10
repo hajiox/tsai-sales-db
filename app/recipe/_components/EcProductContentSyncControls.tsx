@@ -1,5 +1,6 @@
 "use client";
 
+import { isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, History, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -58,7 +59,7 @@ export default function EcProductContentSyncControls({
   const notified = useRef<string | null>(null);
   const totalCharacters = ecProductContentCharacterCount(productPoints, webDescription);
   const targetContents = useMemo(() => buildEcProductContents(
-    EC_PRODUCT_CONTENT_TARGETS.map(({ id }) => id),
+    EC_PRODUCT_CONTENT_TARGETS.filter(target => isEcChannelOperational(target.id)).map(({ id }) => id),
     productPoints,
     webDescription,
   ), [productPoints, webDescription]);
@@ -141,14 +142,14 @@ export default function EcProductContentSyncControls({
     {hasUnsavedChanges && <p className="mt-2 text-xs font-medium text-amber-700"><AlertTriangle className="mr-1 inline h-3.5 w-3.5" />先にレシピを保存してください。</p>}
     {totalCharacters > EC_PRODUCT_CONTENT_MAX_CHARACTERS && <p className="mt-2 text-xs font-medium text-red-700"><AlertTriangle className="mr-1 inline h-3.5 w-3.5" />合計500文字以内へ調整して保存してください。</p>}
     <div className="mt-3 flex flex-wrap gap-2">
-      {EC_PRODUCT_CONTENT_TARGETS.map((target) => <button
+      {EC_PRODUCT_CONTENT_TARGETS.filter(target => isEcChannelOperational(target.id)).map((target) => <button
         key={target.id}
         type="button"
         disabled={disabled}
         onClick={() => void enqueue([target.id])}
         className={`${SITE_COLORS[target.id]} min-h-9 rounded-md px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40`}
       >{target.label}</button>)}
-      <button type="button" disabled={disabled} onClick={() => void enqueue(EC_PRODUCT_CONTENT_TARGETS.map(({ id }) => id))} className="min-h-9 rounded-md bg-gray-950 px-3 text-xs font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40">全EC</button>
+      <button type="button" disabled={disabled} onClick={() => void enqueue(EC_PRODUCT_CONTENT_TARGETS.filter(target => isEcChannelOperational(target.id)).map(({ id }) => id))} className="min-h-9 rounded-md bg-gray-950 px-3 text-xs font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40">全EC</button><span className="rounded-md border border-dashed px-3 py-2 text-xs text-gray-500">makeshop 開店準備中</span>
     </div>
 
     {job && <div className={`mt-3 rounded-md border p-3 text-xs ${job.status === "completed" ? "border-emerald-200 bg-emerald-50" : FINAL_STATUSES.has(job.status) ? "border-amber-200 bg-amber-50" : "border-blue-200 bg-blue-50"}`}>

@@ -1,7 +1,13 @@
 ---
 name: update-aizu-ec-product-names
-description: 会津ブランド館の商品について、TSAが固定した商品識別子とEC用商品名を使い、ログイン済みAmazon、楽天、Yahoo、メルカリShops、BASE、Qoo10、BASE管理TikTok Shopの商品名だけを安全に確認・変更する。TSA Codex BridgeのEC商品名変更ジョブ専用。
+description: 会津ブランド館の商品について、TSAが固定した商品識別子とEC用商品名を使い、ログイン済みAmazon、楽天、Yahoo、BASEの商品名だけを安全に確認・変更する。TSA Codex BridgeのEC商品名変更ジョブ専用。
 ---
+
+## EC運用範囲（2026-10-01以降）
+
+- 現行対象はAmazon・楽天・Yahoo・BASEだけ。メルカリShops・Qoo10・TikTok Shopは2026年9月末で退店済みで、新たなAPI取得、ブラウザ巡回、ログイン、登録・更新を実行しない。保存済みの商品紐付け・レビュー・履歴は削除しない。
+- makeshopは開店準備中。表示用の枠を残し、商品操作・収集・接続確認はまだ実行しない。
+- 入力に退店先やmakeshopが含まれる場合は勝手に別ECへ置換せず、対象外の理由を返す。以下の旧EC向け資料は過去の記録であり、この運用範囲を優先する。
 
 ## Browser route order (2026-09-21)
 

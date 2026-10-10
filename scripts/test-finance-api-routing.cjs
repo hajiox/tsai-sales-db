@@ -67,7 +67,7 @@ async function main() {
   assert.equal(queueCalls.length, 0);
   let response = await manual.POST(post({ startDate: '2026-09-01', endDate: '2026-09-30', channels: ['amazon', 'yahoo', 'qoo10', 'tiktok'] }));
   assert.equal(response.status, 200);
-  assert.deepEqual(queueCalls[0].channels, ['amazon', 'yahoo'], 'closed ECs cannot launch new acquisition');
+  assert.deepEqual(queueCalls[0].channels, ['amazon', 'yahoo'], 'Retired stores cannot restart new acquisition even for September');
   assert.equal(queueCalls[0].kind, 'sales');
   assert.equal(queueCalls[0].allowBridge, true);
   assert.equal(queueCalls[0].period.reportMonth, '2026-09-01');

@@ -175,7 +175,8 @@ assert.match(bridgeSource, /eventType: "ec_price_progress_checkpoint"/);
 assert.match(bridgeSource, /maxTemporaryTabs: 1/);
 assert.match(bridgeSource, /maxTemporaryTabs: 0/);
 assert.match(bridgeSource, /temporaryTabCreations > maxTemporaryTabs/);
-assert.match(bridgeSource, /model: "gpt-5\.6-sol"[\s\S]{0,120}reasoningEffort: "medium"/);
+assert.match(bridgeSource, /spawnCodexProcess\(applyTaskModelPolicy\(taskKey, args\)/,
+  "Price work uses the central task model policy rather than a stale inline model");
 assert.match(bridgeSource, /focusedContext: true,[\s\S]{0,80}ephemeral: true/);
 assert.match(bridgeSource, /maxBrowserToolCalls: 45/);
 assert.match(bridgeSource, /maxCommandExecutions: 30/);

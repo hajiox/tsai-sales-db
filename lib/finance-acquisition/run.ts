@@ -4,6 +4,7 @@ import { fetchAmazonFinance } from "./amazon";
 import { fetchBaseFinance } from "./base";
 import { fetchAmazonAdvertising, fetchMetaAdvertising } from "./advertising";
 import { assertFullMonth, money, record, sameCostTotals } from "./policy";
+import { ecChannelUnavailableReason, isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
 import type { AcquisitionOptions, AcquisitionResult, AdRow, FinanceFetchResult, SyncPeriod } from "./types";
 
 export type { AcquisitionOptions, AcquisitionResult } from "./types";
@@ -12,6 +13,10 @@ export async function runOfficialFinanceAcquisition(
   kind: "ec_profit" | "advertising", channel: string, period: SyncPeriod, options: AcquisitionOptions = {},
 ): Promise<AcquisitionResult> {
   assertFullMonth(period);
+  if (!isEcChannelOperational(channel) || !isEcChannelOperational(channel, period.endDate)) {
+    return { status: "skipped", coverageLevel: "partial", importedCount: 0, source: "none",
+      details: ecChannelUnavailableReason(channel), warnings: [] };
+  }
   if (kind === "ec_profit" && (channel === "amazon" || channel === "base")) {
     const fetched = channel === "amazon" ? await fetchAmazonFinance(period) : await fetchBaseFinance(period);
     return importEcProfit(fetched, options);

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { validatePeriod } from "@/lib/web-sales-automation/date";
 import { enqueueFinanceAcquisitions } from "@/lib/finance-acquisition/dispatch";
 import { isFinanceAdmin, isSameOriginFinanceRequest } from "@/lib/finance-acquisition/auth";
-import { ACTIVE_EC_CHANNELS } from "@/lib/web-sales-abcd/monthly";
+import { getOperationalEcChannels, isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,8 +17,9 @@ export async function POST(request: Request) {
     const body = JSON.parse(text);
     const period = validatePeriod(String(body.startDate || ""), String(body.endDate || ""));
     const requested: string[] = Array.isArray(body.channels) ? body.channels.map(String) : [];
-    const channels = [...new Set(requested.length > 0 ? requested : ACTIVE_EC_CHANNELS)]
-      .filter(channel => (ACTIVE_EC_CHANNELS as readonly string[]).includes(channel));
+    const allowedChannels = new Set<string>(getOperationalEcChannels());
+    const channels = [...new Set(requested.length > 0 ? requested : getOperationalEcChannels())]
+      .filter(channel => allowedChannels.has(channel) && isEcChannelOperational(channel, period.endDate));
     if (channels.length === 0) {
       return NextResponse.json({ error: "同期対象を選択してください" }, { status: 400 });
     }

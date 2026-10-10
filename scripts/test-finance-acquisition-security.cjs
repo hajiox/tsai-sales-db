@@ -55,7 +55,9 @@ async function main() {
   }
   assert.equal(provenance.safeAcquisitionError(Object.assign(new Error("private remote body"), { code: "account_verification_required" })), "公式API確認: account_verification_required");
 
-  const capabilities = loadTs("lib/finance-acquisition/capabilities.ts", { "./credential-store": { getConfiguredApiCredentialNames: async () => new Set() } });
+  const lifecycle = loadTs("lib/ec-channel-lifecycle.ts");
+  const capabilities = loadTs("lib/finance-acquisition/capabilities.ts", { "./credential-store": { getConfiguredApiCredentialNames: async () => new Set() },
+    "@/lib/ec-channel-lifecycle": lifecycle });
   const configured = new Set(["BASE_ACCESS_TOKEN"]);
   const noIdentity = capabilities.financeCapability("sales", "base", configured);
   assert.equal(noIdentity.api_ready, false, "A token alone must not skip account verification");
@@ -86,10 +88,13 @@ async function main() {
   assert.equal(rakuten.api_ready, true);
   assert.equal(capabilities.financeCapability("ec_profit", "rakuten", new Set()).preferred_route, "bridge");
   for (const channel of ["mercari", "tiktok", "qoo10"]) {
-    const retired = capabilities.financeCapability("sales", channel, configured);
+    const retired = capabilities.financeCapability("sales", channel, configured, "2026-10");
     assert.equal(retired.preferred_route, "none");
     assert.equal(retired.api_ready, false);
+    assert.equal(capabilities.financeCapability("sales", channel, configured, "2026-09").preferred_route, "none",
+      "Earlier reporting months must not restart new collection from retired stores");
   }
+  assert.equal(capabilities.financeCapability("sales", "makeshop", configured, "2026-10").preferred_route, "none");
 
   let session = null;
   const auth = loadTs("lib/finance-acquisition/auth.ts", {

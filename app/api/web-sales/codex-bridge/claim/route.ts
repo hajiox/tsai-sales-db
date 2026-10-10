@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { inactiveEcJobTargets, ecOperationBlockedMessage } from "@/lib/ec-operation-policy";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import {
   isCodexBridgeAuthorized,
@@ -68,18 +69,36 @@ export async function POST(request: Request) {
     }, { onConflict: "id" });
     if (workerError) throw workerError;
 
-    const { data, error } = await supabase.rpc("claim_web_sales_codex_job", {
-      p_worker_id: workerId,
-      p_lease_seconds: 900,
-    });
-    if (error) throw error;
-    const job = data?.[0] || null;
-    if (job) {
+    let job = null;
+    // Old queued jobs remain in history, but must never reach a retired store.
+    for (let skipped = 0; skipped < 20; skipped += 1) {
+      const { data, error } = await supabase.rpc("claim_web_sales_codex_job", {
+        p_worker_id: workerId,
+        p_lease_seconds: 900,
+      });
+      if (error) throw error;
+      const candidate = data?.[0] || null;
+      if (!candidate) break;
+      const blocked = inactiveEcJobTargets(candidate);
+      if (blocked.length === 0) { job = candidate; break; }
+      const message = ecOperationBlockedMessage(blocked);
+      const { data: cancelled, error: cancelError } = await supabase.from("web_sales_codex_jobs")
+        .update({ status: "cancelled", current_step: "退店・開店準備中のため実行対象外", error_message: message,
+          completed_at: now, updated_at: now, lease_expires_at: null })
+        .eq("id", candidate.id).eq("status", "running").eq("worker_id", workerId).select("id").maybeSingle();
+      if (cancelError) throw cancelError;
+      if (!cancelled) continue;
+      const { error: eventError } = await supabase.from("web_sales_codex_job_events").insert({
+        job_id: candidate.id, event_type: "cancelled", message, progress: 0, payload: { inactiveChannels: blocked },
+      });
+      if (eventError) throw eventError;
+    }
+    {
       const { error: busyError } = await supabase
         .from("web_sales_codex_workers")
         .update({
-          status: "busy",
-          current_job_id: job.id,
+          status: job ? "busy" : "online",
+          current_job_id: job?.id || null,
           last_seen_at: now,
           updated_at: now,
         })

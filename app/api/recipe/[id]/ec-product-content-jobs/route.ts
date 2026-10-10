@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { inactiveEcOperationTargets, ecOperationBlockedMessage } from "@/lib/ec-operation-policy";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import {
@@ -138,6 +139,8 @@ export async function POST(
       if (targets.length === 0) return NextResponse.json({ error: "再実行が必要なECはありません" }, { status: 409 });
     }
 
+    const inactiveTargets = inactiveEcOperationTargets(targets);
+    if (inactiveTargets.length) return NextResponse.json({ error: ecOperationBlockedMessage(inactiveTargets), code: "EC_CHANNEL_INACTIVE" }, { status: 409 });
     const targetContents = buildEcProductContents(targets, recipeSnapshot.productPoints, recipeSnapshot.webDescription);
     const expectedContents = asObject(body.expectedTargetContents);
     if (!retryFromId && !targets.every((target) => ecProductContentValuesEqual(expectedContents[target], targetContents[target]))) {

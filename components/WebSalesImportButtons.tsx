@@ -4,8 +4,10 @@
 "use client"
 
 import React from "react"
+import { getVisibleEcChannels, isEcChannelOperational } from "@/lib/ec-channel-lifecycle"
 
 interface WebSalesImportButtonsProps {
+  month?: string
   isUploading: boolean
   onCsvClick: () => void
   onAmazonClick: () => void
@@ -18,6 +20,7 @@ interface WebSalesImportButtonsProps {
 }
 
 export default function WebSalesImportButtons({
+  month,
   isUploading,
   onCsvClick,
   onAmazonClick,
@@ -58,35 +61,36 @@ export default function WebSalesImportButtons({
         >
           Yahoo
         </button>
-        <button
+        {isEcChannelOperational("mercari", month) && (<button
           onClick={onMercariClick}
           className="px-3 py-1 text-xs font-semibold text-white bg-sky-500 rounded hover:bg-sky-600"
         >
           メルカリ
-        </button>
+        </button>)}
         <button
           onClick={onBaseClick}
           className="px-3 py-1 text-xs font-semibold text-white bg-green-600 rounded hover:bg-green-700"
         >
           BASE
         </button>
-        <button
+        {isEcChannelOperational("qoo10", month) && (<button
           onClick={onQoo10Click}
           className="px-3 py-1 text-xs font-semibold text-white bg-pink-500 rounded hover:bg-pink-600"
         >
           Qoo10
-        </button>
-        <button
+        </button>)}
+        {isEcChannelOperational("tiktok", month) && (<button
           onClick={onTiktokClick}  // 🟢 TikTok有効化
           className="px-3 py-1 text-xs font-semibold text-white bg-teal-500 rounded hover:bg-teal-600"
         >
           TikTok
-        </button>
+        </button>)}
+        {getVisibleEcChannels(month).includes("makeshop") && <button disabled className="rounded border border-dashed px-3 py-1 text-xs text-slate-500">makeshop 開店準備中</button>}
       </div>
 
       {/* ▼ 追加した注意書き */}
       <p className="mt-1 text-xs text-gray-500 text-center">
-        ※ Yahoo・メルカリ・BASE・Qoo10・TikTokのCSV はアップロード前に <span className="font-semibold">必ず「CSV UTF-8 (カンマ区切り)」形式</span> で保存してください。
+        ※ 各ECのCSV はアップロード前に <span className="font-semibold">必ず「CSV UTF-8 (カンマ区切り)」形式</span> で保存してください。
       </p>
     </div>
   );

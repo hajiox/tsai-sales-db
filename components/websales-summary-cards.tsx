@@ -4,6 +4,8 @@
 import { useEffect, useState, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
+import { getVisibleEcChannels, isEcChannelOperational } from "@/lib/ec-channel-lifecycle"
+import { EcOpeningPlaceholder } from "@/components/EcOpeningPlaceholder"
 import { Target } from "lucide-react"
 
 const SITES = [
@@ -360,6 +362,11 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
     }
   }, [webTarget, grandTotalSales, viewMode]);
 
+  const displayPeriod = viewMode === 'period'
+    ? (() => { const [year, mon] = month.split('-').map(Number); return new Date(Date.UTC(year, mon - periodMonths, 1)).toISOString().slice(0, 7); })()
+    : month;
+  const visibleSites = SITES.filter(site => isEcChannelOperational(site.key, displayPeriod)
+    || Object.values(totals?.[site.key] || {}).some(value => typeof value === 'number' && value !== 0));
   const currentTrendKey = hoveredItem ? `${hoveredItem.type}-${hoveredItem.key}` : null;
 
   if (loading) {
@@ -374,7 +381,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
 
   return (
     <div className="space-y-3 relative" ref={containerRef}>
-      <div className="relative grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8 xl:gap-3">
+      <div className="relative grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-6 xl:gap-3">
         <Card
           className="min-h-[230px] text-center bg-gray-50 border-gray-200 cursor-pointer flex flex-col justify-between col-span-1"
           onMouseEnter={(e) => handleMouseEnter({ type: 'total', key: 'grandTotal', name: '総合計' }, e)}
@@ -408,7 +415,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
           )}
         </Card>
 
-        {SITES.map((s) => {
+        {visibleSites.map((s) => {
           const currentSales = totals ? totals[s.key]?.amount ?? null : 0;
           const lySales = lastYearTotals ? lastYearTotals[s.key]?.amount ?? null : 0;
           
@@ -420,7 +427,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
             onMouseLeave={handleMouseLeave}
           >
             <div>
-              <CardHeader className="py-2 px-3"><CardTitle className="text-xs">{s.name}</CardTitle></CardHeader>
+              <CardHeader className="py-2 px-3"><CardTitle className="text-xs">{s.name}{!isEcChannelOperational(s.key, displayPeriod) && "（退店・保存済み）"}</CardTitle></CardHeader>
               <CardContent className="space-y-0.5 py-1 px-3">
                 <div className="text-base font-bold">{money(currentSales)}</div>
                 <div className="text-[11px] text-gray-500">{totals ? formatNumber(totals[s.key]?.count ?? 0) : "-"}個</div>
@@ -451,6 +458,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
             )}
           </Card>
         )})}
+        {getVisibleEcChannels(month).includes("makeshop") && <EcOpeningPlaceholder />}
       </div>
 
       <Card>

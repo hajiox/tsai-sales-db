@@ -3,6 +3,8 @@ import { activeAcquisitionTasks, acquisitionMarks, acquisitionRunIsCurrent, acqu
 
 const historicalTasks = ["amazon", "rakuten", "yahoo", "base", "mercari", "tiktok", "qoo10"].map((channel) => ({ channel, label: channel }));
 assert.deepEqual(activeAcquisitionTasks(historicalTasks).map((task) => task.channel), ["amazon", "rakuten", "yahoo", "base"]);
+assert.equal(activeAcquisitionTasks(historicalTasks, "2026-09").length, 7, "September history retains all stores");
+assert.equal(activeAcquisitionTasks(historicalTasks, "2026-10").length, 4, "October displays only operational stores");
 assert.equal(historicalTasks.length, 7, "Filtering new controls must keep historical definitions intact");
 const savedPeriod = { status: "success", period_start: "2026-09-01", period_end: "2026-09-30", finished_at: "2026-10-01T10:00:00Z" };
 assert.equal(savedAcquisitionSupersedesAttempt(savedPeriod, "2026-09-01", "2026-09-30", "2026-09-30T10:00:00Z"), true, "A verified later save supersedes an old Bridge wait");

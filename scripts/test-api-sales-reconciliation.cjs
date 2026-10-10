@@ -12,6 +12,7 @@ let providerCalls = 0;
 let credentialNames = new Set();
 const originalLoad = Module._load;
 Module._load = function (request, parent, isMain) {
+  if (request === '@/lib/ec-channel-lifecycle') return originalLoad.call(this, path.join(__dirname, '../lib/ec-channel-lifecycle.ts'), parent, isMain);
   if (request === '@supabase/supabase-js') return { createClient: () => db };
   if (request === '@/lib/csvHelpers') return { findBestMatchSimplified: () => null };
   if (request === '@/lib/sales-price-reconciliation') return { hasPackConflict: () => false };

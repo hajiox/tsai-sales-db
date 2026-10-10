@@ -2,6 +2,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
+import { isEcChannelOperational } from "@/lib/ec-channel-lifecycle"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 import { resolveWebSalesAmount, sumWebSalesAmounts } from "@/lib/web-sales-amounts"
 
@@ -43,6 +44,7 @@ export default function WebSalesRankingTable({ month }: Props) {
   const [sortBy, setSortBy] = useState<SortType>('count')
   const [activeChannel, setActiveChannel] = useState<RankingChannel>('total')
   const [originalData, setOriginalData] = useState<Row[]>([])
+  useEffect(() => { setActiveChannel("total") }, [month])
 
   // ホバートレンド関連
   const [hoveredProductId, setHoveredProductId] = useState<string | null>(null)
@@ -350,7 +352,8 @@ export default function WebSalesRankingTable({ month }: Props) {
 
       <div className="overflow-x-auto pb-1" role="tablist" aria-label="売上ランキングのEC">
         <div className="inline-flex min-w-max rounded-md border border-slate-200 bg-slate-100 p-1">
-          {CHANNEL_OPTIONS.map(option => (
+          {CHANNEL_OPTIONS.filter(option => option.key === 'total' || isEcChannelOperational(option.key, month)
+          || originalData.some(row => row.channel_counts[option.key as EcChannel] !== 0)).map(option => (
             <button
               key={option.key}
               type="button"

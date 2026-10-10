@@ -8,6 +8,7 @@ import {
   upsertEcProfitEstimate,
 } from "@/lib/web-sales-codex/ec-profit-estimate";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
+import { isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +26,8 @@ export async function POST(request: Request) {
 
   try {
     const input = schema.parse(await request.json());
-    const channels = (input.channels?.length ? input.channels : ["rakuten", "qoo10"]) as EcProfitChannel[];
+    const channels = ((input.channels?.length ? input.channels : ["rakuten", "qoo10"]) as EcProfitChannel[])
+      .filter(channel => isEcChannelOperational(channel, input.month));
     const supabase = getWebSalesAutomationServiceClient();
     const results = [];
     for (const channel of channels) {

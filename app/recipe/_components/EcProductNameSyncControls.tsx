@@ -1,5 +1,6 @@
 "use client";
 
+import { isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Clock3, History, Play, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
@@ -245,16 +246,17 @@ export default function EcProductNameSyncControls({
       {hasUnsavedChanges && <p className="mt-2 text-xs font-medium text-amber-700"><AlertTriangle className="mr-1 inline h-3.5 w-3.5" />先にレシピを保存してください。</p>}
       {commonValueInvalid && <p className="mt-2 text-xs font-medium text-red-700"><AlertTriangle className="mr-1 inline h-3.5 w-3.5" />共通商品名を75文字以内へ直して保存してください。</p>}
       <div className="mt-3 flex flex-wrap gap-2">
-        {EC_PRODUCT_NAME_TARGETS.map((target) => (
+        {EC_PRODUCT_NAME_TARGETS.filter(target => isEcChannelOperational(target.id)).map((target) => (
           <button key={target.id} type="button" disabled={disabled || !targetNames[target.id]} onClick={() => void enqueue([target.id])}
             className={`${SITE_COLORS[target.id]} min-h-9 rounded-md px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40`}>
             {target.label}
           </button>
         ))}
-        <button type="button" disabled={disabled || EC_PRODUCT_NAME_TARGETS.some(({ id }) => !targetNames[id])} onClick={() => void enqueue(EC_PRODUCT_NAME_TARGETS.map((target) => target.id))}
+        <button type="button" disabled={disabled || EC_PRODUCT_NAME_TARGETS.filter(target => isEcChannelOperational(target.id)).some(({ id }) => !targetNames[id])} onClick={() => void enqueue(EC_PRODUCT_NAME_TARGETS.filter(target => isEcChannelOperational(target.id)).map((target) => target.id))}
           className="min-h-9 rounded-md bg-gray-950 px-3 text-xs font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40">
           全EC
         </button>
+        <span className="rounded border border-dashed px-3 py-2 text-xs text-gray-500">makeshop 開店準備中</span>
       </div>
 
       {(job || reservations.length > 0 || history.length > 0) && <div className="mt-3 space-y-2">

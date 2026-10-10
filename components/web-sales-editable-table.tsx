@@ -18,6 +18,7 @@ import Qoo10CsvImportModal from "./Qoo10CsvImportModal"
 import TiktokCsvImportModal from "./TiktokCsvImportModal"
 import CsvImportModal from "./CsvImportModal"
 import { calculateTotalAllECSites, sortWebSalesData, filterWebSalesData } from "@/utils/webSalesUtils"
+import { isEcChannelOperational } from "@/lib/ec-channel-lifecycle"
 import { WebSalesData } from "@/types/db"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 
@@ -304,6 +305,7 @@ export default function WebSalesEditableTable({
 
       {/* ===== 商品一覧テーブルの上：データ取り込み＆チャネル別削除ボタン ===== */}
       <WebSalesImportButtons
+        month={month}
         isUploading={false}
         onCsvClick={() => {
           console.log('CSV button clicked!');
@@ -336,10 +338,10 @@ export default function WebSalesEditableTable({
         <button onClick={() => handleChannelDelete('amazon')} className="px-3 py-1 text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200">🗑️ Amazon削除</button>
         <button onClick={() => handleChannelDelete('rakuten')} className="px-3 py-1 text-xs font-semibold text-red-700 bg-red-100 border border-red-300 rounded hover:bg-red-200">🗑️ 楽天削除</button>
         <button onClick={() => handleChannelDelete('yahoo')} className="px-3 py-1 text-xs font-semibold text-purple-700 bg-purple-100 border border-purple-300 rounded hover:bg-purple-200">🗑️ Yahoo削除</button>
-        <button onClick={() => handleChannelDelete('mercari')} className="px-3 py-1 text-xs font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded hover:bg-sky-200">🗑️ メルカリ削除</button>
+        {isEcChannelOperational("mercari", month) && <button onClick={() => handleChannelDelete('mercari')} className="px-3 py-1 text-xs font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded hover:bg-sky-200">🗑️ メルカリ削除</button>}
         <button onClick={() => handleChannelDelete('base')} className="px-3 py-1 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded hover:bg-green-200">🗑️ BASE削除</button>
-        <button onClick={() => handleChannelDelete('qoo10')} className="px-3 py-1 text-xs font-semibold text-pink-700 bg-pink-100 border border-pink-300 rounded hover:bg-pink-200">🗑️ Qoo10削除</button>
-        <button onClick={() => handleChannelDelete('tiktok')} className="px-3 py-1 text-xs font-semibold text-teal-700 bg-teal-100 border border-teal-300 rounded hover:bg-teal-200">🗑️ TikTok削除</button>
+        {isEcChannelOperational("qoo10", month) && <button onClick={() => handleChannelDelete('qoo10')} className="px-3 py-1 text-xs font-semibold text-pink-700 bg-pink-100 border border-pink-300 rounded hover:bg-pink-200">🗑️ Qoo10削除</button>}
+        {isEcChannelOperational("tiktok", month) && <button onClick={() => handleChannelDelete('tiktok')} className="px-3 py-1 text-xs font-semibold text-teal-700 bg-teal-100 border border-teal-300 rounded hover:bg-teal-200">🗑️ TikTok削除</button>}
       </div>
 
       <WebSalesDataTable
@@ -363,6 +365,7 @@ export default function WebSalesEditableTable({
       />
 
       <WebSalesImportButtons
+        month={month}
         isUploading={false}
         onCsvClick={() => {
           console.log('CSV button clicked!');
@@ -399,10 +402,10 @@ export default function WebSalesEditableTable({
         <button onClick={() => handleLearningReset('amazon')} className="px-3 py-1 text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200">🔄 Amazon学習データリセット</button>
         <button onClick={() => handleLearningReset('rakuten')} className="px-3 py-1 text-xs font-semibold text-red-700 bg-red-100 border border-red-300 rounded hover:bg-red-200">🔄 楽天学習データリセット</button>
         <button onClick={() => handleLearningReset('yahoo')} className="px-3 py-1 text-xs font-semibold text-purple-700 bg-purple-100 border border-purple-300 rounded hover:bg-purple-200">🔄 Yahoo学習データリセット</button>
-        <button onClick={() => handleLearningReset('mercari')} className="px-3 py-1 text-xs font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded hover:bg-sky-200">🔄 メルカリ学習データリセット</button>
+        {isEcChannelOperational("mercari", month) && <button onClick={() => handleLearningReset('mercari')} className="px-3 py-1 text-xs font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded hover:bg-sky-200">🔄 メルカリ学習データリセット</button>}
         <button onClick={() => handleLearningReset('base')} className="px-3 py-1 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded hover:bg-green-200">🔄 BASE学習データリセット</button>
-        <button onClick={() => handleLearningReset('qoo10')} className="px-3 py-1 text-xs font-semibold text-pink-700 bg-pink-100 border border-pink-300 rounded hover:bg-pink-200">🔄 Qoo10学習データリセット</button>
-        <button onClick={() => handleLearningReset('tiktok')} className="px-3 py-1 text-xs font-semibold text-teal-700 bg-teal-100 border border-teal-300 rounded hover:bg-teal-200">🔄 TikTok学習データリセット</button>
+        {isEcChannelOperational("qoo10", month) && <button onClick={() => handleLearningReset('qoo10')} className="px-3 py-1 text-xs font-semibold text-pink-700 bg-pink-100 border border-pink-300 rounded hover:bg-pink-200">🔄 Qoo10学習データリセット</button>}
+        {isEcChannelOperational("tiktok", month) && <button onClick={() => handleLearningReset('tiktok')} className="px-3 py-1 text-xs font-semibold text-teal-700 bg-teal-100 border border-teal-300 rounded hover:bg-teal-200">🔄 TikTok学習データリセット</button>}
       </div>
 
       {/* ECチャネル別削除ボタン群 */}
@@ -413,10 +416,10 @@ export default function WebSalesEditableTable({
         <button onClick={() => handleChannelDelete('amazon')} className="px-3 py-1 text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200">🗑️ Amazon削除</button>
         <button onClick={() => handleChannelDelete('rakuten')} className="px-3 py-1 text-xs font-semibold text-red-700 bg-red-100 border border-red-300 rounded hover:bg-red-200">🗑️ 楽天削除</button>
         <button onClick={() => handleChannelDelete('yahoo')} className="px-3 py-1 text-xs font-semibold text-purple-700 bg-purple-100 border border-purple-300 rounded hover:bg-purple-200">🗑️ Yahoo削除</button>
-        <button onClick={() => handleChannelDelete('mercari')} className="px-3 py-1 text-xs font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded hover:bg-sky-200">🗑️ メルカリ削除</button>
+        {isEcChannelOperational("mercari", month) && <button onClick={() => handleChannelDelete('mercari')} className="px-3 py-1 text-xs font-semibold text-sky-700 bg-sky-100 border border-sky-300 rounded hover:bg-sky-200">🗑️ メルカリ削除</button>}
         <button onClick={() => handleChannelDelete('base')} className="px-3 py-1 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded hover:bg-green-200">🗑️ BASE削除</button>
-        <button onClick={() => handleChannelDelete('qoo10')} className="px-3 py-1 text-xs font-semibold text-pink-700 bg-pink-100 border border-pink-300 rounded hover:bg-pink-200">🗑️ Qoo10削除</button>
-        <button onClick={() => handleChannelDelete('tiktok')} className="px-3 py-1 text-xs font-semibold text-teal-700 bg-teal-100 border border-teal-300 rounded hover:bg-teal-200">🗑️ TikTok削除</button>
+        {isEcChannelOperational("qoo10", month) && <button onClick={() => handleChannelDelete('qoo10')} className="px-3 py-1 text-xs font-semibold text-pink-700 bg-pink-100 border border-pink-300 rounded hover:bg-pink-200">🗑️ Qoo10削除</button>}
+        {isEcChannelOperational("tiktok", month) && <button onClick={() => handleChannelDelete('tiktok')} className="px-3 py-1 text-xs font-semibold text-teal-700 bg-teal-100 border border-teal-300 rounded hover:bg-teal-200">🗑️ TikTok削除</button>}
       </div>
 
       <WebSalesSummary totalCount={totalCount} totalAmount={totalAmount} />

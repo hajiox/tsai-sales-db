@@ -5336,7 +5336,7 @@ function RecipeDetailContent() {
               <ScopedEcImageSection
                 role="non_amazon"
                 title="Amazon以外の画像"
-                description="メルカリ由来の発送案内・発送企業情報です。楽天・Yahoo・メルカリ・Qoo10・TikTokの末尾に追加し、AmazonとBASEには登録しません。"
+                description="保存済みの発送案内・発送企業情報です。楽天・Yahooの末尾に追加します。退店済みECの画像履歴は保持します。"
                 images={nonAmazonImages}
                 startingOrder={getRecipeEcImageIndexesForSite('mercari', webProductImages.length).length + 1}
                 badgeTone="red"
