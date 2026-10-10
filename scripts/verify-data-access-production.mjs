@@ -1,4 +1,5 @@
-// Production smoke test: creates one short-lived read-only connection, never business data.
+// Production smoke test: creates one short-lived synthetic connection, reads only
+// business data, and changes/revokes only that connection's permission metadata.
 import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
@@ -16,7 +17,7 @@ const resolveMcp = createRequire(path.join(mcpDir, 'package.json'));
 const { Client } = await import(pathToFileURL(resolveMcp.resolve('@modelcontextprotocol/client')).href);
 const { StdioClientTransport } = await import(pathToFileURL(resolveMcp.resolve('@modelcontextprotocol/client/stdio')).href);
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
-const client = new Client({ name: 'tsa-data-production-verification', version: '1.1.0' });
+const client = new Client({ name: 'tsa-data-production-verification', version: '1.2.0' });
 let connectionId;
 let connected = false;
 const payload = result => result.structuredContent ?? JSON.parse(result.content.find(item => item.type === 'text').text);
@@ -35,10 +36,12 @@ try {
   await client.connect(transport);
   connected = true;
   const tools = await client.listTools();
-  assert.equal(tools.tools.length, 21, 'Unexpected MCP tool list.');
-  assert.equal(client.getServerVersion().version, '1.1.0', 'Unexpected MCP adapter version.');
+  assert.equal(tools.tools.length, 24, 'Unexpected MCP tool list.');
+  assert.equal(client.getServerVersion().version, '1.2.0', 'Unexpected MCP adapter version.');
   const businessCatalog = payload(await client.callTool({ name: 'tsa_business_catalog', arguments: {} }));
   assert.ok(!businessCatalog.ok && businessCatalog.error.code === 'FORBIDDEN', 'Limited connection unexpectedly accessed the full business catalog.');
+  const limitedComposition = payload(await client.callTool({ name: 'tsa_get_recipe_items', arguments: { recipeId: record.id } }));
+  assert.ok(!limitedComposition.ok && limitedComposition.error.code === 'FORBIDDEN', 'Limited connection unexpectedly accessed whole-composition replacement data.');
   const read = payload(await client.callTool({ name: 'tsa_search_recipes', arguments: { limit: 100 } }));
   assert.ok(read.ok && read.data.items.length === 1 && read.data.items[0].id === record.id, 'Scoped read failed.');
   const detail = payload(await client.callTool({ name: 'tsa_get_recipe', arguments: { id: record.id } }));
@@ -54,16 +57,30 @@ try {
   assert.ok(!write.ok && write.error.code === 'FORBIDDEN', 'Read-only write denial failed.');
   const plans = (await db.query('select count(*)::int n from public.data_access_changes where connection_id=$1', [connectionId])).rows[0].n;
   assert.equal(plans, 0, 'The read-only verification unexpectedly prepared a change.');
+  // Exercise the new transport with the same synthetic key. No real connection
+  // or recipe/item is changed, and the full capability never leaves this process.
+  await db.query("update public.data_access_connections set scopes=array['recipes:read','business:full']::text[],resource_ids='{}'::jsonb where id=$1", [connectionId]);
+  const composition = payload(await client.callTool({ name: 'tsa_get_recipe_items', arguments: { recipeId: record.id } }));
+  assert.ok(composition.ok && composition.data.recipeId === record.id && composition.data.recipe?.id === record.id,
+    'Whole-composition read failed for the explicitly full synthetic connection.');
+  assert.ok(Array.isArray(composition.data.items) && composition.data.items.every(item => item.recipe_id === record.id), 'Whole-composition rows do not belong to the selected recipe.');
+  assert.ok(/^[a-f0-9]{32}$/.test(composition.data._version), 'Whole-composition version failed.');
+  const replacementPlans = (await db.query('select count(*)::int n from public.recipe_items_replacement_changes where connection_id=$1', [connectionId])).rows[0].n;
+  assert.equal(replacementPlans, 0, 'The read-only verification unexpectedly prepared a composition replacement.');
   await db.query('update public.data_access_connections set revoked_at=now() where id=$1', [connectionId]);
   const revoked = payload(await client.callTool({ name: 'tsa_search_recipes', arguments: {} }));
   assert.ok(!revoked.ok && revoked.error.code === 'UNAUTHORIZED', 'Immediate revocation failed.');
+  const revokedComposition = payload(await client.callTool({ name: 'tsa_get_recipe_items', arguments: { recipeId: record.id } }));
+  assert.ok(!revokedComposition.ok && revokedComposition.error.code === 'UNAUTHORIZED', 'Composition access ignored immediate revocation.');
   for (const [pathname, method] of [['/api/data-access/connections', 'GET'], ['/api/recipe', 'GET'], ['/api/web-sales-period', 'POST']]) {
     const response = await fetch(origin + pathname, { method, redirect: 'manual', signal: AbortSignal.timeout(15000),
       ...(method === 'POST' ? { headers: { 'content-type': 'application/json' }, body: '{}' } : {}) });
     assert.equal(response.status, 401, 'Anonymous legacy access was not rejected.');
   }
-  console.log(JSON.stringify({ production: true, mcpHandshake: true, tools: 21, adapterVersion: '1.1.0', scopedRead: true, versionedDetail: true,
-    recordRestriction: true, resourceRestriction: true, limitedBusinessCatalogDenied: true, readOnlyWriteDenied: true, preparedChanges: 0, immediateRevocation: true, anonymousLegacyAccessDenied: true }));
+  console.log(JSON.stringify({ production: true, mcpHandshake: true, tools: 24, adapterVersion: '1.2.0', scopedRead: true, versionedDetail: true,
+    recordRestriction: true, resourceRestriction: true, limitedBusinessCatalogDenied: true, limitedCompositionDenied: true,
+    wholeCompositionRead: true, wholeCompositionVersion: true, readOnlyWriteDenied: true, preparedChanges: 0, replacementPlans: 0,
+    immediateRevocation: true, compositionRevocation: true, anonymousLegacyAccessDenied: true }));
 } finally {
   try {
     if (connectionId) await db.query('update public.data_access_connections set revoked_at=coalesce(revoked_at,now()) where id=$1', [connectionId]);

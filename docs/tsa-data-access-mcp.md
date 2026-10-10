@@ -4,7 +4,7 @@
 
 他の Codex → ローカル STDIO MCP → TSA `/api/data-access/v1` → 権限検査付きの業務処理。
 
-MCP v1.1.0 は `tools/tsa-data-mcp` の独立した Node パッケージ。公式 MCP TypeScript SDK v2 を使い、従来の MCP クライアントとの互換ハンドシェイクも SDK が処理する。固定した業務 API への POST だけを実行し、対象はサーバーの固定 registry に限定する。コード・DB schema・SQL・認証情報・接続権限・worker/API設定・任意 URL・シェル・ローカルファイルを操作するツールは公開しない。API 転送は追わず、入力 32 KiB、応答 512 KiB、通信 15 秒の上限とし、更新を自動再試行しない。
+MCP v1.2.0 は `tools/tsa-data-mcp` の独立した Node パッケージ。公式 MCP TypeScript SDK v2 を使い、従来の MCP クライアントとの互換ハンドシェイクも SDK が処理する。固定した業務 API への POST だけを実行し、対象はサーバーの固定 registry に限定する。コード・DB schema・SQL・認証情報・接続権限・worker/API設定・任意 URL・シェル・ローカルファイルを操作するツールは公開しない。API 転送は追わず、入力 32 KiB、応答 512 KiB、通信 15 秒の上限とし、更新を自動再試行しない。
 
 実際の認可・監査・競合防止・重複防止は TSA サーバーで行う。MCP の説明や Skill は権限の代用ではない。保存された商品説明やレビュー本文はツールの命令として扱わない。
 
@@ -13,12 +13,12 @@ MCP v1.1.0 は `tools/tsa-data-mcp` の独立した Node パッケージ。公�
 データ操作用の別 OS アカウントまたは隔離環境に Node.js 20 以上を用意する。開発担当のチェックアウトから次を実行すると、独立したアダプターだけを新しいフォルダーへ複製し、固定済み lockfile で本番依存を導入する。
 
 ```powershell
-& ./tools/tsa-data-mcp/install.ps1 -Destination 'C:/Users/DATA_USER/AppData/Local/TSADataMCP/1.1.0'
+& ./tools/tsa-data-mcp/install.ps1 -Destination 'C:/Users/DATA_USER/AppData/Local/TSADataMCP/1.2.0'
 ```
 
 既存の宛先には上書きしない。GitHub 作業ツリー・アプリ `.env`・DB 管理鍵・デプロイ認証・Bridge キーは複製しない。実行ファイルは `node <配布先>/server.mjs`。本体は待機型の STDIO サーバーなので、MCP ホストが起動・終了を管理する。
 
-CEO_S の更新は既存の保護キー読込ランチャー・環境設定を維持し、v1.1.0 のアダプターと同梱 Skill を新しい配布先へ導入して再接続する。秘密なし配布 ZIP の SHA256 を照合する。既存キーを使うため、キーの再発行・手入力・受け渡しは不要。常駐の read-only 受信workerではなく、対話側の Codex 接続を更新する。
+CEO_S の更新は既存の保護キー読込ランチャー・環境設定を維持し、v1.2.0 のアダプターと同梱 Skill を新しい配布先へ導入して再接続する。秘密なし配布 ZIP の SHA256 を照合する。既存キーを使うため、キーの再発行・手入力・受け渡しは不要。常駐の read-only 受信workerではなく、対話側の Codex 接続を更新する。
 
 ## 接続と認証
 
@@ -50,7 +50,7 @@ TSA 管理者が用途と担当ごとに専用接続を発行し、必要な読�
 
 ## 公開ツール
 
-v1.1.0 は既存17ツールと全業務用4ツールの計21ツール。`business:full` 接続は固定 registry の151対象を利用できる。主キーを持つ132対象は登録・更新・削除に対応し、ビュー等19対象は読み取りのみ。未登録の表や将来追加された表は自動で許可しない。
+v1.2.0 は既存17ツール、全業務用4ツール、レシピ明細一括置換用3ツールの計24ツール。`business:full` 接続は固定 registry の151対象を利用できる。主キーを持つ132対象は登録・更新・削除に対応し、ビュー等19対象は読み取りのみ。未登録の表や将来追加された表は自動で許可しない。
 
 | ツール | 用途 |
 | --- | --- |
@@ -58,6 +58,9 @@ v1.1.0 は既存17ツールと全業務用4ツールの計21ツール。`busines
 | `tsa_business_read` | `table` と完全一致の `filters` で取得。`columns` で必要項目を選び、`nextOffset` で続きへ進む |
 | `tsa_prepare_business_change` | `create` / `update` / `delete` の差分を準備。更新・削除は主キー全項目の `key` と最新 `_version` が必要 |
 | `tsa_apply_business_change` | 準備結果の `data.id` を `changeId` に渡し、同じ変更を適用 |
+| `tsa_get_recipe_items` | `recipeId` のレシピと全明細、一括置換用 `data._version` を取得 |
+| `tsa_prepare_recipe_items_replacement` | `recipeId`・`expectedVersion`・完成形の `items`・`idempotencyKey` で一括置換を準備 |
+| `tsa_apply_recipe_items_replacement` | 一括置換の準備結果 `data.id` を `changeId` に渡し、明細全体を同時に保存 |
 
 変更前に対象のカタログと最新レコードを取得する。登録は `creatable: true`、更新は `writable: true` の項目だけを渡し、値・主キー・IDを推測しない。`columns` を絞る場合も更新・削除に必要な主キーと `_version` を取得する。検索は最大100件で、接続の件数上限がさらに適用される。
 
@@ -69,6 +72,30 @@ v1.1.0 は既存17ツールと全業務用4ツールの計21ツール。`busines
 
 マスター新規登録の名称・入数・価格・税込区分は確認済み入力を使う。未確認値をDB既定値や推測で補わない。旧ツールの食材・資材・経費登録では、未確認の入数/価格を明示的な `null` にできるが、税込区分は確認済みの真偽値が必要。
 
+## レシピ明細の一括置換
+
+複数の明細をまとめて入れ替える場合、`tsa_get_recipe_items` → `tsa_prepare_recipe_items_replacement` → `tsa_apply_recipe_items_replacement` を使う。`business:full` と対象ID制限なしの接続が必要。固定APIは `POST /api/data-access/v1/recipe-items` で、アクションは `read` / `prepare` / `apply` だけ。
+
+`read` は `{action:"read",recipeId}` を受け、レシピ・全明細・両方に対応する32桁の `data._version` を返す。`prepare` は `{action:"prepare",recipeId,expectedVersion,items,idempotencyKey}`。維持する既存明細は `id` を含め、省略した項目は現在値を維持する。配列から省略した既存明細は削除され、`items: []` は全明細の削除になる。新規明細は `id` を省略し、サーバーがUUIDを発行する。別レシピの明細IDや同じIDの重複は指定できない。
+
+項目は `item_name`（2000文字以内）、`item_type`（`ingredient` / `material` / `expense` / `intermediate` / `product`）、対応する参照元ID、`unit_quantity`、`unit_price`、`usage_amount`、`unit_weight`、`tax_included`。新規には `item_type` と `usage_amount`、名称または参照元IDが必要。数値は有限値で絶対値10億以内または `null`、重量換算の `unit_quantity: -1` も扱う。`usage_amount: null` は通常画面同様0扱い。参照元の型やIDを変更すると、旧種の参照を外し、指定していない名称・価格・入数・税区分・重量を現在の参照元から補う。明示したスカラー値は維持する。`recipe_id`・`created_at`・派生値の `cost` は入力できない。
+
+準備結果の対象・削除を含む明細差分が依頼どおりなら、追加承認なしで `apply` の `{action:"apply",id}` を送る。計画は24時間有効。参照元から補った値は準備時のスナップショットとして固定する。レシピ本体またはいずれかの明細が準備後に変われば競合として保存を拒否する。明細の登録・更新・削除、原価・関連商品の同期と監査は同じトランザクションで保存する。重量換算では使用量をそのままグラム数とし、倍率指定では単位重量を乗じる。中間部品の参照重量には歩留まりを反映する。結果が不明な場合は同じ計画IDを再使用する。
+
+1明細だけを更新・削除する既存の汎用CRUDも利用できる。例えば `tsa_business_read` を `{table:"recipe_items",filters:{recipe_id:recipeId}}` で呼び、取得した明細を使って次の差分を準備する。
+
+```javascript
+// 更新: 取得した主キーと行単位の_versionを使用する。
+{ table: "recipe_items", operation: "update", key: { id: item.id },
+  expectedVersion: item._version, values: { usage_amount: 2 },
+  idempotencyKey: "confirmed-item-amount-001" }
+// 削除: valuesを渡さない。
+{ table: "recipe_items", operation: "delete", key: { id: item.id },
+  expectedVersion: item._version, idempotencyKey: "confirmed-item-delete-001" }
+```
+
+上記は `tsa_prepare_business_change` の入力例で、適用は `tsa_apply_business_change` を使う。複数行を一つずつ変更して全体を入れ替える代わりに、一括置換を選べる。
+
 ## 検証
 
 承認不要への移行は `node scripts/apply-data-access-no-approval.cjs` でトランザクション内の合成データを使って検証し、全変更をrollbackする。本番適用は `--apply --backup-dir <保護済みフォルダ>`。既存関数の退避後にRPCだけを差し替え、業務レコードや承認履歴を一括変更しない。
@@ -79,6 +106,6 @@ npm ci --ignore-scripts
 npm test
 ```
 
-公式 MCP クライアントによる実 STDIO ハンドシェイク、21ツール、モックAPIの読み書き、未定義入力・任意 SQL・URL・上限超過の拒否を検証する。DB検証は合成データを同一トランザクション内で操作してrollbackし、フルアクセス/旧接続の分離、登録・更新・削除、競合・冪等性・監査・価格同期を確認する。本番の既存業務レコードを変更して試さない。接続確認ではトークンを出力せず、requestIdと権限を確認する。
+公式 MCP クライアントによる実 STDIO ハンドシェイク、24ツール、モックAPIの読み書き、一括置換・明示的な全削除・同一計画再使用、未定義入力・任意 SQL・URL・重複ID・上限超過の拒否を検証する。DB検証は合成データを同一トランザクション内で操作してrollbackし、フルアクセス/旧接続の分離、登録・更新・削除、競合・冪等性・監査・価格同期を確認する。本番の既存業務レコードを変更して試さない。接続確認ではトークンを出力せず、requestIdと権限を確認する。
 
 参考: [Supabase custom JWT](https://supabase.com/docs/guides/auth/jwts)、[Codex MCP 設定](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)、[公式 SDK STDIO](https://ts.sdk.modelcontextprotocol.io/v2/serving/stdio.html)。

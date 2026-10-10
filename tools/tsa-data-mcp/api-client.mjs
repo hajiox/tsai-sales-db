@@ -44,7 +44,7 @@ export function loadConfiguration(env = process.env) {
 export function createApiClient(configuration, { fetchImpl = fetch, timeoutMs = 15000 } = {}) {
   const { origin, token } = configuration;
   async function post(path, body) {
-    if (!['/read', '/changes', '/business'].includes(path) && !/^\/changes\/[0-9a-f-]{36}\/apply$/i.test(path)) {
+    if (!['/read', '/changes', '/business', '/recipe-items'].includes(path) && !/^\/changes\/[0-9a-f-]{36}\/apply$/i.test(path)) {
       throw new DataApiError('INVALID_OPERATION', '対応していない操作です。');
     }
     const serialized = JSON.stringify(body);
@@ -102,6 +102,7 @@ export function createApiClient(configuration, { fetchImpl = fetch, timeoutMs = 
     return JSON.parse(JSON.stringify(payload).replaceAll(token, '[redacted]'));
   }
   return {
+    recipeItems: (action, body) => post('/recipe-items', { ...body, action }),
     business: (action, body) => post('/business', { ...body, action }),
     read: body => post('/read', body),
     prepare: body => post('/changes', body),

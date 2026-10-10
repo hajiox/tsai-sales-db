@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "test:data-access": "node scripts/test-data-access.cjs && node scripts/test-data-access-http.cjs && node scripts/test-data-access-admin.cjs && node scripts/test-recipe-request-auth.cjs && node scripts/test-business-data-access.cjs",
+    "test:data-access": "node scripts/test-data-access.cjs && node scripts/test-data-access-http.cjs && node scripts/test-data-access-admin.cjs && node scripts/test-recipe-request-auth.cjs && node scripts/test-business-data-access.cjs && node scripts/test-recipe-items-replacement.cjs",
     "test:data-access-migration": "node scripts/apply-data-access-migration.cjs",
     "apply:data-access-migration": "node scripts/apply-data-access-migration.cjs --apply",
     "test:data-access-admin": "node scripts/test-data-access-admin.cjs",
@@ -109,7 +109,10 @@
     "test:recipe-sns-accounts": "node scripts/test-recipe-sns-accounts.cjs",
     "test:business-data-access": "node scripts/test-business-data-access.cjs",
     "test:business-data-access-migration": "node scripts/apply-business-data-access.cjs",
-    "test:business-cost-sync": "node scripts/test-business-cost-sync.cjs"
+    "test:business-cost-sync": "node scripts/test-business-cost-sync.cjs",
+    "test:recipe-items-replacement": "node scripts/test-recipe-items-replacement.cjs",
+    "test:recipe-items-replacement-migration": "node scripts/test-recipe-items-replacement-migration.cjs",
+    "apply:recipe-items-replacement-migration": "node scripts/apply-recipe-items-replacement.cjs --apply"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",

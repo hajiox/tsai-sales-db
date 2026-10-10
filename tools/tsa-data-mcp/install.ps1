@@ -1,6 +1,6 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-  [string]$Destination = (Join-Path $env:LOCALAPPDATA 'TSADataMCP/1.1.0')
+  [string]$Destination = (Join-Path $env:LOCALAPPDATA 'TSADataMCP/1.2.0')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,7 +15,7 @@ if (Test-Path -LiteralPath $targetPath) {
 if (-not $PSCmdlet.ShouldProcess($targetPath, 'Install TSA data-only MCP without credentials or application source')) { return }
 
 New-Item -ItemType Directory -Path $targetPath | Out-Null
-foreach ($fileName in @('server.mjs', 'api-client.mjs', 'change-schemas.mjs', 'business-schemas.mjs', 'package.json', 'package-lock.json', 'codex-config.example.toml')) {
+foreach ($fileName in @('server.mjs', 'api-client.mjs', 'change-schemas.mjs', 'business-schemas.mjs', 'recipe-items-schemas.mjs', 'package.json', 'package-lock.json', 'codex-config.example.toml')) {
   Copy-Item -LiteralPath (Join-Path $sourcePath $fileName) -Destination (Join-Path $targetPath $fileName)
 }
 Copy-Item -LiteralPath (Join-Path $sourcePath 'skill') -Destination (Join-Path $targetPath 'skill') -Recurse
