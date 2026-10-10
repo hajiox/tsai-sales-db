@@ -111,6 +111,8 @@ export default function EcPriceSyncControls({
   const hasPrice = Number.isFinite(sellingPriceInclTax) && sellingPriceInclTax > 0;
   const hasProductLp = Boolean(productLpUrl?.trim());
   const jobIsActive = Boolean(job && ACTIVE_STATUSES.has(job.status));
+  const jobIsReserved = Boolean(job?.status === "queued" && job.isReserved === true);
+  const jobIsExecuting = jobIsActive && !jobIsReserved;
   const blockedByAnotherJob = dispatchMode === "immediate" && Boolean(blockingJob);
   const unfinishedTargets = job
     ? getEcPriceRetryTargets(job.targets, job.sites, job.planValidated)
@@ -176,10 +178,10 @@ export default function EcPriceSyncControls({
   }, [refreshPriceHistory, refreshRegistration]);
 
   useEffect(() => {
-    if (!jobIsActive) return;
+    if (!jobIsExecuting) return;
     const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [jobIsActive]);
+  }, [jobIsExecuting]);
 
   useEffect(() => {
     void refreshReservations();
@@ -428,15 +430,16 @@ export default function EcPriceSyncControls({
   const startedAt = job?.startedAt ? Date.parse(job.startedAt) : Date.parse(job?.createdAt || "");
   const heartbeatAgeSeconds = Number.isFinite(heartbeatAt) ? Math.max(0, Math.floor((clockNow - heartbeatAt) / 1000)) : null;
   const elapsedSeconds = Number.isFinite(startedAt) ? Math.max(0, Math.floor((clockNow - startedAt) / 1000)) : 0;
-  const completionEstimate = jobIsActive && job
+  const completionEstimate = jobIsExecuting && job
     ? estimateCompletion(job.status, activeProgress, elapsedSeconds, job.targets.length + (hasProductLp ? 1 : 0), clockNow)
     : null;
-  const heartbeatStale = jobIsActive && heartbeatAgeSeconds !== null && heartbeatAgeSeconds >= 70;
+  const heartbeatStale = jobIsExecuting && heartbeatAgeSeconds !== null && heartbeatAgeSeconds >= 70;
   const executionPhase = job?.status === "queued"
     ? "開始待ち"
     : "1件ずつ順次実行中";
-  const jobStatusLabel = jobIsActive
-    ? executionPhase
+  const jobStatusLabel = jobIsReserved
+    ? "予約済み・未実行"
+    : jobIsActive ? executionPhase
     : job?.status === "completed"
       ? "完了"
       : job?.status === "waiting_for_user"
@@ -448,7 +451,9 @@ export default function EcPriceSyncControls({
             : job?.status === "cancelled"
               ? "停止済み"
               : "実行履歴なし";
-  const jobStatusStyle = job?.status === "completed"
+  const jobStatusStyle = jobIsReserved
+    ? "border-slate-200 bg-slate-50 text-slate-600"
+    : job?.status === "completed"
     ? "border-emerald-200 bg-emerald-50 text-emerald-700"
     : job?.status === "failed"
       ? "border-red-200 bg-red-50 text-red-700"
@@ -559,13 +564,13 @@ export default function EcPriceSyncControls({
         </p>
       ) : job ? (
         <div className={`mt-3 rounded-md border px-3 py-3 text-xs ${jobStatusStyle}`}>
-          <p className="mb-2 text-[10px] font-bold uppercase text-current/70">直近の実行状況</p>
+          <p className="mb-2 text-[10px] font-bold uppercase text-current/70">{jobIsReserved ? "予約状況" : "直近の実行状況"}</p>
           <div className="flex flex-wrap items-center justify-between gap-2 font-bold">
             <div className="flex items-center gap-2">
-              {job.status === "completed" ? <CheckCircle2 className="h-4 w-4" /> : job.status === "failed" ? <AlertTriangle className="h-4 w-4" /> : job.status === "cancelled" ? <CircleStop className="h-4 w-4" /> : <Loader2 className={`h-4 w-4 ${jobIsActive ? "animate-spin" : ""}`} />}
+              {jobIsReserved ? <CalendarClock className="h-4 w-4" /> : job.status === "completed" ? <CheckCircle2 className="h-4 w-4" /> : job.status === "failed" ? <AlertTriangle className="h-4 w-4" /> : job.status === "cancelled" ? <CircleStop className="h-4 w-4" /> : <Loader2 className={`h-4 w-4 ${jobIsExecuting ? "animate-spin" : ""}`} />}
               <span>{jobStatusLabel}</span>
             </div>
-            {jobIsActive ? (
+            {jobIsExecuting ? (
               <span className="tabular-nums" aria-label={`進捗 ${activeProgress}パーセント`}>{activeProgress}%</span>
             ) : (
               <time className="text-[10px] font-medium opacity-70" dateTime={job.completedAt || job.updatedAt || job.createdAt}>
@@ -573,7 +578,10 @@ export default function EcPriceSyncControls({
               </time>
             )}
           </div>
-          {jobIsActive && (
+          {jobIsReserved && (
+            <p className="mt-2 font-medium">自動では実行されません。「予約分をまとめて実行」で開始します。</p>
+          )}
+          {jobIsExecuting && (
             <>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/80 ring-1 ring-inset ring-current/10">
                 <div

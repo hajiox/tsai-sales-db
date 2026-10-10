@@ -51,6 +51,7 @@ export type EcPriceJobLpResult = {
 export type EcPriceJobView = {
   id: string;
   status: "queued" | "running" | "waiting_for_user" | "needs_review" | "completed" | "failed" | "cancelled";
+  isReserved?: boolean;
   progress: number;
   currentStep: string;
   errorMessage: string | null;

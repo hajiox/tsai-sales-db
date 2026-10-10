@@ -103,6 +103,7 @@ function toJobView(job: Record<string, unknown>): EcPriceJobView {
   return {
     id: String(job.id),
     status: String(job.status) as EcPriceJobView["status"],
+    isReserved: isReservedEcPriceJob(job.status, parameters),
     progress: Number(job.progress) || 0,
     currentStep: browserSessionContention
       ? "旧Bridgeのタブ固定ロジックで停止しました。再実行してください"

@@ -213,5 +213,12 @@ assert.equal(
   false,
   "実行開始済みジョブを予約へ戻さない",
 );
+for (const dispatchMode of ["immediate", "batch", undefined]) {
+  assert.equal(
+    reservations.isReservedEcPriceJob("queued", { dispatchMode }),
+    false,
+    "実行が許可された待機ジョブや旧ジョブを予約表示にしない",
+  );
+}
 
 console.log("Recipe selling price tax-inclusive priority checks passed.");
