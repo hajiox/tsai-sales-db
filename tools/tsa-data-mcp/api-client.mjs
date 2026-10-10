@@ -10,6 +10,7 @@ const ERROR_MESSAGES = {
   IDEMPOTENCY_CONFLICT: '同じ実行キーが異なる変更に使われています。重複登録せず、準備済みの変更を確認してください。',
   EXPIRED: '変更案の有効期限が切れています。現在のデータを取得し直して変更内容を確認してください。',
   REJECTED: '変更案は管理者に却下されています。別キーでの再申請による迂回は行わないでください。',
+  EXHAUSTED: 'この区分のJANコード発行枠を使い切っています。新しいGS1事業者コードの設定が必要です。',
   NOT_FOUND: '対象が見つかりません。対象IDを確認してください。',
   RATE_LIMITED: '実行頻度の上限です。自動で連続再試行せず、時間を置いてください。',
 };
@@ -44,7 +45,7 @@ export function loadConfiguration(env = process.env) {
 export function createApiClient(configuration, { fetchImpl = fetch, timeoutMs = 15000 } = {}) {
   const { origin, token } = configuration;
   async function post(path, body) {
-    if (!['/read', '/changes', '/business', '/recipe-items'].includes(path) && !/^\/changes\/[0-9a-f-]{36}\/apply$/i.test(path)) {
+    if (!['/read', '/changes', '/business', '/recipe-items', '/jan-codes'].includes(path) && !/^\/changes\/[0-9a-f-]{36}\/apply$/i.test(path)) {
       throw new DataApiError('INVALID_OPERATION', '対応していない操作です。');
     }
     const serialized = JSON.stringify(body);
@@ -102,6 +103,7 @@ export function createApiClient(configuration, { fetchImpl = fetch, timeoutMs = 
     return JSON.parse(JSON.stringify(payload).replaceAll(token, '[redacted]'));
   }
   return {
+    janCodes: (action, body) => post('/jan-codes', { ...body, action }),
     recipeItems: (action, body) => post('/recipe-items', { ...body, action }),
     business: (action, body) => post('/business', { ...body, action }),
     read: body => post('/read', body),

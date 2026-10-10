@@ -1,6 +1,6 @@
 {
   "name": "@aizu/tsa-data-mcp",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "description": "Scoped TSA business-data MCP adapter. No repository or database credentials.",
   "type": "module",
@@ -15,7 +15,8 @@
     "codex-config.example.toml",
     "skill",
     "business-schemas.mjs",
-    "recipe-items-schemas.mjs"
+    "recipe-items-schemas.mjs",
+    "jan-schemas.mjs"
   ],
   "scripts": {
     "start": "node server.mjs",

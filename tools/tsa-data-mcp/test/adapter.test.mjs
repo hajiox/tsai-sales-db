@@ -114,9 +114,9 @@ test('real STDIO initialize, tools/list, mock API read and rejection before any 
   try {
     await client.connect(transport);
     assert.equal(client.getServerVersion().name, 'tsa-data');
-    assert.equal(client.getServerVersion().version, '1.2.0');
+    assert.equal(client.getServerVersion().version, '1.3.0');
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 24);
+    assert.equal(tools.length, 29);
     assert.equal(new Set(tools.map(tool => tool.name)).size, tools.length);
     assert.ok(tools.every(tool => tool.annotations.openWorldHint === false));
     assert.ok(tools.filter(tool => tool.name.includes('search_') || tool.name.includes('get_')).every(tool => tool.annotations.readOnlyHint === true));

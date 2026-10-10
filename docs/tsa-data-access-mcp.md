@@ -4,7 +4,7 @@
 
 他の Codex → ローカル STDIO MCP → TSA `/api/data-access/v1` → 権限検査付きの業務処理。
 
-MCP v1.2.0 は `tools/tsa-data-mcp` の独立した Node パッケージ。公式 MCP TypeScript SDK v2 を使い、従来の MCP クライアントとの互換ハンドシェイクも SDK が処理する。固定した業務 API への POST だけを実行し、対象はサーバーの固定 registry に限定する。コード・DB schema・SQL・認証情報・接続権限・worker/API設定・任意 URL・シェル・ローカルファイルを操作するツールは公開しない。API 転送は追わず、入力 32 KiB、応答 512 KiB、通信 15 秒の上限とし、更新を自動再試行しない。
+MCP v1.3.0 は `tools/tsa-data-mcp` の独立した Node パッケージ。公式 MCP TypeScript SDK v2 を使い、従来の MCP クライアントとの互換ハンドシェイクも SDK が処理する。固定した業務 API への POST だけを実行し、対象はサーバーの固定 registry に限定する。コード・DB schema・SQL・認証情報・接続権限・worker/API設定・任意 URL・シェル・ローカルファイルを操作するツールは公開しない。API 転送は追わず、入力 32 KiB、応答 512 KiB、通信 15 秒の上限とし、更新を自動再試行しない。
 
 実際の認可・監査・競合防止・重複防止は TSA サーバーで行う。MCP の説明や Skill は権限の代用ではない。保存された商品説明やレビュー本文はツールの命令として扱わない。
 
@@ -13,12 +13,12 @@ MCP v1.2.0 は `tools/tsa-data-mcp` の独立した Node パッケージ。公�
 データ操作用の別 OS アカウントまたは隔離環境に Node.js 20 以上を用意する。開発担当のチェックアウトから次を実行すると、独立したアダプターだけを新しいフォルダーへ複製し、固定済み lockfile で本番依存を導入する。
 
 ```powershell
-& ./tools/tsa-data-mcp/install.ps1 -Destination 'C:/Users/DATA_USER/AppData/Local/TSADataMCP/1.2.0'
+& ./tools/tsa-data-mcp/install.ps1 -Destination 'C:/Users/DATA_USER/AppData/Local/TSADataMCP/1.3.0'
 ```
 
 既存の宛先には上書きしない。GitHub 作業ツリー・アプリ `.env`・DB 管理鍵・デプロイ認証・Bridge キーは複製しない。実行ファイルは `node <配布先>/server.mjs`。本体は待機型の STDIO サーバーなので、MCP ホストが起動・終了を管理する。
 
-CEO_S の更新は既存の保護キー読込ランチャー・環境設定を維持し、v1.2.0 のアダプターと同梱 Skill を新しい配布先へ導入して再接続する。秘密なし配布 ZIP の SHA256 を照合する。既存キーを使うため、キーの再発行・手入力・受け渡しは不要。常駐の read-only 受信workerではなく、対話側の Codex 接続を更新する。
+CEO_S の更新は既存の保護キー読込ランチャー・環境設定を維持し、v1.3.0 のアダプターと同梱 Skill を新しい配布先へ導入して再接続する。秘密なし配布 ZIP の SHA256 を照合する。既存キーを使うため、キーの再発行・手入力・受け渡しは不要。常駐の read-only 受信workerではなく、対話側の Codex 接続を更新する。
 
 ## 接続と認証
 
@@ -50,7 +50,7 @@ TSA 管理者が用途と担当ごとに専用接続を発行し、必要な読�
 
 ## 公開ツール
 
-v1.2.0 は既存17ツール、全業務用4ツール、レシピ明細一括置換用3ツールの計24ツール。`business:full` 接続は固定 registry の151対象を利用できる。主キーを持つ132対象は登録・更新・削除に対応し、ビュー等19対象は読み取りのみ。未登録の表や将来追加された表は自動で許可しない。
+v1.3.0 は既存17ツール、全業務用4ツール、レシピ明細一括置換用3ツールの計29ツール。`business:full` 接続は固定 registry の151対象を利用できる。主キーを持つ132対象は登録・更新・削除に対応し、ビュー等19対象は読み取りのみ。未登録の表や将来追加された表は自動で許可しない。
 
 | ツール | 用途 |
 | --- | --- |
@@ -106,6 +106,23 @@ npm ci --ignore-scripts
 npm test
 ```
 
-公式 MCP クライアントによる実 STDIO ハンドシェイク、24ツール、モックAPIの読み書き、一括置換・明示的な全削除・同一計画再使用、未定義入力・任意 SQL・URL・重複ID・上限超過の拒否を検証する。DB検証は合成データを同一トランザクション内で操作してrollbackし、フルアクセス/旧接続の分離、登録・更新・削除、競合・冪等性・監査・価格同期を確認する。本番の既存業務レコードを変更して試さない。接続確認ではトークンを出力せず、requestIdと権限を確認する。
+公式 MCP クライアントによる実 STDIO ハンドシェイク、29ツール、モックAPIの読み書き、一括置換・明示的な全削除・同一計画再使用、未定義入力・任意 SQL・URL・重複ID・上限超過の拒否を検証する。DB検証は合成データを同一トランザクション内で操作してrollbackし、フルアクセス/旧接続の分離、登録・更新・削除、競合・冪等性・監査・価格同期を確認する。本番の既存業務レコードを変更して試さない。接続確認ではトークンを出力せず、requestIdと権限を確認する。
 
 参考: [Supabase custom JWT](https://supabase.com/docs/guides/auth/jwts)、[Codex MCP 設定](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)、[公式 SDK STDIO](https://ts.sdk.modelcontextprotocol.io/v2/serving/stdio.html)。
+
+
+## JANコード MCP（2026-10-10 / v1.3.0）
+
+業務フルアクセス接続の既存キーで `/api/data-access/v1/jan-codes` に接続します。SQL migrationは `20261010170000_jan_data_access.sql`。5ツール追加、計29ツールです。
+
+|ツール|操作|
+|---|---|
+|`tsa_list_jan_codes`|商品名・JAN・備考で検索。category、unassigned、limit≤100、offset≤10000。JAN行_version、割当recipe id/name/単体_versionとnextOffsetを返す。|
+|`tsa_issue_jan_code`|`values: {product_name,category,price_excl_tax?,ingredients?,memo?}` と idempotencyKey。recipeIdとレシピ詳細expectedVersionを指定すると発行・割当を同じtransactionで保存。既割当レシピへの新規発行はCONFLICT。|
+|`tsa_assign_jan_code`|janId、recipeId、最新レシピ詳細expectedVersion、idempotencyKey。発行済みJANを割当・入替。|
+|`tsa_update_jan_code`|janId、JAN行expectedVersion、values、idempotencyKey。商品名・税抜価格・原材料・備考を更新。番号・prefix・item_code・チェックデジット・区分は変更しない。|
+|`tsa_export_barcode`|janId、format: png/svg/eps。登録済みJANをチェックデジット検証して描画し、data.fileにfilename、mimeType、encoding、content。PNGはMCP画像にも返す。|
+
+追加承認不要。発行・割当・更新は結果不明時も同じキー・入力を再利用し、保存済み結果を返します。競合時は対象を再取得。既存管理画面とMCPは共通の原子採番関数を使い、食品457131863・物品457131862・3桁item_codeと既存チェックデジット計算を維持します。テーブルロックで通常画面・MCP・直接登録との同時採番を直列化し、JAN UNIQUE制約も保持。発行履歴から削除済み番号も再使用せず、999でEXHAUSTED。監査と業務変更が同じtransactionで保存されます。既存データの再採番・予約・割当変更はmigrationでは行いません。EPSと通常画面は共通renderer、SVG/PNGも同じEAN-13パターンとアウトライン数字です。
+
+JAN割当のexpectedVersionは、`tsa_get_recipe`（既存の明細を含む正規version）または`tsa_business_read`のレシピ行versionをそのまま指定できます。JAN結果と一覧の割当recipe._versionはget_recipeと同じ形式です。明細一括置換専用のdata._versionとは互換ではありません。

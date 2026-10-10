@@ -5,7 +5,7 @@ description: TSA のレシピ・明細・商品・在庫・売上・会計等の
 
 # TSA データ操作
 
-`tsa_data` MCP v1.2.0 の24ツールで業務データを操作する。CEO_Sは既存キーの `business:full` 接続を使い、再発行や手入力は不要。専用トークンは実行環境で管理され、Chat・成果物・ログへ出さない。
+`tsa_data` MCP v1.3.0 の29ツールで業務データを操作する。CEO_Sは既存キーの `business:full` 接続を使い、再発行や手入力は不要。専用トークンは実行環境で管理され、Chat・成果物・ログへ出さない。
 
 - 全業務操作は `tsa_business_catalog` で対象を確認し、対象の `table` を指定したカタログから主キー、型、項目別 `creatable` / `writable` を確認する。固定151対象のうち132対象は登録・更新・削除、19対象は読取のみ。カタログ外の表・項目を推測しない。
 - `tsa_business_read` の完全一致 `filters` で対象を特定し、必要なら `columns` を絞る。更新・削除には主キー全項目と最新の `data.items[0]._version` が必要。続きは `nextOffset` を使う。同名候補は主キーと詳細で識別し、IDを作らない。
@@ -26,3 +26,14 @@ description: TSA のレシピ・明細・商品・在庫・売上・会計等の
 1明細だけの変更は既存の `tsa_business_read`（`table: "recipe_items"`、`filters: {recipe_id: recipeId}`）→行単位の `_version` で `tsa_prepare_business_change` の `update` または `delete` → `tsa_apply_business_change` も使える。複数行の一括置換には全体versionを使い、行単位versionと混同しない。
 
 コード・DB schema・SQL・認証情報・接続権限・worker/API設定・GitHub・Vercel・任意 URL の操作は対象外。実行結果は対象・変更内容・確認結果を簡潔に報告する。
+
+
+## JAN発行・割当・バーコード
+
+採番は `tsa_issue_jan_code` を使う。汎用CRUDでJAN番号や連番を作らない。先に `tsa_list_jan_codes` で既発行・割当先を確認し、未割当を探す場合は `unassigned: true`。新規発行は確認済みの商品名と `category: "食品"` または `"物品"` を `values` に渡す。既存管理画面と同じ登録済みGS1事業者コードを使い、チェックデジット・3桁の連番・監査をサーバーが一括保存する。
+
+レシピにも同時割当する場合は `recipeId` と、`tsa_get_recipe` または `tsa_business_read` のレシピ詳細 `_version` を `expectedVersion` に付ける。明細一括用の全体versionとは異なる。既にJANのあるレシピへの新規発行は拒否される。発行済みJANの割当・入替は検索結果の `janId`、対象 `recipeId`、同じレシピ詳細versionで `tsa_assign_jan_code` を使う。
+
+商品名・税抜価格・原材料・備考は `tsa_update_jan_code` に検索結果のJAN行 `_version` と変更値を渡す。JANの数字・GS1事業者コード・連番・区分は発行後に変更しない。これはJAN管理表の情報であり、レシピの販売価格は変更しない。各保存操作は1つの依頼に1つの `idempotencyKey`。応答不明でも同じキー・同じ入力で再照会し、別キーで二重発行しない。利用者の依頼への追加承認は不要。
+
+`tsa_export_barcode` の `janId` と `format`（`png` / `svg` / `eps`）で、登録済みJANの画像・ファイル内容を得る。発番や予約はしない。PNGは画像とbase64、SVG/EPSはUTF-8の `data.file.content` なので、返されたfilenameで必要な成果物を保存する。EPSは数字もベクターでフォント不要。発行枠が999に達したら停止し、新prefixや桁数を推測して迂回しない。

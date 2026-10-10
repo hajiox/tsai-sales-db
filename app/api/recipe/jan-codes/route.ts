@@ -1,82 +1,28 @@
+import { randomUUID } from "node:crypto";
 import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
-import { createClient } from "@supabase/supabase-js";
+import { createDataAccessAdminClient, readDataAccessBody, RPC_ERRORS } from "@/lib/data-access/server";
+import { validateJanValues } from "@/lib/data-access/jan-contracts";
+import { DataAccessError } from "@/lib/data-access/contracts";
 import { NextResponse } from "next/server";
-
 export async function POST(request: Request) {
-    const authError = await requireRecipeAdminRequest(request);
-    if (authError) return authError;
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    try {
-        const body = await request.json();
-        const { product_name, category, price_excl_tax, ingredients, memo } = body;
-
-        let company_prefix = "457131862"; // default 物品
-        if (category === "食品") {
-            company_prefix = "457131863"; // 食品
-        }
-
-        // Get max item code
-        const { data, error } = await supabase
-            .from("jan_codes")
-            .select("item_code")
-            .eq("company_prefix", company_prefix)
-            .order("item_code", { ascending: false })
-            .limit(1);
-
-        if (error) {
-            console.error("DB Error:", error);
-        }
-
-        let nextItemCodeNo = 1;
-        if (data && data.length > 0 && data[0].item_code) {
-            nextItemCodeNo = parseInt(data[0].item_code, 10) + 1;
-        }
-
-        const nextItemCode = String(nextItemCodeNo).padStart(3, '0');
-        const codePrefix = company_prefix + nextItemCode;
-
-        let oddSum = 0;
-        let evenSum = 0;
-        for (let i = 0; i < 12; i++) {
-            const num = parseInt(codePrefix[i], 10);
-            if (i % 2 === 0) {
-                oddSum += num;
-            } else {
-                evenSum += num;
-            }
-        }
-        const sum = oddSum + evenSum * 3;
-        const mod = sum % 10;
-        const checkDigit = mod === 0 ? "0" : String(10 - mod);
-        
-        const jan_code = codePrefix + checkDigit;
-
-        const insertData = {
-            jan_code,
-            company_prefix,
-            item_code: nextItemCode,
-            check_digit: checkDigit,
-            product_name: product_name || "新規登録商品",
-            category: category || "物品",
-            price_excl_tax: price_excl_tax ? Number(price_excl_tax) : null,
-            ingredients: ingredients || null,
-            memo: memo || null,
-        };
-
-        const { data: newRow, error: insertError } = await supabase
-            .from("jan_codes")
-            .insert(insertData)
-            .select()
-            .single();
-
-        if (insertError) throw insertError;
-
-        return NextResponse.json({ success: true, data: newRow });
-    } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
-    }
+ const authError = await requireRecipeAdminRequest(request);
+ if (authError) return authError;
+ try {
+  const body = await readDataAccessBody(request);
+  if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some(key => !["product_name", "category", "price_excl_tax", "ingredients", "memo", "idempotencyKey"].includes(key))) throw new DataAccessError("INVALID_INPUT", "指定された値を確認してください");
+  const { idempotencyKey = randomUUID(), ...values } = body;
+  if (typeof idempotencyKey !== "string" || !/^[A-Za-z0-9_.:-]{8,128}$/.test(idempotencyKey)) throw new DataAccessError("INVALID_INPUT", "実行キーを確認してください");
+  const payload = validateJanValues({ category: "物品", ...values, product_name: values.product_name || "新規登録商品" }, true);
+  const { data, error } = await createDataAccessAdminClient().rpc("tsa_jan_issue_admin_v1", { p_payload: payload, p_idempotency_key: idempotencyKey });
+  if (error) {
+   const code = /^DA_([A-Z_]+)$/.exec(error.message || "")?.[1];
+   if (code === "EXHAUSTED") throw new DataAccessError(code, "この区分のJANコード発行枠を使い切っています", 409);
+   if (code && RPC_ERRORS[code]) throw new DataAccessError(code, RPC_ERRORS[code][1], RPC_ERRORS[code][0]);
+   throw new DataAccessError("UNAVAILABLE", "JANコードを発行できませんでした", 503);
+  }
+  return NextResponse.json({ success: true, data }, { headers: { "Cache-Control": "no-store" } });
+ } catch (cause) {
+  const error = cause instanceof DataAccessError ? cause : new DataAccessError("INVALID_INPUT", "指定された値を確認してください");
+  return NextResponse.json({ error: error.message }, { status: error.status });
+ }
 }

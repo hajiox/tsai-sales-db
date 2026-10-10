@@ -17,7 +17,7 @@ const resolveMcp = createRequire(path.join(mcpDir, 'package.json'));
 const { Client } = await import(pathToFileURL(resolveMcp.resolve('@modelcontextprotocol/client')).href);
 const { StdioClientTransport } = await import(pathToFileURL(resolveMcp.resolve('@modelcontextprotocol/client/stdio')).href);
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
-const client = new Client({ name: 'tsa-data-production-verification', version: '1.2.0' });
+const client = new Client({ name: 'tsa-data-production-verification', version: '1.3.0' });
 let connectionId;
 let connected = false;
 const payload = result => result.structuredContent ?? JSON.parse(result.content.find(item => item.type === 'text').text);
@@ -30,6 +30,12 @@ await db.connect();
 try {
   const record = (await db.query('select id from public.recipes order by id limit 1')).rows[0];
   assert.ok(record, 'A recipe is needed for the read-only smoke test.');
+  const janCandidates = (await db.query("select id,jan_code from public.jan_codes where jan_code~'^[0-9]{13}$' order by id limit 20")).rows;
+  const janRecord = janCandidates.find(row => {
+    const sum = [...row.jan_code.slice(0,12)].reduce((total, digit, index) => total + Number(digit) * (index % 2 ? 3 : 1), 0);
+    return Number(row.jan_code[12]) === (10 - sum % 10) % 10;
+  });
+  assert.ok(janRecord, 'A registered valid JAN is needed for the read-only export smoke test.');
   const token = `tsa_data_${randomBytes(32).toString('base64url')}`;
   connectionId = (await db.query(`insert into public.data_access_connections(label,token_hash,scopes,resource_ids,max_limit,expires_at,created_by)
     values('本番接続検証（読取専用・自動停止）',$1,$2,$3::jsonb,1,now()+interval '15 minutes','deployment verification') returning id`,
@@ -41,12 +47,16 @@ try {
   await client.connect(transport);
   connected = true;
   const tools = await client.listTools();
-  assert.equal(tools.tools.length, 24, 'Unexpected MCP tool list.');
-  assert.equal(client.getServerVersion().version, '1.2.0', 'Unexpected MCP adapter version.');
+  assert.equal(tools.tools.length, 29, 'Unexpected MCP tool list.');
+  assert.equal(client.getServerVersion().version, '1.3.0', 'Unexpected MCP adapter version.');
   const businessCatalog = payload(await client.callTool({ name: 'tsa_business_catalog', arguments: {} }));
   assert.ok(!businessCatalog.ok && businessCatalog.error.code === 'FORBIDDEN', 'Limited connection unexpectedly accessed the full business catalog.');
   const limitedComposition = payload(await client.callTool({ name: 'tsa_get_recipe_items', arguments: { recipeId: record.id } }));
   assert.ok(!limitedComposition.ok && limitedComposition.error?.code === 'FORBIDDEN', `Limited composition denial failed: ${diagnostic(limitedComposition)}`);
+  const limitedJanList = payload(await client.callTool({ name: 'tsa_list_jan_codes', arguments: {} }));
+  assert.ok(!limitedJanList.ok && limitedJanList.error?.code === 'FORBIDDEN', `Limited JAN list denial failed: ${diagnostic(limitedJanList)}`);
+  const limitedJanExport = payload(await client.callTool({ name: 'tsa_export_barcode', arguments: { janId: janRecord.id, format: 'svg' } }));
+  assert.ok(!limitedJanExport.ok && limitedJanExport.error?.code === 'FORBIDDEN', `Limited JAN export denial failed: ${diagnostic(limitedJanExport)}`);
   const read = payload(await client.callTool({ name: 'tsa_search_recipes', arguments: { limit: 100 } }));
   assert.ok(read.ok && read.data.items.length === 1 && read.data.items[0].id === record.id, 'Scoped read failed.');
   const detail = payload(await client.callTool({ name: 'tsa_get_recipe', arguments: { id: record.id } }));
@@ -72,19 +82,44 @@ try {
   assert.ok(/^[a-f0-9]{32}$/.test(composition.data._version), 'Whole-composition version failed.');
   const replacementPlans = (await db.query('select count(*)::int n from public.recipe_items_replacement_changes where connection_id=$1', [connectionId])).rows[0].n;
   assert.equal(replacementPlans, 0, 'The read-only verification unexpectedly prepared a composition replacement.');
+  const janList = payload(await client.callTool({ name: 'tsa_list_jan_codes', arguments: { query: janRecord.jan_code, limit: 1 } }));
+  assert.ok(janList.ok && janList.data.items[0]?.id === janRecord.id && /^[a-f0-9]{32}$/.test(janList.data.items[0]._version), `JAN read failed: ${diagnostic(janList)}`);
+  assert.ok(Array.isArray(janList.data.items[0].recipes), 'JAN recipe assignments missing.');
+  for (const format of ['svg', 'eps', 'png']) {
+    const exported = await client.callTool({ name: 'tsa_export_barcode', arguments: { janId: janRecord.id, format } });
+    const result = payload(exported);
+    assert.ok(result.ok && result.data.janCode === janRecord.jan_code, `JAN export failed: ${diagnostic(result)}`);
+    const file = result.data.file;
+    assert.equal(file.filename, `barcode_${janRecord.jan_code}.${format}`);
+    if (format === 'png') {
+      assert.equal(file.encoding, 'base64'); assert.equal(file.mimeType, 'image/png');
+      assert.equal(Buffer.from(file.content, 'base64').subarray(0,8).toString('hex'), '89504e470d0a1a0a');
+      assert.ok(exported.content.some(item => item.type === 'image' && item.mimeType === 'image/png'));
+    } else {
+      assert.equal(file.encoding, 'utf8');
+      assert.ok(file.content.startsWith(format === 'svg' ? '<svg' : '%!PS-Adobe-3.0 EPSF-3.0'));
+      assert.ok(file.content.includes(janRecord.jan_code));
+    }
+  }
+  const janOperations = (await db.query('select count(*)::int n from public.jan_code_operations where connection_id=$1', [connectionId])).rows[0].n;
+  assert.equal(janOperations, 0, 'Read-only verification unexpectedly issued, assigned, or updated a JAN.');
   await db.query('update public.data_access_connections set revoked_at=now() where id=$1', [connectionId]);
   const revoked = payload(await client.callTool({ name: 'tsa_search_recipes', arguments: {} }));
   assert.ok(!revoked.ok && revoked.error.code === 'UNAUTHORIZED', 'Immediate revocation failed.');
   const revokedComposition = payload(await client.callTool({ name: 'tsa_get_recipe_items', arguments: { recipeId: record.id } }));
   assert.ok(!revokedComposition.ok && revokedComposition.error?.code === 'UNAUTHORIZED', `Composition access ignored immediate revocation: ${diagnostic(revokedComposition)}`);
+  for (const [name, args] of [['tsa_list_jan_codes', {}], ['tsa_export_barcode', { janId: janRecord.id, format: 'svg' }]]) {
+    const revokedJan = payload(await client.callTool({ name, arguments: args }));
+    assert.ok(!revokedJan.ok && revokedJan.error?.code === 'UNAUTHORIZED', `JAN ignored revocation: ${diagnostic(revokedJan)}`);
+  }
   for (const [pathname, method] of [['/api/data-access/connections', 'GET'], ['/api/recipe', 'GET'], ['/api/web-sales-period', 'POST']]) {
     const response = await fetch(origin + pathname, { method, redirect: 'manual', signal: AbortSignal.timeout(15000),
       ...(method === 'POST' ? { headers: { 'content-type': 'application/json' }, body: '{}' } : {}) });
     assert.equal(response.status, 401, 'Anonymous legacy access was not rejected.');
   }
-  console.log(JSON.stringify({ production: true, mcpHandshake: true, tools: 24, adapterVersion: '1.2.0', scopedRead: true, versionedDetail: true,
+  console.log(JSON.stringify({ production: true, mcpHandshake: true, tools: 29, adapterVersion: '1.3.0', scopedRead: true, versionedDetail: true,
     recordRestriction: true, resourceRestriction: true, limitedBusinessCatalogDenied: true, limitedCompositionDenied: true,
-    wholeCompositionRead: true, wholeCompositionVersion: true, readOnlyWriteDenied: true, preparedChanges: 0, replacementPlans: 0,
+    limitedJanListDenied: true, limitedJanExportDenied: true, fullJanRead: true, janExports: ['svg','eps','png'], janOperations: 0, janRevocation: true, wholeCompositionRead: true, wholeCompositionVersion: true, readOnlyWriteDenied: true, preparedChanges: 0, replacementPlans: 0,
     immediateRevocation: true, compositionRevocation: true, anonymousLegacyAccessDenied: true }));
 } finally {
   try {

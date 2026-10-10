@@ -36,6 +36,7 @@ function JanCodesContent() {
     
     // New JAN form state
     const [isGenerating, setIsGenerating] = useState(false);
+    const issueRequest = useRef<{ signature: string; key: string } | null>(null);
     const [newProductName, setNewProductName] = useState(prefilledName || "");
     const [newCategory, setNewCategory] = useState("食品");
 
@@ -80,6 +81,9 @@ function JanCodesContent() {
             : `新しいJANコードを発行しますか？`;
         if (!confirm(confirmMsg)) return;
 
+        const signature = JSON.stringify({ product_name: newProductName, category: newCategory });
+        if (issueRequest.current?.signature !== signature) issueRequest.current = { signature, key: crypto.randomUUID() };
+        const idempotencyKey = issueRequest.current.key;
         setIsGenerating(true);
         try {
             const res = await fetch("/api/recipe/jan-codes", {
@@ -88,6 +92,7 @@ function JanCodesContent() {
                 body: JSON.stringify({
                     product_name: newProductName,
                     category: newCategory,
+                    idempotencyKey,
                 }),
             });
 
@@ -97,6 +102,7 @@ function JanCodesContent() {
             }
 
             const result = await res.json();
+            issueRequest.current = null;
             const newJanCode = result.data?.jan_code;
 
             // レシピからの遷移の場合、JANコードを持ってレシピページに戻る

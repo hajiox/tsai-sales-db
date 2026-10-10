@@ -47,9 +47,9 @@ test('recipe whole-item replacement uses three fixed tools over real STDIO and r
   transport.stderr?.on('data', data => { stderr += data.toString(); });
   try {
     await client.connect(transport);
-    assert.equal(client.getServerVersion().version, '1.2.0');
+    assert.equal(client.getServerVersion().version, '1.3.0');
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 24);
+    assert.equal(tools.length, 29);
     assert.equal(tools.find(tool => tool.name === 'tsa_get_recipe_items').annotations.readOnlyHint, true);
     assert.equal(tools.find(tool => tool.name === 'tsa_prepare_recipe_items_replacement').annotations.destructiveHint, false);
     assert.equal(tools.find(tool => tool.name === 'tsa_apply_recipe_items_replacement').annotations.destructiveHint, true);

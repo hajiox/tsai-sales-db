@@ -1,0 +1,45 @@
+// Synthetic fixture writes only, always rolled back, including DDL.
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),assert=require('node:assert/strict');
+const root=path.join(__dirname,'..');require('@next/env').loadEnvConfig(root,false,{info(){},error(){}});const{Client}=require('pg');
+async function main(){const db=new Client({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:false}});await db.connect();let checks=0,savepoint=0;const q=(s,v=[])=>db.query(s,v),check=(v,l)=>{assert.ok(v,l);checks++},eq=(a,b,l)=>{assert.deepEqual(a,b,l);checks++};
+const denied=async(fn,code)=>{const name=`jan_test_${++savepoint}`;await q(`savepoint ${name}`);let message;try{await fn()}catch(e){message=e.message}await q(`rollback to savepoint ${name}`);await q(`release savepoint ${name}`);eq(message,code,code)};
+const hash=crypto.createHash('sha256').update(crypto.randomUUID()).digest('hex'),recipeId=crypto.randomUUID(),janId=crypto.randomUUID();
+const call=async(action,payload,tokenHash=hash)=>(await q('select public.tsa_jan_access_v1($1,$2,$3::jsonb) data',[tokenHash,action,JSON.stringify(payload)])).rows[0].data;
+const recipeVersion=async()=>(await q('select md5(to_jsonb(r)::text) version from recipes r where id=$1',[recipeId])).rows[0].version;
+try{await q('begin');await q("set local lock_timeout='5s'; set local statement_timeout='60s'");await q(fs.readFileSync(path.join(root,'supabase/migrations/20261010170000_jan_data_access.sql'),'utf8'));
+for(const role of['anon','authenticated']){eq((await q("select has_function_privilege($1,'tsa_jan_access_v1(text,text,jsonb)','execute') allowed",[role])).rows[0].allowed,false,'service only');eq((await q("select has_table_privilege($1,'jan_code_operations','select') allowed",[role])).rows[0].allowed,false,'audit protected')}
+eq((await q("select 'jan_code_operations'=any(tsa_business_tables()) allowed")).rows[0].allowed,false,'audit absent generic catalog');
+const connection=(await q("insert into data_access_connections(label,token_hash,scopes,expires_at,created_by) values('synthetic JAN fixture',$1,array['business:full','recipes:read'],now()+interval '1 hour','fixture') returning id",[hash])).rows[0].id;
+await q("insert into recipes(id,name,category) values($1,'__synthetic_jan_recipe__','自社')",[recipeId]);
+await q("insert into jan_codes(id,jan_code,company_prefix,item_code,check_digit,product_name,category) values($1,'4571318639909','457131863','990','9','__synthetic_jan__','食品')",[janId]);
+const listing=await call('list',{query:'__synthetic_jan__',limit:1});eq(listing.items.length,1,'list');eq(listing.items[0]._version.length,32,'JAN version');
+const canonicalRead=(await q("select tsa_data_access_v1($1,'read',$2::jsonb) data",[hash,JSON.stringify({resource:'recipes',id:recipeId})])).rows[0].data;
+check(canonicalRead.items[0]._version!==await recipeVersion(),'get_recipe composite differs from row version');
+const request={values:{product_name:'__synthetic_issue__',category:'食品',price_excl_tax:0},recipeId,expectedVersion:canonicalRead.items[0]._version,idempotencyKey:'fixture-issue-001'};
+const issued=await call('issue',request);eq(issued.jan.item_code,'991','next code');eq(issued.recipe.jan_code,issued.jan.jan_code,'atomic assign');eq(issued.recipe._version,(await q("select tsa_data_access_version('recipes',to_jsonb(r)) version from recipes r where id=$1",[recipeId])).rows[0].version,'result recipe canonical version');check((await q("select exists(select 1 from pg_locks where pid=pg_backend_pid() and relation='jan_codes'::regclass and mode='ShareRowExclusiveLock' and granted) locked")).rows[0].locked,'issuance table lock protects concurrent direct inserts');const digits=[...issued.jan.jan_code].map(Number);eq((digits.slice(0,12).reduce((sum,n,i)=>sum+n*(i%2?3:1),0)+digits[12])%10,0,'checksum');eq(await call('issue',request),issued,'idempotent result');
+await denied(()=>call('issue',{...request,values:{...request.values,product_name:'changed'}}),'DA_IDEMPOTENCY_CONFLICT');
+await denied(()=>call('issue',{...request,idempotencyKey:'fixture-issue-003',expectedVersion:'a'.repeat(32)}),'DA_CONFLICT');
+await denied(async()=>call('issue',{...request,idempotencyKey:'fixture-issue-004',expectedVersion:await recipeVersion()}),'DA_CONFLICT');
+const assign={janId,recipeId,expectedVersion:await recipeVersion(),idempotencyKey:'fixture-assign-001'};const assigned=await call('assign',assign);eq(assigned.recipe.jan_code,'4571318639909','assign existing');eq(await call('assign',assign),assigned,'assign idempotency');
+await denied(()=>call('assign',{...assign,idempotencyKey:'fixture-assign-002'}),'DA_CONFLICT');
+const update={janId,expectedVersion:assigned.jan._version,values:{product_name:'__synthetic_updated__',memo:'日本語メモ'},idempotencyKey:'fixture-update-001'};
+const updated=await call('update',update);eq(updated.jan.memo,'日本語メモ','metadata update');eq(await call('update',update),updated,'update idempotency');
+await denied(()=>call('update',{...update,idempotencyKey:'fixture-update-002'}),'DA_CONFLICT');
+await denied(()=>call('update',{...update,expectedVersion:updated.jan._version,values:{jan_code:'123'},idempotencyKey:'fixture-update-003'}),'DA_INVALID_INPUT');
+await denied(()=>call('update',{...update,expectedVersion:updated.jan._version,values:{category:'物品'},idempotencyKey:'fixture-update-004'}),'DA_INVALID_INPUT');
+const exported=await call('export',{janId,format:'eps'});eq(exported.janCode,'4571318639909','export registered');
+const adminPayload={product_name:'__synthetic_admin__',category:'食品'};const admin=async()=>(await q('select tsa_jan_issue_admin_v1($1::jsonb,$2) data',[JSON.stringify(adminPayload),'fixture-admin-001'])).rows[0].data;const adminIssued=await admin();eq(adminIssued.item_code,'992','ordinary editor same sequence');eq(await admin(),adminIssued,'admin idempotency');
+await q('delete from jan_codes where id=$1',[adminIssued.id]);const next=await call('issue',{values:{product_name:'__synthetic_after_delete__',category:'食品'},idempotencyKey:'fixture-issue-005'});eq(next.jan.item_code,'993','deleted issued number not reused');
+const page=await call('list',{query:'__synthetic_',category:'食品',limit:1});eq(page.nextOffset,1,'pagination');eq((await call('list',{query:'__synthetic_',category:'食品',limit:1,offset:1})).items.length,1,'next page');
+for(const payload of[{limit:0},{limit:101},{offset:10001},{offset:-1},{offset:1.5},{query:null},{unassigned:null},{sql:'select 1'}])await denied(()=>call('list',payload),'DA_INVALID_INPUT');
+await denied(()=>call('issue',{values:{product_name:'x',category:'食品',price_excl_tax:-1},idempotencyKey:'fixture-invalid-1'}),'DA_INVALID_INPUT');
+await denied(()=>call('issue',{values:{product_name:'x',category:'食品'},expectedVersion:'a'.repeat(32),idempotencyKey:'fixture-invalid-2'}),'DA_INVALID_INPUT');
+await denied(()=>call('list',{},'b'.repeat(64)),'DA_UNAUTHORIZED');
+await q("update data_access_connections set scopes=array['recipes:read'] where id=$1",[connection]);await denied(()=>call('list',{}),'DA_FORBIDDEN');await q("update data_access_connections set scopes=array['business:full'],resource_ids='{\"recipes\":[]}'::jsonb where id=$1",[connection]);await denied(()=>call('issue',request),'DA_FORBIDDEN');await q("update data_access_connections set resource_ids='{}'::jsonb,expires_at=now()-interval '1 second' where id=$1",[connection]);await denied(()=>call('list',{}),'DA_UNAUTHORIZED');
+await q("insert into jan_codes(jan_code,company_prefix,item_code,check_digit,product_name,category) values('4571318639990','457131863','999','0','__synthetic_exhaustion__','食品')");await q("update data_access_connections set expires_at=now()+interval '1 hour' where id=$1",[connection]);await denied(()=>call('issue',{values:{product_name:'exhausted',category:'食品'},idempotencyKey:'fixture-exhausted-1'}),'DA_EXHAUSTED');
+eq(Number((await q('select count(*) n from jan_code_operations where connection_id=$1',[connection])).rows[0].n),4,'audit exactly four successful data mutations');
+await denied(()=>q("update jan_code_operations set actor='tampered' where connection_id=$1",[connection]),'DA_INVALID_INPUT');
+await q('rollback');console.log(JSON.stringify({passed:true,checks,rolledBack:true,businessDataChanged:false}));
+}catch(error){await q('rollback').catch(()=>{});throw error}finally{await db.end()}}
+if(require.main===module)main().catch(e=>{console.error('JAN migration test failed:',e.message);process.exitCode=1});
+module.exports={main};

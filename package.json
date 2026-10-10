@@ -112,7 +112,9 @@
     "test:business-cost-sync": "node scripts/test-business-cost-sync.cjs",
     "test:recipe-items-replacement": "node scripts/test-recipe-items-replacement.cjs",
     "test:recipe-items-replacement-migration": "node scripts/test-recipe-items-replacement-migration.cjs",
-    "apply:recipe-items-replacement-migration": "node scripts/apply-recipe-items-replacement.cjs --apply"
+    "apply:recipe-items-replacement-migration": "node scripts/apply-recipe-items-replacement.cjs --apply",
+    "test:jan-data-access": "node scripts/test-jan-data-access.cjs",
+    "test:jan-data-access-migration": "node scripts/test-jan-data-access-migration.cjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
