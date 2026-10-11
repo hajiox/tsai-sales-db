@@ -16,6 +16,16 @@ TSAのタイトルや説明は古い場合がある。リンク先で現在の�
 
 LP単独工程の計画と公開確認はデータ取得であり、ログイン済みECのUI操作はない。正確な `TASK_JSON.lpUrl` を直接HTTPS GETし、`Cache-Control: no-cache` と `Pragma: no-cache` 等でキャッシュを避ける。HTTP応答と取得HTMLのうち、対象商品の名前・販売単位・価格が対応する箇所だけを確認する。ソースの取得・検証には指定ヘルパーと既存のGit/Vercel/GitHub CLIを使う。
 
+Bridgeは計画前に `scripts/read-lp-public-page.cjs` を実行し、`TASK_JSON.lpPublicEvidence` にHTTP状態・最終URL・本文と商品ブロックの小さなJSONを渡す。これを公開証拠として使い、追加取得または公開後の再確認だけ次を実行する。`lpPublicReaderPath` がない手動作業では、このジョブが読んだSkillの絶対パスから同じヘルパーを組み立てる。
+
+```powershell
+node '<TASK_JSON.lpPublicReaderPathの絶対パス>' --url '<TASK_JSON.lpUrl>'
+```
+
+ヘルパーは厳密なUTF-8、サイズ・時間上限、no-cacheで読み、script/style/template/noscript・hidden/aria-hidden等の本文外データを除外する。`main`を優先して本文と商品ブロックを返すが、CSS/JavaScriptを実行した画面そのものではない。生HTMLやPowerShell既定のHTMLパーサーを追加利用せず、HTTP200の中のスクリプト用404断片をページ全体の404と誤認しない。実HTTPエラーや表示本文の404、欠けた対象商品、曖昧な販売単位は停止理由としてそのまま返す。
+
+各変更箇所の `occurrence_evidence` に、対象商品ブロックの正確な `block_id` と商品名・販売単位・現価格の対応を書く。ブロック内の可視価格が複数基準なら推測で1つを選ばない。`block_id` は価格だけを除いた商品ブロック本文の識別値であり、公開後も同じ商品・販売単位のブロックで計画の目標価格を確認する。別カードに同額があるだけでは完了にできない。出力が切り詰められ対象証拠が欠けた場合は `--match '<公開商品名の正確な一部>'` で絞るか、曖昧として停止する。計画前の `lpPublicEvidence` をデプロイ後の確認へ使い回さない。
+
 このLP単独工程ではブラウザーツールを一切呼ばない。`cua_repl` の状態取得、`getBrowser`、既存タブ取得・遷移、新規タブ作成、Chrome DevTools MCPも対象外であり、許可される新規タブ数は0枚である。登録済みURLの直接取得で対象商品と価格を証明できなければ、HTTPエラー、必要表示がHTMLにない、商品と価格の対応が曖昧など、観測した理由を返す。別URL・別商品を代用せず、ソース内の価格だけで公開確認済みとしない。EC画面を操作する工程のChrome優先順・認証ゲートはそのまま適用する。
 
 - 公開LPとFresh Cloneで対象商品を照合し、容量・販売個数・形態・保存方法がTSAレシピの販売単位と一致し、対象表示が標準の税込価格であることを現行LPと固定入力から証明する。同一販売単位の標準価格箇所には、既存schemaの `pricing_basis="standard_price"` を使い、`target_price=TASK_JSON.newPriceInclTax` とする。これは固定済み税込目標価格を直接指定する根拠で、対象ECの指定を必要としない。
@@ -106,3 +116,4 @@ push・本番デプロイの直前に再度fetchし、本番ブランチが編�
 2026-10-11: LP単独工程の同一販売単位・標準価格は、既存の `standard_price` 根拠で固定済み税込目標価格を使うと明記。schemaと検証処理が `sites=[]`・`reference_standard_price=null` を許容することを確認。別販売単位・別価格基準の推測禁止は維持。
 
 2026-10-11: LP単独工程の公開情報取得と検証を登録済みURLへの直接HTTPS・no-cacheへ統一し、ブラウザーツールとタブを使わないことを明記。ECのChrome操作手順は維持。
+2026-10-11: PS5既定HTMLパーサーとNext.jsの非表示404断片による誤停止を避け、決定的UTF-8公開読取ヘルパーと価格以外の商品ブロック識別値を導入。計画前・公開後に同じ対象商品を照合し、生HTML全体の価格一致を完了根拠にしない。

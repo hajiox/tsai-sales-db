@@ -18,6 +18,16 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   EC_PRICE_TARGETS,
   getEcPriceRetryTargets,
   getEcPriceTargetLabel,
@@ -73,6 +83,15 @@ type RegistrationIntentView = {
   updated_at: string;
 };
 
+type RetryConfirmation = {
+  recipeId: string;
+  jobId: string;
+  targetLabel: string;
+  productName: string;
+  priceInclTax: number;
+  recipeSnapshotJson: string;
+};
+
 interface EcPriceSyncControlsProps {
   recipeId: string;
   recipeName: string;
@@ -107,6 +126,8 @@ export default function EcPriceSyncControls({
   const [reservations, setReservations] = useState<ReservationView[]>([]);
   const [queueLoading, setQueueLoading] = useState(true);
   const [queueAction, setQueueAction] = useState(false);
+  const [retryConfirmation, setRetryConfirmation] = useState<RetryConfirmation | null>(null);
+  const retrySubmitting = useRef(false);
   const notifiedJobId = useRef<string | null>(null);
   const hasHydratedJobHistory = useRef(false);
   const hasPrice = Number.isFinite(sellingPriceInclTax) && sellingPriceInclTax > 0;
@@ -121,6 +142,10 @@ export default function EcPriceSyncControls({
     : [];
   const unfinishedLp = Boolean(job?.lp?.required && job.lp.status !== "updated");
   const jobCanRetry = Boolean(job && !jobIsActive && (unfinishedTargets.length > 0 || unfinishedLp));
+  const retryTargetLabel = [
+    ...(unfinishedTargets.length > 0 ? [getEcPriceTargetLabel(unfinishedTargets)] : []),
+    ...(unfinishedLp ? ["商品LP"] : []),
+  ].join("・");
   const disabled = hasUnsavedChanges || isSaving || submitting || jobIsActive || blockedByAnotherJob || !hasPrice;
   const qoo10Missing = Boolean(
     job?.sites.some((site) => site.site === "qoo10" && site.status === "not_found")
@@ -305,32 +330,41 @@ export default function EcPriceSyncControls({
     }
   };
 
-  const retryUnfinished = async () => {
-    if (!job || disabled || !jobCanRetry) return;
-    const labels = [
-      ...(unfinishedTargets.length > 0 ? [getEcPriceTargetLabel(unfinishedTargets)] : []),
-      ...(unfinishedLp ? ["商品LP"] : []),
-    ];
-    if (!window.confirm([
-      "未完了の工程だけを再実行します。",
-      "",
-      `対象: ${labels.join("・")}`,
-      `商品: ${ecProductName || recipeName}`,
-      `価格（税込）: ¥${sellingPriceInclTax.toLocaleString("ja-JP")}`,
-      "",
-      "反映済み・対象商品なしの工程は再実行しません。実行しますか？",
-    ].join("\n"))) return;
+  const requestRetryUnfinished = () => {
+    if (!job || disabled || !jobCanRetry || retrySubmitting.current) return;
+    setRetryConfirmation({
+      recipeId,
+      jobId: job.id,
+      targetLabel: retryTargetLabel,
+      productName: ecProductName || recipeName,
+      priceInclTax: sellingPriceInclTax,
+      recipeSnapshotJson: JSON.stringify(expectedRecipeSnapshot),
+    });
+  };
 
+  const retryUnfinished = async () => {
+    const confirmed = retryConfirmation;
+    if (!confirmed || !job || disabled || !jobCanRetry || retrySubmitting.current) return;
+    if (confirmed.recipeId !== recipeId || confirmed.jobId !== job.id
+      || confirmed.targetLabel !== retryTargetLabel || confirmed.productName !== (ecProductName || recipeName)
+      || confirmed.priceInclTax !== sellingPriceInclTax
+      || confirmed.recipeSnapshotJson !== JSON.stringify(expectedRecipeSnapshot)) {
+      setRetryConfirmation(null);
+      toast.warning("再実行する商品・価格・対象が変わったため、確認し直してください");
+      return;
+    }
+    retrySubmitting.current = true;
+    setRetryConfirmation(null);
     setSubmitting(true);
     try {
-      const response = await fetch(`/api/recipe/${recipeId}/ec-price-jobs`, {
+      const response = await fetch(`/api/recipe/${confirmed.recipeId}/ec-price-jobs`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          retryUnfinishedFromJobId: job.id,
+          retryUnfinishedFromJobId: confirmed.jobId,
           dispatchMode: "immediate",
-          expectedPriceInclTax: sellingPriceInclTax,
-          expectedRecipeSnapshot,
+          expectedPriceInclTax: confirmed.priceInclTax,
+          expectedRecipeSnapshot: JSON.parse(confirmed.recipeSnapshotJson),
         }),
       });
       const payload = await response.json();
@@ -342,6 +376,7 @@ export default function EcPriceSyncControls({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "未完了工程を再実行できません");
     } finally {
+      retrySubmitting.current = false;
       setSubmitting(false);
     }
   };
@@ -480,6 +515,30 @@ export default function EcPriceSyncControls({
 
   return (
     <section className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm print:hidden">
+      <AlertDialog open={Boolean(retryConfirmation)} onOpenChange={(open) => { if (!open) setRetryConfirmation(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>未完了工程の再実行を確認</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-left">
+                <p>未完了の工程だけを再実行します。</p>
+                <div>
+                  <p>対象: {retryConfirmation?.targetLabel}</p>
+                  <p>商品: {retryConfirmation?.productName}</p>
+                  <p>価格（税込）: ¥{retryConfirmation?.priceInclTax.toLocaleString("ja-JP")}</p>
+                </div>
+                <p>反映済み・対象商品なしの工程は再実行しません。実行しますか？</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction disabled={disabled || !jobCanRetry} onClick={() => void retryUnfinished()}>
+              実行する
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <div className="mb-3">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">EC価格反映</h3>
         <p className="mt-1 text-xs text-slate-500">
@@ -677,7 +736,7 @@ export default function EcPriceSyncControls({
           {jobCanRetry && (
             <button
               type="button"
-              onClick={retryUnfinished}
+              onClick={requestRetryUnfinished}
               disabled={disabled}
               className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-current/20 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
             >

@@ -817,6 +817,11 @@ for (const prompt of [lpOnlyPrompt, buildWritePrompt(lpOnlyParameters, lpOnlyPla
   assert.doesNotMatch(prompt, /SAME-CHROME TAB POLICY|SAME-CHROME TEMPORARY-TAB FALLBACK|TAB FINALIZATION IS MANDATORY/);
 }
 assert.match(buildWritePrompt(lpOnlyParameters, lpOnlyPlan), /OPERATOR AUTHORIZATION/);
+assert.match(lpOnlyPrompt, /TASK_JSON\.lpPublicEvidence already contains its HTTP status, exact final URL and parsed main\/product blocks/);
+assert.match(lpOnlyPrompt, /include its exact supplied product block_id in occurrence_evidence/);
+assert.match(lpOnlyPrompt, /never dump raw HTML or use ad hoc Invoke-WebRequest\/curl parsing/);
+assert.match(buildWritePrompt(lpOnlyParameters, lpOnlyPlan), /TASK_JSON\.lpPublicEvidence is the pre-plan snapshot and cannot prove a later deployment/);
+assert.match(buildWritePrompt(lpOnlyParameters, lpOnlyPlan), /verify each TASK_JSON\.lpPublicBindings block_id at its exact target price/);
 assert.match(buildWritePrompt(lpOnlyParameters, lpOnlyPlan), /Report lp\.status=updated only after the public TASK_JSON\.lpUrl displays all planned target prices/);
 assert.match(buildWritePrompt(lpOnlyParameters, lpOnlyPlan), /inspect package\.json, its lockfile, and the existing deployment installCommand/);
 assert.match(buildWritePrompt(lpOnlyParameters, lpOnlyPlan), /npm ci with only those options/);

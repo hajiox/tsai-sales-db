@@ -49,7 +49,7 @@
     "apply:recipe-web-image-copy-migration": "node scripts/apply-recipe-web-image-copy-migration.cjs",
     "test:recipe-ec-scoped-images-migration": "node scripts/dry-run-recipe-ec-scoped-images-migration.cjs",
     "apply:recipe-ec-scoped-images-migration": "node scripts/apply-recipe-ec-scoped-images-migration.cjs",
-    "test:ec-price-plan": "node scripts/test-ec-price-plan.cjs && node scripts/test-ec-price-lp-runtime.cjs && node --experimental-strip-types scripts/test-ec-price-job-display.mjs",
+    "test:ec-price-plan": "node scripts/test-ec-price-plan.cjs && node scripts/test-ec-price-lp-public-reader.cjs && node scripts/test-ec-price-lp-runtime.cjs && node --experimental-strip-types scripts/test-ec-price-job-display.mjs && node scripts/test-ec-price-retry-confirmation.cjs",
     "test:ec-product-registration-bridge": "node scripts/test-ec-product-registration-bridge.cjs",
     "test:ec-product-registration-migration": "node scripts/dry-run-ec-product-registration-migration.cjs",
     "apply:ec-product-registration-migration": "node scripts/apply-ec-product-registration-migration.cjs",

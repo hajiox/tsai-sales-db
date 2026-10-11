@@ -13,8 +13,10 @@ const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'tsa-lp-runtime-'));
 const config = {workspace: path.join(fixture, 'workspace'), codexHome: path.join(fixture, 'codex-home')};
 fs.mkdirSync(config.workspace, {recursive:true});
 const resolver = path.join(config.codexHome, 'skills/update-aizu-ec-prices/scripts/find-lp-source.ps1');
+const publicReader = path.join(config.codexHome, 'skills/update-aizu-ec-prices/scripts/read-lp-public-page.cjs');
 fs.mkdirSync(path.dirname(resolver), {recursive:true});
 fs.writeFileSync(resolver, '# fixture only');
+fs.writeFileSync(publicReader, 'module.exports={readLpPublicPage:async url=>({final_url:url.endsWith("/redirect")?"https://example.invalid/other":url})};');
 const builder = new Function('config', 'RESULT_SCHEMA', 'uniquePaths', 'appendUnifiedCuaMcpArgs', 'appendChromeDevtoolsMcpArgs', 'BROWSER_ROUTE_POLICY',
   `${section('buildIsolatedCodexArgs', 'emptyCodexUsage')} return buildIsolatedCodexArgs;`)(config, 'schema.json', values=>[...new Set(values.filter(Boolean))], ()=>{}, ()=>{}, 'route policy');
 const explicit = builder('output.json', ['job-artifacts', 'lp-workspace'], {
@@ -39,6 +41,11 @@ assert.match(summarize({sites:[{status:'updated'}],lp:{status:'updated'}},{targe
 const calls=[];
 let planTabPolicyViolation=null;
 let writeTabPolicyViolation=null;
+let publicReadIssue=null;
+const publicBlock={block_id:'LPB_0123456789abcdef',text:'Exact soup product, five servings, 1750円',prices:[1750]};
+const publicEvidence={http_status:200,final_url:'https://example.invalid/',product_blocks:[publicBlock]};
+const bindPublicPlan = new Function(`${section('bindEcPriceLpPublicPlan', 'verifyRegisteredEcPriceLp')} return bindEcPriceLpPublicPlan;`)();
+const publicUpdate={occurrence_evidence:`${publicBlock.block_id}: exact soup product and five servings`,observed_price:1750,target_price:1944};
 const blockedLpResult = new Function(`${section('blockedLpResult', 'validateEcProductNameGenerateJobParameters')} return blockedLpResult;`)();
 const blockedEcPriceLpPlan = new Function(`${section('blockedEcPriceLpPlan', 'ecPriceLpCurrentTargetPrices')} return blockedEcPriceLpPlan;`)();
 const bindings={
@@ -51,13 +58,15 @@ const bindings={
   assertEcPriceRecipeSnapshot:async()=>{}, ecPriceLpCurrentTargetPrices:()=>[],
   positiveEcPriceInteger:v=>v, verifyRegisteredEcPriceLp:async()=>null,
   browserPermissionRequired:()=>false,
+  readRegisteredEcPriceLp:async()=>{if(publicReadIssue)throw new Error(publicReadIssue);return publicEvidence;},
+  bindEcPriceLpPublicPlan:bindPublicPlan,
   blockedLpResult, blockedEcPriceLpPlan, summarizeCodexPhaseFailure:(_stderr,fallback)=>fallback,
   runEcPriceCodexPhase:async options=>{
     calls.push(options);
     if(calls.length===1){
       const root=path.join(options.workspaceDir,'.lp-price-jobs/fresh-repo');
       fs.mkdirSync(root,{recursive:true});
-      return {exitCode:0,tabPolicyViolation:planTabPolicyViolation,result:{status:'ready',reference_standard_price:1944,lp:{project_root:root,source_commit:'a'.repeat(40),message:'Fresh clone verified'}}};
+      return {exitCode:0,tabPolicyViolation:planTabPolicyViolation,result:{status:'ready',reference_standard_price:1944,lp:{project_root:root,source_commit:'a'.repeat(40),updates:[publicUpdate],message:'Fresh clone verified'}}};
     }
     return {exitCode:0,tabPolicyViolation:writeTabPolicyViolation,result:{status:'completed',lp:{status:'updated',final_prices:[1944]}}};
   },
@@ -71,6 +80,9 @@ const lpFunction = new Function(...Object.keys(bindings), `async ${section('exec
   assert.equal(calls.length,2);
   const task=JSON.parse(calls[0].prompt);
   assert.equal(task.lpResolverPath,resolver);
+  assert.equal(task.lpPublicReaderPath,publicReader);
+  assert.deepEqual(task.lpPublicEvidence,publicEvidence,'Codex receives parsed public evidence before planning');
+  assert.deepEqual(JSON.parse(calls[1].prompt).lpPublicBindings,[{block_id:publicBlock.block_id,observed_price:1750,target_price:1944}]);
   assert.equal(task.lpWorkspaceRoot,path.join(config.workspace,'.lp-price-jobs',job.id));
   assert.equal(calls[0].workspaceDir,task.lpWorkspaceRoot);
   assert.ok(calls[1].workspaceDir.startsWith(task.lpWorkspaceRoot+path.sep));
@@ -91,6 +103,25 @@ const lpFunction = new Function(...Object.keys(bindings), `async ${section('exec
   assert.equal(calls.length,2);
   assert.equal(writeBlocked.resultLp.status,'blocked');
   assert.match(writeBlocked.resultLp.message,/Forbidden LP browser operation/);
+  calls.length=0; publicReadIssue='HTTP 404';
+  const readBlocked=await lpFunction(options);
+  assert.equal(calls.length,0,'A failed public preflight stops before any Codex phase');
+  assert.match(readBlocked.resultLp.message,/HTTP 404/);
+  assert.equal(bindPublicPlan({lp:{updates:[publicUpdate]}},publicEvidence).issue,null);
+  assert.match(bindPublicPlan({lp:{updates:[{...publicUpdate,occurrence_evidence:'price only'}]}},publicEvidence).issue,/公開商品ブロック/);
+  assert.match(bindPublicPlan({lp:{updates:[{...publicUpdate,observed_price:790}]}},publicEvidence).issue,/現価格/);
+  assert.match(bindPublicPlan({lp:{updates:[publicUpdate]}},{product_blocks:[{...publicBlock,prices:[1750,790]}]}).issue,/価格基準が複数/);
+  const bound=[{block_id:publicBlock.block_id,observed_price:1750,target_price:1944}];
+  let deployed={product_blocks:[{...publicBlock,prices:[1944]}]};
+  const verifyPublic = new Function('readRegisteredEcPriceLp',`async ${section('verifyRegisteredEcPriceLp', 'summarizeSequentialEcPriceResult')} return verifyRegisteredEcPriceLp;`)(async()=>deployed);
+  assert.equal(await verifyPublic('https://example.invalid/',[1944],bound),null);
+  deployed={product_blocks:[publicBlock,{block_id:'LPB_fedcba9876543210',text:'Other product',prices:[1944]}]};
+  assert.match(await verifyPublic('https://example.invalid/',[1944],bound),/対象商品ブロック/,'Another product at the target price cannot verify this plan');
+  deployed={product_blocks:[{...publicBlock,prices:[1944]},{...publicBlock,prices:[1750]}]};
+  assert.match(await verifyPublic('https://example.invalid/',[1944],bound),/対象商品ブロック/,'Every repeated bound card must agree');
+  assert.match(await verifyPublic('https://example.invalid/',[1944],[]),/根拠/);
+  const readPublic = new Function('config','join','pathToFileURL',`async ${section('readRegisteredEcPriceLp', 'bindEcPriceLpPublicPlan')} return readRegisteredEcPriceLp;`)(config,path.join,require('node:url').pathToFileURL);
+  await assert.rejects(readPublic('https://example.invalid/redirect'),/最終URL/);
   console.log('LP phase sandbox, scoped workspace, resolver, browser guards and failure-message tests passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>{
   // Remove only the unique temporary fixture created by this test.

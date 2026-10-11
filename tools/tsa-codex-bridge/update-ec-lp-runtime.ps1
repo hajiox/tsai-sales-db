@@ -106,16 +106,18 @@ $files = @(
     @{ Relative = 'bridge.mjs'; Source = (Join-Path $sourceRoot 'bridge.mjs'); Target = $bridgePath },
     @{ Relative = 'Skill-SKILL.md'; Source = (Join-Path $sourceRoot 'skills\update-aizu-ec-prices\SKILL.md'); Target = (Join-Path $skillDir 'SKILL.md') },
     @{ Relative = 'Skill-lp-workflow.md'; Source = (Join-Path $sourceRoot 'skills\update-aizu-ec-prices\references\lp-workflow.md'); Target = (Join-Path $skillDir 'references\lp-workflow.md') },
-    @{ Relative = 'Skill-find-lp-source.ps1'; Source = (Join-Path $sourceRoot 'skills\update-aizu-ec-prices\scripts\find-lp-source.ps1'); Target = (Join-Path $skillDir 'scripts\find-lp-source.ps1') }
+    @{ Relative = 'Skill-find-lp-source.ps1'; Source = (Join-Path $sourceRoot 'skills\update-aizu-ec-prices\scripts\find-lp-source.ps1'); Target = (Join-Path $skillDir 'scripts\find-lp-source.ps1') },
+    @{ Relative = 'Skill-read-lp-public-page.cjs'; Source = (Join-Path $sourceRoot 'skills\update-aizu-ec-prices\scripts\read-lp-public-page.cjs'); Target = (Join-Path $skillDir 'scripts\read-lp-public-page.cjs'); AllowCreate = $true }
 )
 foreach ($file in $files) {
     Assert-PlainPath $file.Source $sourceRoot | Out-Null
     Assert-PlainPath $file.Target $(if ($file.Relative -eq 'bridge.mjs') { $installDir } else { $skillDir }) | Out-Null
-    if (-not (Test-Path -LiteralPath $file.Source -PathType Leaf) -or -not (Test-Path -LiteralPath $file.Target -PathType Leaf)) {
+    $file.OldExists = Test-Path -LiteralPath $file.Target -PathType Leaf
+    if (-not (Test-Path -LiteralPath $file.Source -PathType Leaf) -or (-not $file.OldExists -and (-not $file.AllowCreate -or (Test-Path -LiteralPath $file.Target)))) {
         throw 'A required source or installed file is missing.'
     }
     $file.SourceHash = File-Hash $file.Source
-    $file.OldHash = File-Hash $file.Target
+    $file.OldHash = if ($file.OldExists) { File-Hash $file.Target } else { $null }
 }
 foreach ($path in @($files[0].Source, $bridgePath)) {
     if ([IO.File]::ReadAllText($path) -notmatch 'const VERSION = "1\.9\.101";') { throw 'This targeted updater requires Bridge version 1.9.101.' }
@@ -123,6 +125,8 @@ foreach ($path in @($files[0].Source, $bridgePath)) {
 $node = (Get-Command node -CommandType Application | Select-Object -First 1).Source
 & $node --check $files[0].Source
 if ($LASTEXITCODE -ne 0) { throw 'Source bridge.mjs failed node --check.' }
+& $node --check $files[4].Source
+if ($LASTEXITCODE -ne 0) { throw 'Source LP public reader failed node --check.' }
 $workers = @()
 foreach ($name in @('interactive', 'ai-01', 'ai-02', 'analysis-01')) {
     $runtime = if ($name -eq 'interactive') { $installDir } else { Join-Path $installDir "workers\$name" }
@@ -177,10 +181,13 @@ try {
     $backupDir = Assert-PlainPath (Join-Path $installDir ('backups\ec-lp-' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmss') + '-' + $nonce)) $installDir
     New-Item -ItemType Directory -Path $backupDir | Out-Null
     foreach ($file in $files) {
-        if ((File-Hash $file.Source) -cne $file.SourceHash -or (File-Hash $file.Target) -cne $file.OldHash) { throw 'Source or installed files changed during validation.' }
+        $targetExists = Test-Path -LiteralPath $file.Target -PathType Leaf
+        if ((File-Hash $file.Source) -cne $file.SourceHash -or $targetExists -ne $file.OldExists -or ($file.OldExists -and (File-Hash $file.Target) -cne $file.OldHash)) { throw 'Source or installed files changed during validation.' }
         $file.Backup = Assert-PlainPath (Join-Path $backupDir $file.Relative) $installDir
-        [IO.File]::Copy($file.Target, $file.Backup, $false)
-        if ((File-Hash $file.Backup) -cne $file.OldHash) { throw 'A runtime backup did not verify.' }
+        if ($file.OldExists) {
+            [IO.File]::Copy($file.Target, $file.Backup, $false)
+            if ((File-Hash $file.Backup) -cne $file.OldHash) { throw 'A runtime backup did not verify.' }
+        }
     }
     $interactive = Read-Worker $workers[0] -RequireIdle -RequireMaintenance
     if ([int]$interactive.State.pid -ne $workers[0].Pid -or $interactive.Process.CreationDate -ne $workers[0].CreatedAt) { throw 'Interactive process identity changed before stop.' }
@@ -200,8 +207,14 @@ try {
 } catch {
     if ($copiesStarted) {
         try {
-            foreach ($file in $files) { [IO.File]::Copy($file.Backup, $file.Target, $true) }
-            foreach ($file in $files) { if ((File-Hash $file.Target) -cne $file.OldHash) { throw 'Rollback hash mismatch.' } }
+            foreach ($file in $files) {
+                Assert-PlainPath $file.Target $(if ($file.Relative -eq 'bridge.mjs') { $installDir } else { $skillDir }) | Out-Null
+                if ($file.OldExists) { [IO.File]::Copy($file.Backup, $file.Target, $true) }
+                elseif (Test-Path -LiteralPath $file.Target -PathType Leaf) { Remove-Item -LiteralPath $file.Target -Force }
+            }
+            foreach ($file in $files) {
+                if (($file.OldExists -and (File-Hash $file.Target) -cne $file.OldHash) -or (-not $file.OldExists -and (Test-Path -LiteralPath $file.Target))) { throw 'Rollback hash mismatch.' }
+            }
         } catch {
             $ownsMaintenance = $false
             throw 'Runtime rollback did not verify; maintenance remains locked. Inspect the preserved backup before removing the lock.'
