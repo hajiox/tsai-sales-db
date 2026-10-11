@@ -75,6 +75,18 @@ function Assert-Interactive($Worker, [int]$ExpectedParent) {
     if ($children.Count -ne 0) { throw 'The interactive worker still has child processes; no process was stopped.' }
     return [int]$parent.ProcessId
 }
+function Assert-RecordedSupervisor($Worker) {
+    $parentPid = [int]$Worker.Process.ParentProcessId
+    if (-not $supervisors.ContainsKey($parentPid)) { throw 'The new worker has an unknown supervisor.' }
+    $parent = Get-CimInstance Win32_Process -Filter "ProcessId = $parentPid"
+    if (-not $parent -or $parent.Name -notin @('powershell.exe', 'pwsh.exe') -or
+        $parent.CreationDate -ne $supervisors[$parentPid] -or
+        $parent.CreationDate -gt $Worker.Process.CreationDate -or
+        [string]$parent.CommandLine -notmatch ('(?:^|[\s"])' + [regex]::Escape($startPath) + '(?:[\s"]|$)')) {
+        throw 'A recorded supervisor identity changed.'
+    }
+    return $parentPid
+}
 function Assert-ConfigHashes {
     foreach ($spec in $workers) {
         if ((File-Hash $spec.Config) -cne $spec.ConfigHash) { throw 'An existing worker config changed during maintenance.' }
@@ -131,8 +143,16 @@ foreach ($name in @('interactive', 'ai-01', 'ai-02', 'analysis-01')) {
 }
 if (@($workers.Pid | Select-Object -Unique).Count -ne 4) { throw 'Four distinct verified workers are required.' }
 $supervisorPid = Assert-Interactive (Read-Worker $workers[0] -RequireIdle) 0
+# Pre-existing duplicate supervisors can race to acquire the one worker lock.
+$supervisors = @{}
+foreach ($process in @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'")) {
+    if ($process.CreationDate -and [string]$process.CommandLine -match ('(?:^|[\s"])' + [regex]::Escape($startPath) + '(?:[\s"]|$)')) {
+        $supervisors[[int]$process.ProcessId] = $process.CreationDate
+    }
+}
+Assert-RecordedSupervisor (Read-Worker $workers[0] -RequireIdle) | Out-Null
 if ($DryRun) {
-    [pscustomobject]@{ dry_run = $true; version = '1.9.101'; files = $files.Count; interactive_pid = $workers[0].Pid; supervisor_pid = $supervisorPid; headless_pids = @($workers[1..3].Pid); configs_preserved = $true } | ConvertTo-Json -Compress
+    [pscustomobject]@{ dry_run = $true; version = '1.9.101'; files = $files.Count; interactive_pid = $workers[0].Pid; supervisor_pid = $supervisorPid; recorded_supervisor_pids = @($supervisors.Keys | Sort-Object); headless_pids = @($workers[1..3].Pid); configs_preserved = $true } | ConvertTo-Json -Compress
     return
 }
 
@@ -165,6 +185,7 @@ try {
     $interactive = Read-Worker $workers[0] -RequireIdle -RequireMaintenance
     if ([int]$interactive.State.pid -ne $workers[0].Pid -or $interactive.Process.CreationDate -ne $workers[0].CreatedAt) { throw 'Interactive process identity changed before stop.' }
     Assert-Interactive $interactive $supervisorPid | Out-Null
+    Assert-RecordedSupervisor $interactive | Out-Null
     Assert-ConfigHashes
     Stop-Process -Id $workers[0].Pid -Force -ErrorAction Stop
     $stopDeadline = [DateTime]::UtcNow.AddSeconds(5)
@@ -199,7 +220,7 @@ do {
         $candidate = Read-Worker $workers[0]
         if ([int]$candidate.State.pid -eq $workers[0].Pid -or $candidate.Process.CreationDate.ToUniversalTime() -lt $releasedAt -or
             [DateTimeOffset]::Parse([string]$candidate.State.updatedAt).UtcDateTime -lt $releasedAt) { throw 'Waiting for a new interactive heartbeat.' }
-        if ([int]$candidate.Process.ParentProcessId -ne $supervisorPid) { throw 'The interactive supervisor identity changed.' }
+        $activatedSupervisorPid = Assert-RecordedSupervisor $candidate
         $newWorker = $candidate
     } catch { Start-Sleep -Milliseconds 250 }
 } while (-not $newWorker -and [DateTime]::UtcNow -lt $deadline)
@@ -210,4 +231,4 @@ foreach ($spec in $workers[1..3]) {
     if ([int]$headless.State.pid -ne $spec.Pid -or $headless.Process.CreationDate -ne $spec.CreatedAt) { throw 'A headless worker identity changed during the targeted update.' }
 }
 foreach ($file in $files) { if ((File-Hash $file.Target) -cne $file.SourceHash) { throw 'Final installed file verification failed.' } }
-[pscustomobject]@{ updated = $true; version = '1.9.101'; interactive_pid = [int]$newWorker.State.pid; supervisor_pid = $supervisorPid; headless_pids = @($workers[1..3].Pid); configs_preserved = $true; backup_directory = $backupDir } | ConvertTo-Json -Compress
+[pscustomobject]@{ updated = $true; version = '1.9.101'; interactive_pid = [int]$newWorker.State.pid; supervisor_pid = $activatedSupervisorPid; headless_pids = @($workers[1..3].Pid); configs_preserved = $true; backup_directory = $backupDir } | ConvertTo-Json -Compress
