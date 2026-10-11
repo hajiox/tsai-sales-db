@@ -99,6 +99,7 @@ function loadFunction(name, nextName) {
 
 const validatePlan = loadFunction("validateEcPricePlan", "validateEcPriceResultV2");
 const validateResult = loadFunction("validateEcPriceResultV2", "planToFinalResult");
+const buildPlanPrompt = loadFunction("buildEcPricePlanPrompt", "buildEcPriceWritePrompt");
 const countsTemporaryTabActions = loadFunction("countEcPriceTemporaryTabActions", "isForbiddenEcPriceTabAction");
 const detectsForbiddenTabAction = loadFunction("isForbiddenEcPriceTabAction", "terminateChildProcessTree");
 const estimateDesktopCompletion = loadFunction("estimateDesktopCompletion", "bridgeTaskLabel");
@@ -774,6 +775,7 @@ assert.equal(validateServerPlan(lpParameters, lpPlan).status, "ready");
 const lpOnlyParameters = {
   ...lpParameters,
   targets: [],
+  newPriceInclTax: 1944,
   siteBaselines: {},
   recoveryPlanSites: [],
 };
@@ -781,6 +783,10 @@ const lpOnlyPlan = {
   ...lpPlan,
   reference_standard_price: null,
   sites: [],
+  lp: {
+    ...lpPlan.lp,
+    updates: [{ ...lpPlan.lp.updates[0], target_price: 1944 }],
+  },
 };
 assert.equal(
   validatePlan(lpOnlyPlan, lpOnlyParameters),
@@ -792,6 +798,30 @@ assert.equal(
   "ready",
   "サーバーもLPだけの検証済み計画を受理する",
 );
+const lpOnlyPrompt = buildPlanPrompt(lpOnlyParameters);
+assert.match(lpOnlyPrompt, /LP-ONLY PLAN/);
+assert.match(lpOnlyPrompt, /Return sites=\[\] and reference_standard_price=null/);
+assert.match(lpOnlyPrompt, /pricing_basis=standard_price and target_price exactly to TASK_JSON\.newPriceInclTax independently of EC sites/);
+assert.match(lpOnlyPrompt, /Do not open or read EC seller pages in this LP-only phase; no old standard-price baseline is required/);
+assert.match(lpOnlyPrompt, /Never derive this LP target from a shipping-excluded BASE price/);
+assert.match(lpOnlyPrompt, /different sale unit.*uncertain mapping must remain blocked\/needs_review/);
+assert.doesNotMatch(lpOnlyPrompt, /always set reference_standard_price/i);
+const ecPlanPrompt = buildPlanPrompt(baseParameters);
+assert.doesNotMatch(ecPlanPrompt, /LP-ONLY PLAN/);
+assert.match(ecPlanPrompt, /For requested EC sites, always set reference_standard_price/);
+assert.match(ecPlanPrompt, /shipping-excluded BASE listing must use delta_from_reference/);
+assert.match(ecPlanPrompt, /For an EC site's delta_from_reference, standard_baseline_price must be TASK_JSON\.siteBaselines\[site\]/);
+for (const update of [
+  { ...lpOnlyPlan.lp.updates[0], target_price: 1646 },
+  { ...lpOnlyPlan.lp.updates[0], pricing_basis: "base", target_price: 1646 },
+  { ...lpOnlyPlan.lp.updates[0], pricing_basis: "base", target_price: 1944 },
+  { ...lpOnlyPlan.lp.updates[0], pricing_basis: "unknown", target_price: 1944 },
+]) {
+  const mismatchedLpPlan = { ...lpOnlyPlan, lp: { ...lpOnlyPlan.lp, updates: [update] } };
+  assert.match(validatePlan(mismatchedLpPlan, lpOnlyParameters), /商品LPの目標価格/,
+    "LP単独では承認済み1,944円以外や未計画のEC価格基準を受理しない");
+  assert.throws(() => validateServerPlan(lpOnlyParameters, mismatchedLpPlan), /商品LP/);
+}
 assert.deepEqual(
   currentLpTargetPrices({
     lp: {

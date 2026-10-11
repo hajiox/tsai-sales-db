@@ -10,6 +10,15 @@ TSAレシピから `product_lp_url` が渡された場合は、そのURLを正�
 
 TSAのタイトルや説明は古い場合がある。リンク先で現在の容量・商品形態を確認する。
 
+## LP単独工程の価格根拠
+
+`TASK_JSON.lpUpdate=true` かつ `TASK_JSON.targets=[]` は、ECと独立してLPだけを確認・反映する正規の工程である。EC対象、`siteBaselines`、`recoveryPlanSites` が空であることだけを理由に停止しない。対象ECを追加したり、完了済みECを再巡回・再変更したりしない。
+
+- 公開LPとFresh Cloneで対象商品を照合し、容量・販売個数・形態・保存方法がTSAレシピの販売単位と一致し、対象表示が標準の税込価格であることを現行LPと固定入力から証明する。同一販売単位の標準価格箇所には、既存schemaの `pricing_basis="standard_price"` を使い、`target_price=TASK_JSON.newPriceInclTax` とする。これは固定済み税込目標価格を直接指定する根拠で、対象ECの指定を必要としない。
+- LP単独計画は `sites=[]`、`reference_standard_price=null` を返す。旧標準価格やECの保存値は、この標準価格のLP計画には不要である。LPの現価格は `observed_price` に記録し、旧LP価格をキャンペーンの標準基準価格に流用しない。
+- 各対象箇所のソースファイル、商品との対応、現価格、目標価格を証明できたら通常どおり `lp.status="planned"` とする。対象箇所がすべて計画できれば全体 `status="ready"` にできる。ECが空であることと、商品・公開元・変更箇所が未確認であることを混同しない。
+- 販売個数・容量の異なるセット、送料別、比較価格など別基準の価格には、この標準価格を適用しない。固定入力または検証済み計画からその箇所の正確な目標価格を証明できなければLP工程をブロックする。EC名、基準価格、倍率、送料差額を推測せず、`sites` や `targets` を補充しない。
+
 ## 複数商品チャーシューLP
 
 `https://chasieu.aizu-syokubura.com/` は、冷凍・レトルトを含む複数のチャーシュー商品を掲載する共通LPとして扱う。
@@ -89,3 +98,5 @@ push・本番デプロイの直前に再度fetchし、本番ブランチが編�
 - remote、ブランチ、デプロイ先を推測で新規作成しない。既存構成を確認する。
 
 2026-10-11: Skillの絶対パスからヘルパーを実行する手順へ修正。Fresh Cloneの不要なrg依存と本番ブランチ推測を除去し、限定検索・CLI認証失敗・origin/branch/HEAD/clean検証をローカルfixtureで確認。実EC/LPの価格変更は検証で実行しない。
+
+2026-10-11: LP単独工程の同一販売単位・標準価格は、既存の `standard_price` 根拠で固定済み税込目標価格を使うと明記。schemaと検証処理が `sites=[]`・`reference_standard_price=null` を許容することを確認。別販売単位・別価格基準の推測禁止は維持。
