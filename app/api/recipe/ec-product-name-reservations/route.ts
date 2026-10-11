@@ -1,7 +1,6 @@
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import { randomUUID } from "node:crypto";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import { normalizeEcProductNameTargets } from "@/lib/ec-product-name-codex";
 import {
@@ -44,8 +43,8 @@ function toReservationView(row: Record<string, unknown>) {
 }
 
 async function requireAdmin() {
-  const session = await getServerSession(authOptions);
-  return session?.user?.email?.toLowerCase() === ADMIN_EMAIL ? session : null;
+  const session = await getBusinessAdminSession();
+  return isBusinessAdminSession(session) ? session : null;
 }
 
 async function loadReservations() {

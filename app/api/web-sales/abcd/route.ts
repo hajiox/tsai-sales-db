@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import { analyze, channelSchema, importSchema } from "@/lib/web-sales-abcd/model";
 import { guessMapping, mapRows, readCsv, type Mapping } from "@/lib/web-sales-abcd/csv";
@@ -14,8 +13,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const summaryColumns = "id,channel,period_start,period_end,metric,scope,source,item_count,created_at";
 const admin = async () => {
-  const session = await getServerSession(authOptions);
-  return session?.user?.email?.toLowerCase() === "aizubrandhall@gmail.com" ? session.user.email : null;
+  const session = await getBusinessAdminSession();
+  return isBusinessAdminSession(session) ? session!.user!.email : null;
 };
 function failure(error: unknown) {
   if (error instanceof z.ZodError) return NextResponse.json({ error: error.issues.map(i => i.message).slice(0, 5).join(" / ") }, { status: 400 });

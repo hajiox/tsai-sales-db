@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getToken } from "next-auth/jwt";
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 
 import { parseSukenekoProductMasterCsv } from "@/lib/sukeneko-inventory";
 
@@ -92,7 +92,8 @@ export async function POST(request: NextRequest) {
       if (error) throw error;
     }
 
-    const token = await getToken({ req: request as any });
+    const session = await getBusinessAdminSession();
+  const token = session?.user;
     const { data: importRun, error: importError } = await supabase
       .from("wholesale_sukeneko_master_imports")
       .insert({
@@ -195,8 +196,9 @@ function sanitizeFileName(value: unknown) {
 }
 
 async function requireAuthorized(request: NextRequest) {
-  const token = await getToken({ req: request as any });
-  if (!token || token.email !== "aizubrandhall@gmail.com") {
+  const session = await getBusinessAdminSession();
+  const token = session?.user;
+  if (!isBusinessAdminSession(session)) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
   return null;

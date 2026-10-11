@@ -1,13 +1,12 @@
+import { getBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import { hasPackConflict, priceDifference } from "@/lib/sales-price-reconciliation";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await getServerSession(authOptions))?.user) {
+  if (!(await getBusinessAdminSession())?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const db = getWebSalesAutomationServiceClient();

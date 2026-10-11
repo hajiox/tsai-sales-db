@@ -3,7 +3,7 @@ export const maxDuration = 60;
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from "@supabase/supabase-js";
-import { getToken } from "next-auth/jwt";
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import { NextResponse } from "next/server";
 import {
   DELIVERY_NOTE_MATERIALS,
@@ -24,8 +24,8 @@ const maxFiles = 4;
 export async function POST(request: Request) {
   let scanId = "";
   try {
-    const token = await getToken({ req: request as any });
-    if (!token || token.email !== "aizubrandhall@gmail.com") {
+    const token = await getAuthorizedIdentity(request);
+    if (!token) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
@@ -162,4 +162,9 @@ JSONのみを次の形式で返してください:
     }
   ]
 }`;
+}
+
+async function getAuthorizedIdentity(request: Request) {
+  const session = await getBusinessAdminSession(request);
+  return isBusinessAdminSession(session) ? session!.user : null;
 }

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import { isQoo10SettledDetailUnavailable } from "@/lib/web-sales-codex/ec-profit-retry";
 import { selectEffectiveFinanceJob } from "@/lib/web-sales-codex/finance-job-state";
@@ -64,8 +63,8 @@ type Totals = {
 };
 
 export async function GET(request: Request) {
-  const session = await getServerSession(authOptions);
-  if (session?.user?.email?.toLowerCase() !== "aizubrandhall@gmail.com") {
+  const session = await getBusinessAdminSession();
+  if (!isBusinessAdminSession(session)) {
     return NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
   }
 

@@ -1,3 +1,4 @@
+import { hasBusinessOperationContext } from "@/lib/data-access/business-operation-context";
 import { NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { createClient } from "@supabase/supabase-js";
@@ -6,8 +7,8 @@ import { inventorySources, buildClosingInventoryReport, type InventoryHeader, ty
 
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
-  const token = await getToken({ req: request as Parameters<typeof getToken>[0]["req"] });
-  if (token?.email !== "aizubrandhall@gmail.com") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const token = hasBusinessOperationContext(request) ? null : await getToken({ req: request as Parameters<typeof getToken>[0]["req"] });
+  if (!hasBusinessOperationContext(request) && token?.email !== "aizubrandhall@gmail.com") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const requested = new URL(request.url).searchParams.get("fiscalYear");
   const year = normalizeInventoryFiscalYear(requested);
   if (requested !== null && !year) return NextResponse.json({ error: "年度が不正です" }, { status: 400 });

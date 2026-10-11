@@ -1,7 +1,6 @@
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import { NextResponse } from "next/server";
 import { inactiveEcOperationTargets, ecOperationBlockedMessage } from "@/lib/ec-operation-policy";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 import {
   buildUnifiedEcProductNames,
@@ -76,8 +75,8 @@ function toJobView(job: Record<string, unknown>): EcProductNameJobView {
 }
 
 async function requireAdmin() {
-  const session = await getServerSession(authOptions);
-  return session?.user?.email?.toLowerCase() === ADMIN_EMAIL ? session : null;
+  const session = await getBusinessAdminSession();
+  return isBusinessAdminSession(session) ? session : null;
 }
 
 function jobMatchesRequest(

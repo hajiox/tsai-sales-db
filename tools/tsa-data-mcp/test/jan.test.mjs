@@ -15,10 +15,10 @@ test('JAN five tools use fixed HTTP, strict CAS and idempotency; PNG preview is 
  const file = {filename:'barcode_4571318639917.png',mimeType:'image/png',encoding:'base64',content:Buffer.from('synthetic PNG fixture').toString('base64')};
  res.end(JSON.stringify({ok:true,data:body.action==='export'?{janCode:'4571318639917',file}:{jan:{id:janId,_version:version},items:[],nextOffset:null},requestId:'jan_mock'}));});
  http.listen(0,'127.0.0.1');await once(http,'listening');
- const client=new Client({name:'jan-test',version:'1.3.0'});
+ const client=new Client({name:'jan-test',version:'1.4.0'});
  const transport=new StdioClientTransport({command:process.execPath,args:[fileURLToPath(new URL('../server.mjs',import.meta.url))],env:{TSA_DATA_API_URL:`http://127.0.0.1:${http.address().port}`,TSA_DATA_API_TOKEN:token,TSA_DATA_ALLOW_LOCALHOST:'1'},stderr:'pipe'});
  let stderr='';transport.stderr?.on('data',chunk=>{stderr+=chunk.toString()});
- try{await client.connect(transport);assert.equal(client.getServerVersion().version,'1.3.0');const{tools}=await client.listTools();assert.equal(tools.length,29);
+ try{await client.connect(transport);assert.equal(client.getServerVersion().version,'1.4.0');const{tools}=await client.listTools();assert.equal(tools.length,32);
  for(const name of['tsa_list_jan_codes','tsa_issue_jan_code','tsa_assign_jan_code','tsa_update_jan_code','tsa_export_barcode']) assert.ok(tools.some(tool=>tool.name===name));
  assert.equal(tools.find(tool=>tool.name==='tsa_export_barcode').annotations.readOnlyHint,true);
  assert.equal(tools.find(tool=>tool.name==='tsa_issue_jan_code').annotations.idempotentHint,true);

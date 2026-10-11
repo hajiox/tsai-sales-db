@@ -236,14 +236,19 @@ export async function PATCH(request: NextRequest) {
             : null;
 
     // 一括スキップ（1リクエストで複数件処理）
-    if (action === "bulk_skip") {
+    if (action === "bulk_skip" || action === "bulk_restore") {
         const itemIds: string[] = body.itemIds || [];
         if (itemIds.length === 0) {
             return NextResponse.json({ error: "itemIds is required" }, { status: 400 });
         }
         const { error } = await supabase
             .from("pending_estimate_items")
-            .update({
+            .update(action === "bulk_restore" ? {
+                status: "pending",
+                applied_action: null,
+                applied_at: null,
+                notes: null,
+            } : {
                 status: "skipped",
                 applied_action: "bulk_skipped",
                 applied_at: new Date().toISOString(),
@@ -252,7 +257,9 @@ export async function PATCH(request: NextRequest) {
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
-        return NextResponse.json({ success: true, skipped: itemIds.length });
+        return NextResponse.json(action === "bulk_restore"
+            ? { success: true, restored: itemIds.length }
+            : { success: true, skipped: itemIds.length });
     }
 
     if (!itemId || !action) {
@@ -459,27 +466,6 @@ export async function PATCH(request: NextRequest) {
             }
 
             return NextResponse.json({ success: true, action: "restored" });
-        }
-
-        // 一括復活
-        if (action === "bulk_restore") {
-            const itemIds: string[] = body.itemIds || [];
-            if (itemIds.length === 0) {
-                return NextResponse.json({ error: "itemIds is required" }, { status: 400 });
-            }
-            const { error } = await supabase
-                .from("pending_estimate_items")
-                .update({
-                    status: "pending",
-                    applied_action: null,
-                    applied_at: null,
-                    notes: null,
-                })
-                .in("id", itemIds);
-            if (error) {
-                return NextResponse.json({ error: error.message }, { status: 500 });
-            }
-            return NextResponse.json({ success: true, restored: itemIds.length });
         }
 
         return NextResponse.json({ error: "不明なaction" }, { status: 400 });

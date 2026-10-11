@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/sync";
 
 export const runtime = "nodejs";
@@ -10,8 +9,8 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string; artifactId: string }> },
 ) {
-  const session = await getServerSession(authOptions);
-  if (session?.user?.email?.toLowerCase() !== "aizubrandhall@gmail.com") {
+  const session = await getBusinessAdminSession();
+  if (!isBusinessAdminSession(session)) {
     return NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
   }
 

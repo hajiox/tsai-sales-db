@@ -114,7 +114,10 @@
     "test:recipe-items-replacement-migration": "node scripts/test-recipe-items-replacement-migration.cjs",
     "apply:recipe-items-replacement-migration": "node scripts/apply-recipe-items-replacement.cjs --apply",
     "test:jan-data-access": "node scripts/test-jan-data-access.cjs",
-    "test:jan-data-access-migration": "node scripts/test-jan-data-access-migration.cjs"
+    "test:jan-data-access-migration": "node scripts/test-jan-data-access-migration.cjs",
+    "test:business-operations": "node scripts/test-business-operations.cjs && node scripts/test-business-operation-registry.cjs && node scripts/test-finance-business-operations.cjs",
+    "test:business-operations-migration": "node scripts/test-business-operations-migration.cjs",
+    "apply:business-operations-migration": "node scripts/apply-business-operations-migrations.cjs --apply"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",

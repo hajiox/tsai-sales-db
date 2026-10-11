@@ -1,9 +1,7 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 
 export async function isFinanceAdmin(): Promise<boolean> {
-  const session = await getServerSession(authOptions);
-  return session?.user?.email?.toLowerCase() === "aizubrandhall@gmail.com";
+  return isBusinessAdminSession(await getBusinessAdminSession());
 }
 
 export function isSameOriginFinanceRequest(request: Request): boolean {

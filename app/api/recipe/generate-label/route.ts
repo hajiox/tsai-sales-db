@@ -1,6 +1,5 @@
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import {
   INGREDIENT_LABEL_AI_MODEL,
   INGREDIENT_LABEL_AI_REASONING_EFFORT,
@@ -25,8 +24,8 @@ function asObject(value: unknown): Record<string, unknown> {
 }
 
 async function requireAdmin() {
-  const session = await getServerSession(authOptions);
-  return session?.user?.email?.toLowerCase() === ADMIN_EMAIL ? session : null;
+  const session = await getBusinessAdminSession();
+  return isBusinessAdminSession(session) ? session : null;
 }
 
 export async function GET(request: Request) {

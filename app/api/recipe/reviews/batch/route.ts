@@ -1,6 +1,5 @@
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db, loadSources } from "@/lib/recipe-reviews/server";
 import { sourceSchema } from "@/lib/recipe-reviews/model";
 import { type BatchEntry, type BatchJob } from "@/lib/recipe-reviews/batch-status";
@@ -9,7 +8,7 @@ import { directOverrides } from "@/lib/recipe-reviews/direct-server";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export const maxDuration=300;
-const admin=async()=> (await getServerSession(authOptions))?.user?.email?.toLowerCase()==="aizubrandhall@gmail.com";
+const admin=async()=> isBusinessAdminSession(await getBusinessAdminSession());
 export async function GET(){
  if(!await admin())return NextResponse.json({error:"Unauthorized"},{status:401});
  try{
@@ -36,7 +35,7 @@ export async function POST(){
    const sources=parsed.data;
    return {recipeId:recipe.id,sources,reason:sources.length===0?"ECの商品紐付けが未設定です":sources.length>40?"収集元が40件を超えています":null};
   })));}
-  const queued=await db().rpc("enqueue_recipe_review_batch",{p_requested_by:"aizubrandhall@gmail.com",p_targets:targets});if(queued.error)throw queued.error;
+  const queued=await db().rpc("enqueue_recipe_review_batch",{p_requested_by:(await getBusinessAdminSession())!.user!.email!,p_targets:targets});if(queued.error)throw queued.error;
   return NextResponse.json({id:queued.data});
  }catch(e){console.error("Review batch enqueue failed",e instanceof Error?e.message:"database error");return NextResponse.json({error:"一括巡回を登録できませんでした。状況を更新してから再実行してください"},{status:500});}
 }

@@ -1,8 +1,6 @@
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getBusinessAdminSession, isBusinessAdminSession, hasBusinessOperationContext } from "@/lib/data-access/business-operation-context";
 
-const RECIPE_ADMIN_EMAIL = "aizubrandhall@gmail.com";
 const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 function isSameOriginWrite(request: Request): boolean {
@@ -22,15 +20,15 @@ function isSameOriginWrite(request: Request): boolean {
   }
 }
 
-/** Browser administration only. Machine clients use the scoped data API. */
+/** Browser administration, or an exact handler invocation from the scoped data gateway. */
 export async function requireRecipeAdminRequest(request: Request): Promise<NextResponse | null> {
-  const session = await getServerSession(authOptions);
+  const session = await getBusinessAdminSession(request);
   const email = session?.user?.email?.toLowerCase();
   if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (email !== RECIPE_ADMIN_EMAIL) {
+  if (!isBusinessAdminSession(session)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  if (!READ_METHODS.has(request.method.toUpperCase()) && !isSameOriginWrite(request)) {
+  if (!hasBusinessOperationContext(request) && !READ_METHODS.has(request.method.toUpperCase()) && !isSameOriginWrite(request)) {
     return NextResponse.json({ error: "Same-origin request required" }, { status: 403 });
   }
   return null;

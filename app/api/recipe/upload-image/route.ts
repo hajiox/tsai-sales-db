@@ -17,10 +17,9 @@ export async function POST(request: NextRequest) {
         const file = formData.get('file') as File | null;
         const recipeId = formData.get('recipeId') as string | null;
 
-        if (!file || !recipeId) {
+        if (!(file instanceof File) || !recipeId) {
             return NextResponse.json({ error: 'file と recipeId が必要です' }, { status: 400 });
         }
-
         // Check recipe exists
         const { data: recipe, error: fetchError } = await supabaseAdmin
             .from('recipes')
@@ -112,6 +111,9 @@ export async function DELETE(request: NextRequest) {
         if (fetchError || !image) {
             return NextResponse.json({ error: '画像が見つかりません' }, { status: 404 });
         }
+        if (recipeId && recipeId !== image.recipe_id) {
+            return NextResponse.json({ error: '対象レシピの画像ではありません' }, { status: 409 });
+        }
 
         // Delete blob
         try {
@@ -195,7 +197,8 @@ export async function PATCH(request: NextRequest) {
       await supabaseAdmin
         .from('recipe_images')
         .update({ sort_order: item.sort_order })
-        .eq('id', item.id);
+        .eq('id', item.id)
+        .eq('recipe_id', recipeId);
     }
 
     // 1枚目の画像でrecipes.product_image_urlを更新

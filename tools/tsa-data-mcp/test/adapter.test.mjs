@@ -71,7 +71,7 @@ test('actual HTTP request times out without retry', async () => {
   http.listen(0, '127.0.0.1');
   await once(http, 'listening');
   try {
-    const api = createApiClient({ origin: `http://127.0.0.1:${http.address().port}`, token }, { timeoutMs: 100 });
+    const api = createApiClient({ origin: `http://127.0.0.1:${http.address().port}`, token }, { timeoutMs: 1000 });
     await assert.rejects(api.read({ resource: 'recipes' }), error => error.code === 'TIMEOUT');
     assert.equal(calls, 1);
   } finally {
@@ -114,11 +114,11 @@ test('real STDIO initialize, tools/list, mock API read and rejection before any 
   try {
     await client.connect(transport);
     assert.equal(client.getServerVersion().name, 'tsa-data');
-    assert.equal(client.getServerVersion().version, '1.3.0');
+    assert.equal(client.getServerVersion().version, '1.4.0');
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 29);
+    assert.equal(tools.length, 32);
     assert.equal(new Set(tools.map(tool => tool.name)).size, tools.length);
-    assert.ok(tools.every(tool => tool.annotations.openWorldHint === false));
+    assert.ok(tools.every(tool => tool.annotations.openWorldHint === (tool.name === 'tsa_run_operation')));
     assert.ok(tools.filter(tool => tool.name.includes('search_') || tool.name.includes('get_')).every(tool => tool.annotations.readOnlyHint === true));
     assert.equal(tools.find(tool => tool.name === 'tsa_apply_change').annotations.readOnlyHint, false);
     assert.equal(tools.find(tool => tool.name === 'tsa_apply_change').annotations.destructiveHint, true);

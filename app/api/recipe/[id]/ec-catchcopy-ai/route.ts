@@ -1,6 +1,5 @@
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import {
   EC_CATCHCOPY_AI_MODEL,
   EC_CATCHCOPY_AI_REASONING_EFFORT,
@@ -53,8 +52,8 @@ function toJobView(job: Record<string, unknown>) {
 }
 
 async function requireAdmin() {
-  const session = await getServerSession(authOptions);
-  return session?.user?.email?.toLowerCase() === ADMIN_EMAIL ? session : null;
+  const session = await getBusinessAdminSession();
+  return isBusinessAdminSession(session) ? session : null;
 }
 
 async function loadGenerationInput(recipeId: string) {

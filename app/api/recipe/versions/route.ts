@@ -5,36 +5,7 @@ import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// テーブルが存在しない場合に自動作成
-async function ensureTable(supabase: any) {
-  // テーブルの存在確認
-  const { error: checkError } = await supabase
-    .from("recipe_versions")
-    .select("id")
-    .limit(1);
-
-  if (checkError && checkError.code === "42P01") {
-    // テーブルが存在しない場合、RPC経由でCREATE TABLE
-    const { error: createError } = await supabase.rpc("exec_sql", {
-      sql: `
-        CREATE TABLE IF NOT EXISTS recipe_versions (
-          id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-          recipe_id uuid NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
-          version_number integer NOT NULL,
-          version_note text,
-          snapshot_recipe jsonb NOT NULL,
-          snapshot_items jsonb NOT NULL,
-          created_at timestamptz DEFAULT now()
-        );
-        CREATE INDEX IF NOT EXISTS idx_recipe_versions_recipe_id ON recipe_versions(recipe_id);
-        CREATE INDEX IF NOT EXISTS idx_recipe_versions_created_at ON recipe_versions(created_at);
-      `,
-    });
-    if (createError) {
-      console.error("テーブル作成エラー（RPC未対応の可能性）:", createError);
-    }
-  }
-}
+// Schema changes are migrations only; missing tables fail closed.
 
 // GET: レシピのバージョン一覧を取得
 export async function GET(request: Request) {

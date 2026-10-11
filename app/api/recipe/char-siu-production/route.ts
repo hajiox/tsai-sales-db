@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getToken } from "next-auth/jwt";
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import {
   calculateCharSiuProduction,
   CHAR_SIU_MATERIALS,
@@ -133,7 +133,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "出来高を入力してください" }, { status: 400 });
     }
 
-    const token = await getToken({ req: request as any });
+    const token = await getAuthorizedIdentity(request);
     const existingId = String(body.id || "").trim();
     const settings = await fetchSettings();
     const definitions = outputDefinitions(settings);
@@ -464,9 +464,14 @@ function normalizeDate(value: unknown) {
 }
 
 async function requireAuthorized(request: Request) {
-  const token = await getToken({ req: request as any });
-  if (!token || token.email !== "aizubrandhall@gmail.com") {
+  const token = await getAuthorizedIdentity(request);
+  if (!token) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
   return null;
+}
+
+async function getAuthorizedIdentity(request: Request) {
+  const session = await getBusinessAdminSession(request);
+  return isBusinessAdminSession(session) ? session!.user : null;
 }

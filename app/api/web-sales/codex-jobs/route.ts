@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { ecChannelUnavailableReason, isEcChannelOperational } from "@/lib/ec-channel-lifecycle";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import { validatePeriod } from "@/lib/web-sales-automation/date";
 import {
   WEB_SALES_CHANNELS,
@@ -23,8 +22,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions);
-  if (session?.user?.email?.toLowerCase() !== "aizubrandhall@gmail.com") {
+  const session = await getBusinessAdminSession();
+  if (!isBusinessAdminSession(session)) {
     return NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
   }
 

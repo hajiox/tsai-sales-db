@@ -1,3 +1,4 @@
+import { hasBusinessOperationContext } from "@/lib/data-access/business-operation-context";
 import { NextResponse } from "next/server";
 import { getLabelCheckAdminClient, getLabelCheckUserEmail } from "@/lib/label-check/server";
 
@@ -22,6 +23,13 @@ export async function GET(
     .maybeSingle();
   if (error) return NextResponse.json({ error: "画像を取得できません" }, { status: 500 });
   if (!image) return NextResponse.json({ error: "画像がありません" }, { status: 404 });
+
+  // The MCP response carries bytes; signed storage URLs stay inside the server.
+  if (hasBusinessOperationContext(_request)) {
+    const { data: blob, error: downloadError } = await supabase.storage.from(BUCKET).download(image.storage_path);
+    if (downloadError || !blob) return NextResponse.json({ error: "画像を取得できません" }, { status: 500 });
+    return new Response(await blob.arrayBuffer(), { headers: { "Content-Type": blob.type || "application/octet-stream", "Cache-Control": "private, no-store" } });
+  }
 
   const { data, error: signedError } = await supabase.storage
     .from(BUCKET)

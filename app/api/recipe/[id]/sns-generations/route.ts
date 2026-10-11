@@ -1,7 +1,6 @@
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import { randomUUID } from "node:crypto";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import {
   RECIPE_SNS_MODEL,
   RECIPE_SNS_REASONING_EFFORT,
@@ -135,8 +134,8 @@ function toGenerationView(
 }
 
 async function requireAdmin() {
-  const session = await getServerSession(authOptions);
-  return session?.user?.email?.toLowerCase() === ADMIN_EMAIL ? session : null;
+  const session = await getBusinessAdminSession();
+  return isBusinessAdminSession(session) ? session : null;
 }
 
 const JOB_SELECT = "id,status,progress,current_step,error_message,parameters,result,created_at,started_at,updated_at,completed_at";

@@ -1,3 +1,4 @@
+import { hasBusinessOperationContext, getBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import { NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { createClient } from "@supabase/supabase-js";
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic";
 const db = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 const failure = (error: unknown, status = 400) => NextResponse.json({ success: false, error: error instanceof Error ? error.message : "棚卸しの処理に失敗しました" }, { status });
 async function authorized(request: Request) {
+  if (hasBusinessOperationContext(request)) return (await getBusinessAdminSession(request))!.user!.email!;
   const token = await getToken({ req: request as Parameters<typeof getToken>[0]["req"] });
   return token?.email === "aizubrandhall@gmail.com" ? token.email : null;
 }

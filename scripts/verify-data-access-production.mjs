@@ -17,7 +17,7 @@ const resolveMcp = createRequire(path.join(mcpDir, 'package.json'));
 const { Client } = await import(pathToFileURL(resolveMcp.resolve('@modelcontextprotocol/client')).href);
 const { StdioClientTransport } = await import(pathToFileURL(resolveMcp.resolve('@modelcontextprotocol/client/stdio')).href);
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
-const client = new Client({ name: 'tsa-data-production-verification', version: '1.3.0' });
+const client = new Client({ name: 'tsa-data-production-verification', version: '1.4.0' });
 let connectionId;
 let connected = false;
 const payload = result => result.structuredContent ?? JSON.parse(result.content.find(item => item.type === 'text').text);
@@ -47,10 +47,12 @@ try {
   await client.connect(transport);
   connected = true;
   const tools = await client.listTools();
-  assert.equal(tools.tools.length, 29, 'Unexpected MCP tool list.');
-  assert.equal(client.getServerVersion().version, '1.3.0', 'Unexpected MCP adapter version.');
+  assert.equal(tools.tools.length, 32, 'Unexpected MCP tool list.');
+  assert.equal(client.getServerVersion().version, '1.4.0', 'Unexpected MCP adapter version.');
   const businessCatalog = payload(await client.callTool({ name: 'tsa_business_catalog', arguments: {} }));
   assert.ok(!businessCatalog.ok && businessCatalog.error.code === 'FORBIDDEN', 'Limited connection unexpectedly accessed the full business catalog.');
+  const limitedOperations = payload(await client.callTool({ name: 'tsa_operation_catalog', arguments: {} }));
+  assert.ok(!limitedOperations.ok && limitedOperations.error?.code === 'FORBIDDEN', `Limited operation catalog denial failed: ${diagnostic(limitedOperations)}`);
   const limitedComposition = payload(await client.callTool({ name: 'tsa_get_recipe_items', arguments: { recipeId: record.id } }));
   assert.ok(!limitedComposition.ok && limitedComposition.error?.code === 'FORBIDDEN', `Limited composition denial failed: ${diagnostic(limitedComposition)}`);
   const limitedJanList = payload(await client.callTool({ name: 'tsa_list_jan_codes', arguments: {} }));
@@ -75,6 +77,19 @@ try {
   // Exercise the new transport with the same synthetic key. No real connection
   // or recipe/item is changed, and the full capability never leaves this process.
   await db.query("update public.data_access_connections set scopes=array['recipes:read','business:full']::text[],resource_ids='{}'::jsonb where id=$1", [connectionId]);
+  const operationCatalog = payload(await client.callTool({ name: 'tsa_operation_catalog', arguments: {} }));
+  assert.ok(operationCatalog.ok && Array.isArray(operationCatalog.data.operations) && operationCatalog.data.operations.length > 0, `Full operation catalog failed: ${diagnostic(operationCatalog)}`);
+  const names = operationCatalog.data.operations.map(operation => operation.name);
+  assert.equal(new Set(names).size, names.length, 'Operation names must be unique.');
+  assert.ok(operationCatalog.data.operations.every(operation => typeof operation.description === 'string' && typeof operation.mutation === 'boolean' && operation.inputSchema?.type === 'object'), 'Operation catalog schemas are missing.');
+  const readOperation = operationCatalog.data.operations.find(operation => operation.name === 'finance_import_status');
+  assert.ok(readOperation && readOperation.mutation === false, 'The expected read-only operation is unavailable.');
+  const operationRead = payload(await client.callTool({ name: 'tsa_run_operation', arguments: { operation: 'finance_import_status', input: {} } }));
+  assert.ok(operationRead.ok && operationRead.data.state === 'completed' && operationRead.data.result?.status === 200, `Read-only business operation failed: ${diagnostic(operationRead)}`);
+  const invalidOperation = payload(await client.callTool({ name: 'tsa_run_operation', arguments: { operation: 'not_a_registered_operation', input: {} } }));
+  assert.ok(!invalidOperation.ok && invalidOperation.error?.code === 'INVALID_INPUT', `Unknown operation was not rejected: ${diagnostic(invalidOperation)}`);
+  const operationRuns = (await db.query('select count(*)::int n from public.business_operation_runs where connection_id=$1', [connectionId])).rows[0].n;
+  assert.equal(operationRuns, 0, 'Catalog/read verification unexpectedly claimed a mutation operation.');
   const composition = payload(await client.callTool({ name: 'tsa_get_recipe_items', arguments: { recipeId: record.id } }));
   assert.ok(composition.ok && composition.data.recipeId === record.id && composition.data.recipe?.id === record.id,
     `Whole-composition read failed for the explicitly full synthetic connection: ${diagnostic(composition)}`);
@@ -108,6 +123,8 @@ try {
   assert.ok(!revoked.ok && revoked.error.code === 'UNAUTHORIZED', 'Immediate revocation failed.');
   const revokedComposition = payload(await client.callTool({ name: 'tsa_get_recipe_items', arguments: { recipeId: record.id } }));
   assert.ok(!revokedComposition.ok && revokedComposition.error?.code === 'UNAUTHORIZED', `Composition access ignored immediate revocation: ${diagnostic(revokedComposition)}`);
+  const revokedOperations = payload(await client.callTool({ name: 'tsa_operation_catalog', arguments: {} }));
+  assert.ok(!revokedOperations.ok && revokedOperations.error?.code === 'UNAUTHORIZED', `Operation access ignored immediate revocation: ${diagnostic(revokedOperations)}`);
   for (const [name, args] of [['tsa_list_jan_codes', {}], ['tsa_export_barcode', { janId: janRecord.id, format: 'svg' }]]) {
     const revokedJan = payload(await client.callTool({ name, arguments: args }));
     assert.ok(!revokedJan.ok && revokedJan.error?.code === 'UNAUTHORIZED', `JAN ignored revocation: ${diagnostic(revokedJan)}`);
@@ -117,8 +134,8 @@ try {
       ...(method === 'POST' ? { headers: { 'content-type': 'application/json' }, body: '{}' } : {}) });
     assert.equal(response.status, 401, 'Anonymous legacy access was not rejected.');
   }
-  console.log(JSON.stringify({ production: true, mcpHandshake: true, tools: 29, adapterVersion: '1.3.0', scopedRead: true, versionedDetail: true,
-    recordRestriction: true, resourceRestriction: true, limitedBusinessCatalogDenied: true, limitedCompositionDenied: true,
+  console.log(JSON.stringify({ production: true, mcpHandshake: true, tools: 32, adapterVersion: '1.4.0', scopedRead: true, versionedDetail: true,
+    recordRestriction: true, resourceRestriction: true, limitedBusinessCatalogDenied: true, limitedOperationCatalogDenied: true, operationCatalog: true, readOnlyOperation: true, invalidOperationDenied: true, operationRuns: 0, operationRevocation: true, limitedCompositionDenied: true,
     limitedJanListDenied: true, limitedJanExportDenied: true, fullJanRead: true, janExports: ['svg','eps','png'], janOperations: 0, janRevocation: true, wholeCompositionRead: true, wholeCompositionVersion: true, readOnlyWriteDenied: true, preparedChanges: 0, replacementPlans: 0,
     immediateRevocation: true, compositionRevocation: true, anonymousLegacyAccessDenied: true }));
 } finally {

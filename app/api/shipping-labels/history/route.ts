@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getToken } from "next-auth/jwt";
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })();
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? (() => { throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set"); })();
@@ -119,9 +119,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 async function requireAuthorized(request: Request) {
-  const token = await getToken({ req: request as any });
+  const session = await getBusinessAdminSession();
+  const token = session?.user;
   const email = String(token?.email || "");
-  if (!token || email !== "aizubrandhall@gmail.com") {
+  if (!isBusinessAdminSession(session)) {
     return { email: "", response: NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 }) };
   }
   return { email, response: null };

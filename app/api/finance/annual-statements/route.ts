@@ -1,3 +1,4 @@
+import { hasBusinessOperationContext } from "@/lib/data-access/business-operation-context";
 import { createHash, randomBytes } from 'crypto';
 import { cookies } from 'next/headers';
 import { getToken } from 'next-auth/jwt';
@@ -131,6 +132,7 @@ function jsonError(error: string, status: number, detail?: unknown) {
 }
 
 async function isAuthenticated(request: NextRequest) {
+  if (hasBusinessOperationContext(request)) return true;
   const cookieStore = await cookies();
   if (cookieStore.get('finance-auth')?.value !== 'authenticated') return false;
   const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });

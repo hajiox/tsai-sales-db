@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isFinanceAdmin,isSameOriginFinanceRequest } from "@/lib/finance-acquisition/auth";
 import { enqueueFinanceAcquisitions,TASK_KIND } from "@/lib/finance-acquisition/dispatch";
 import { validatePeriod } from "@/lib/web-sales-automation/date";
+import { getBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export async function POST(request:Request) {
@@ -15,6 +16,7 @@ export async function POST(request:Request) {
     const channels=Array.isArray(body.channels)?body.channels.map(String):[];
     if (!channels.length || channels.length>7) return NextResponse.json({error:"取得対象を選択してください"},{status:400});
     const period=validatePeriod(String(body.startDate||""),String(body.endDate||""));
-    return NextResponse.json(await enqueueFinanceAcquisitions({kind,channels,period,allowBridge:true,incompleteOnly:body.incompleteOnly===true}));
+    const session = await getBusinessAdminSession(request);
+    return NextResponse.json(await enqueueFinanceAcquisitions({kind,channels,period,allowBridge:true,incompleteOnly:body.incompleteOnly===true,requestedBy:session?.user?.email || undefined}));
   } catch {return NextResponse.json({error:"取得要求を登録できません。対象・期間・既存の処理状態を確認してください"},{status:400});}
 }

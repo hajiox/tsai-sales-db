@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getToken } from "next-auth/jwt";
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import {
   inventoryFiscalYearFromDate,
   normalizeInventoryFiscalYear,
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
       fetchAllMasterRows("ingredients"),
       fetchAllMasterRows("materials"),
     ]);
-    const token = await getToken({ req: request as any });
+    const token = await getAuthorizedIdentity(request);
     const { data: inventory, error: inventoryError } = await supabase
       .from("manufacturing_inventory_counts")
       .insert({
@@ -312,9 +312,14 @@ function todayInJapan() {
 }
 
 async function requireAuthorized(request: Request) {
-  const token = await getToken({ req: request as any });
-  if (!token || token.email !== "aizubrandhall@gmail.com") {
+  const token = await getAuthorizedIdentity(request);
+  if (!token) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
   return null;
+}
+
+async function getAuthorizedIdentity(request: Request) {
+  const session = await getBusinessAdminSession(request);
+  return isBusinessAdminSession(session) ? session!.user : null;
 }

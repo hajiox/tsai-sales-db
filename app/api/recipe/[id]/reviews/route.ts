@@ -1,11 +1,10 @@
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { z } from "zod";
 import { db, loadRecipe, loadSources, allReviews, enqueueReview, REVIEW_TASKS } from "@/lib/recipe-reviews/server";
 import { sourceSchema, validReviewUrl, reviewStats, REVIEW_CHANNELS } from "@/lib/recipe-reviews/model";
 export const runtime="nodejs"; export const dynamic="force-dynamic";
-async function admin(){return (await getServerSession(authOptions))?.user?.email?.toLowerCase()==="aizubrandhall@gmail.com";}
+async function admin(){return isBusinessAdminSession(await getBusinessAdminSession());}
 type Context={params:Promise<{id:string}>};
 export async function GET(request:Request,{params}:Context){if(!await admin())return NextResponse.json({error:"Unauthorized"},{status:401});try{
  const {id}=await params;z.string().uuid().parse(id);const recipe=await loadRecipe(id);const rows=await allReviews(id);const url=new URL(request.url);const channel=url.searchParams.get("channel")||"all";
@@ -16,5 +15,5 @@ export async function GET(request:Request,{params}:Context){if(!await admin())re
  }catch(e){return NextResponse.json({error:e instanceof Error?e.message:"レビュー取得失敗"},{status:400});}}
 export async function POST(request:Request,{params}:Context){if(!await admin())return NextResponse.json({error:"Unauthorized"},{status:401});try{const{id}=await params;z.string().uuid().parse(id);const body=await request.json();
  if(body.mode==="source") {await loadRecipe(id);const source=sourceSchema.parse(body.source);if(!validReviewUrl(source.url,source.channel))throw new Error("対象ECのHTTPS URLを指定してください");const q=await db().from("recipe_review_sources").upsert({recipe_id:id,channel:source.channel,product_key:source.productKey,name:source.name,url:source.url,updated_at:new Date().toISOString()},{onConflict:"recipe_id,channel,product_key"});if(q.error)throw q.error;return NextResponse.json({ok:true});}
- const mode=z.enum(["collect","analyze"]).parse(body.mode);return NextResponse.json(await enqueueReview(id,mode,"aizubrandhall@gmail.com"));
+ const mode=z.enum(["collect","analyze"]).parse(body.mode);return NextResponse.json(await enqueueReview(id,mode,(await getBusinessAdminSession())!.user!.email!));
  }catch(e){return NextResponse.json({error:e instanceof Error?e.message:"レビュー操作失敗"},{status:400});}}

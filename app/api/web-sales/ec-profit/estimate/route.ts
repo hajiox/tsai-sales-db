@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import { z } from "zod";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import {
   EC_PROFIT_CHANNELS,
   type EcProfitChannel,
@@ -19,8 +18,8 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions);
-  if (session?.user?.email?.toLowerCase() !== "aizubrandhall@gmail.com") {
+  const session = await getBusinessAdminSession();
+  if (!isBusinessAdminSession(session)) {
     return NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
   }
 

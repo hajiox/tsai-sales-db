@@ -4,6 +4,12 @@ const nextConfig = {
   reactStrictMode: true,
   serverExternalPackages: ['puppeteer', 'pdf-parse', 'pdfjs-dist', '@napi-rs/canvas'],
   outputFileTracingIncludes: {
+    '/api/data-access/v1/operations': [
+      './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+      './node_modules/@napi-rs/canvas/**/*',
+      './node_modules/@napi-rs/canvas-linux-x64-gnu/**/*',
+      './node_modules/@napi-rs/canvas-linux-arm64-gnu/**/*',
+    ],
     '/api/finance/annual-statements': [
       './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
       './node_modules/@napi-rs/canvas/**/*',

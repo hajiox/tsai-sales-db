@@ -1,7 +1,6 @@
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import { createHash, randomUUID } from "node:crypto";
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import {
   recipeSnsDestinationUrlFromSnapshot,
   validateRecipeSnsAiResult,
@@ -45,8 +44,8 @@ function compact(value: unknown, max = 1_000) {
 }
 
 async function requireAdmin() {
-  const session = await getServerSession(authOptions);
-  return session?.user?.email?.toLowerCase() === ADMIN_EMAIL ? session : null;
+  const session = await getBusinessAdminSession();
+  return isBusinessAdminSession(session) ? session : null;
 }
 
 function parseSchedule(value: unknown) {

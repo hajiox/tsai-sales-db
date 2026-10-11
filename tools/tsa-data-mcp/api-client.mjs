@@ -1,5 +1,7 @@
 const MAX_RESPONSE_BYTES = 512 * 1024;
 const MAX_REQUEST_BYTES = 32 * 1024;
+const OPERATION_REQUEST_BYTES = 4 * 1024 * 1024;
+const OPERATION_RESPONSE_BYTES = 4 * 1024 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ERROR_MESSAGES = {
   UNAUTHORIZED: '接続トークンが無効・期限切れ・失効済みです。管理者に接続を確認してください。',
@@ -13,6 +15,8 @@ const ERROR_MESSAGES = {
   EXHAUSTED: 'この区分のJANコード発行枠を使い切っています。新しいGS1事業者コードの設定が必要です。',
   NOT_FOUND: '対象が見つかりません。対象IDを確認してください。',
   RATE_LIMITED: '実行頻度の上限です。自動で連続再試行せず、時間を置いてください。',
+  INVALID_INPUT: '操作カタログの入力仕様を確認してください。対象・値・ファイル形式を推測しないでください。',
+  IN_PROGRESS: '同じ操作が実行中、または結果未確認です。新しいキーで再実行せず、操作状態を確認してください。',
 };
 
 export class DataApiError extends Error {
@@ -45,12 +49,13 @@ export function loadConfiguration(env = process.env) {
 export function createApiClient(configuration, { fetchImpl = fetch, timeoutMs = 15000 } = {}) {
   const { origin, token } = configuration;
   async function post(path, body) {
-    if (!['/read', '/changes', '/business', '/recipe-items', '/jan-codes'].includes(path) && !/^\/changes\/[0-9a-f-]{36}\/apply$/i.test(path)) {
+    if (!['/read', '/changes', '/business', '/recipe-items', '/jan-codes', '/operations'].includes(path) && !/^\/changes\/[0-9a-f-]{36}\/apply$/i.test(path)) {
       throw new DataApiError('INVALID_OPERATION', '対応していない操作です。');
     }
     const serialized = JSON.stringify(body);
-    if (Buffer.byteLength(serialized, 'utf8') > MAX_REQUEST_BYTES) {
-      throw new DataApiError('REQUEST_TOO_LARGE', '入力が大きすぎます。変更を分割してください。');
+    const operation = path === '/operations';
+    if (Buffer.byteLength(serialized, 'utf8') > (operation ? OPERATION_REQUEST_BYTES : MAX_REQUEST_BYTES)) {
+      throw new DataApiError('REQUEST_TOO_LARGE', '入力が大きすぎます。業務操作はbase64を含むJSON全体4MiB以内です。大きい原本は既存画面の分割取込を使用してください。');
     }
     let response;
     let payload;
@@ -58,7 +63,7 @@ export function createApiClient(configuration, { fetchImpl = fetch, timeoutMs = 
       response = await fetchImpl(`${origin}/api/data-access/v1${path}`, {
         method: 'POST', redirect: 'manual', cache: 'no-store',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: serialized, signal: AbortSignal.timeout(timeoutMs),
+        body: serialized, signal: AbortSignal.timeout(operation && timeoutMs === 15000 ? 60000 : timeoutMs),
       });
       if (response.status >= 300 && response.status < 400) {
         await response.body?.cancel();
@@ -77,7 +82,7 @@ export function createApiClient(configuration, { fetchImpl = fetch, timeoutMs = 
           const { value, done } = await reader.read();
           if (done) break;
           size += value.byteLength;
-          if (size > MAX_RESPONSE_BYTES) {
+          if (size > (operation ? OPERATION_RESPONSE_BYTES : MAX_RESPONSE_BYTES)) {
             await reader.cancel();
             throw new DataApiError('RESPONSE_TOO_LARGE', '結果が大きすぎます。取得件数や期間を絞ってください。');
           }
@@ -103,6 +108,7 @@ export function createApiClient(configuration, { fetchImpl = fetch, timeoutMs = 
     return JSON.parse(JSON.stringify(payload).replaceAll(token, '[redacted]'));
   }
   return {
+    operations: (action, body) => post('/operations', { ...body, action }),
     janCodes: (action, body) => post('/jan-codes', { ...body, action }),
     recipeItems: (action, body) => post('/recipe-items', { ...body, action }),
     business: (action, body) => post('/business', { ...body, action }),

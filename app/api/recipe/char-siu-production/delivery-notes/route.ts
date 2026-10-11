@@ -3,7 +3,7 @@ export const maxDuration = 60;
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from "@supabase/supabase-js";
-import { getToken } from "next-auth/jwt";
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 import { NextResponse } from "next/server";
 import {
   adminDeliveryNoteScan,
@@ -102,7 +102,7 @@ export async function POST(request: Request) {
   try {
     const unauthorized = await requireAuthorized(request);
     if (unauthorized) return unauthorized;
-    const token = await getToken({ req: request as any });
+    const token = await getAuthorizedIdentity(request);
     const body = await request.json().catch(() => ({}));
     const docId = String(body.docScannerDocId || "").trim();
     const targetProductionDate = normalizeDate(body.targetProductionDate);
@@ -159,7 +159,7 @@ export async function PATCH(request: Request) {
   try {
     const unauthorized = await requireAuthorized(request);
     if (unauthorized) return unauthorized;
-    const token = await getToken({ req: request as any });
+    const token = await getAuthorizedIdentity(request);
     const body = await request.json().catch(() => ({}));
     const scanId = String(body.scanId || "").trim();
     const targetProductionDate = normalizeDate(body.targetProductionDate);
@@ -307,9 +307,14 @@ function normalizeDate(value: unknown) {
 }
 
 async function requireAuthorized(request: Request) {
-  const token = await getToken({ req: request as any });
-  if (!token || token.email !== "aizubrandhall@gmail.com") {
+  const token = await getAuthorizedIdentity(request);
+  if (!token) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
   return null;
+}
+
+async function getAuthorizedIdentity(request: Request) {
+  const session = await getBusinessAdminSession(request);
+  return isBusinessAdminSession(session) ? session!.user : null;
 }

@@ -1,3 +1,4 @@
+import { hasBusinessOperationContext, getBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
@@ -76,8 +77,8 @@ export async function PATCH(request: Request) {
     const unauthorized = await requireFinanceAuthorized(request);
     if (unauthorized) return unauthorized;
     const body = await request.json().catch(() => ({}));
-    const token = await getToken({ req: request as any });
-    const updatedBy = String(token?.email || "");
+    const token = hasBusinessOperationContext(request) ? null : await getToken({ req: request as any });
+    const updatedBy = hasBusinessOperationContext(request) ? (await getBusinessAdminSession(request))!.user!.email! : String(token?.email || "");
 
     if (body.action === "settings") {
       const { data, error } = await supabase
@@ -317,6 +318,7 @@ async function fetchSnapshot(runId: string) {
 }
 
 async function requireFinanceAuthorized(request: Request) {
+  if (hasBusinessOperationContext(request)) return null;
   const [token, cookieStore] = await Promise.all([getToken({ req: request as any }), cookies()]);
   if (!token || token.email !== "aizubrandhall@gmail.com") {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });

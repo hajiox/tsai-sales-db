@@ -12,6 +12,7 @@ const snsRules = read("lib", "recipe-sns.ts");
 const snsServer = read("lib", "recipe-sns-server.ts");
 const snsImage = read("lib", "recipe-sns-image.ts");
 const snsRoute = read("app", "api", "recipe", "[id]", "sns-generations", "route.ts");
+const businessAuth = read("lib", "data-access", "business-operation-context.ts");
 const importRoute = read("app", "api", "web-sales", "codex-bridge", "jobs", "[id]", "recipe-sns-import", "route.ts");
 const skill = read("tools", "tsa-codex-bridge", "skills", "generate-aizu-sns-assets", "SKILL.md");
 
@@ -77,8 +78,11 @@ assert.match(snsImage, /imageMode === "normal" \? "normal-resize" : imageMode/);
 assert.match(snsImage, /fit: imageMode === "handwritten" \? "contain" : "cover"/);
 assert.doesNotMatch(snsImage, /blur|feather|subject-preserve/);
 
-assert.match(snsRoute, /getServerSession\(authOptions\)/);
-assert.match(snsRoute, /session\?\.user\?\.email\?\.toLowerCase\(\) === ADMIN_EMAIL/);
+assert.match(snsRoute, /getBusinessAdminSession\(\)/);
+assert.match(snsRoute, /isBusinessAdminSession\(session\)/);
+assert.match(businessAuth, /return getServerSession\(authOptions\)/, "Normal signed-in browser sessions retain NextAuth authentication");
+assert.match(businessAuth, /session === context\.session && trustedSessions\.has\(session\)/, "Only the gateway-created session is a trusted business actor");
+assert.match(businessAuth, /session\.user\?\.email\?\.trim\(\)\.toLowerCase\(\) === "aizubrandhall@gmail\.com"/, "The existing browser administrator restriction remains in place");
 assert.match(snsRoute, /task_key: "recipe_sns_generate"/);
 assert.match(snsRoute, /isRecipeSnsImageMode\(imageMode\)/);
 assert.match(snsRoute, /isRecipeSnsWritingTone\(rawWritingTone\)/);

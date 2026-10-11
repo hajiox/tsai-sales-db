@@ -18,7 +18,9 @@ function load(relativePath, additionalModules = {}) {
   const loaded = { exports: {} };
   const requireStub = (name) => {
     if (Object.hasOwn(additionalModules, name)) return additionalModules[name];
-    if (name === "node:crypto") return require("node:crypto");
+    if (name === "node:crypto" || name === "node:async_hooks") return require(name);
+    if (name === "server-only") return {};
+    if (name === "@/lib/data-access/business-operation-context") return businessContext;
     if (name === "next/server") return { NextResponse: { json: Response.json } };
     if (name === "next-auth") return { getServerSession: async () => session };
     if (name === "@/app/api/auth/[...nextauth]/route") return { authOptions: {} };
@@ -44,6 +46,7 @@ function load(relativePath, additionalModules = {}) {
   return loaded.exports;
 }
 
+const businessContext = load("lib/data-access/business-operation-context.ts");
 const auth = load("lib/recipe-request-auth.ts");
 function request(method, headers = {}, body = {}) {
   const value = new Request(`${baseUrl}/api/recipe/test`, {
@@ -83,6 +86,19 @@ async function main() {
   }
   session = { user: { email: "AIZUBRANDHALL@GMAIL.COM" } };
   assert.equal(await requireAdmin(request("DELETE", { origin: baseUrl })), null, "Existing allowed account comparison remains case insensitive");
+
+  session = null;
+  const trustedRequest = request("POST", { "x-business-connection": "forged" });
+  assert.equal((await requireAdmin(trustedRequest)).status, 401, "Headers cannot forge a trusted data connection");
+  await businessContext.runWithBusinessOperationContext({ connectionId: "00000000-0000-4000-8000-000000000001", operation: "fixture", request: trustedRequest }, async () => {
+    assert.equal(await requireAdmin(trustedRequest), null);
+    const trusted = await businessContext.getBusinessAdminSession(trustedRequest);
+    assert.equal(trusted.user.email, "data-access:00000000-0000-4000-8000-000000000001", "The connection actor never impersonates the administrator email");
+    assert.equal((await requireAdmin(request("GET"))).status, 401, "A different method cannot inherit trusted context");
+    assert.equal((await requireAdmin(new Request(`${baseUrl}/api/recipe/other`, { method: "POST" }))).status, 401, "A different path cannot inherit trusted context");
+    assert.equal(businessContext.isBusinessAdminSession({ user: { email: trusted.user.email } }), false, "A lookalike session is not trusted");
+  });
+  assert.equal((await requireAdmin(trustedRequest)).status, 401, "Context ends with its exact handler invocation");
 
   const routes = [
     "db-write", "save", "versions", "update", "import", "upload-image", "", "[id]", "integration",

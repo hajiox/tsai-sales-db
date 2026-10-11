@@ -1,3 +1,4 @@
+import { hasBusinessOperationContext, getBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 // app/api/general-ledger/raw-import/route.ts
 import { NextRequest } from "next/server";
 import { Pool } from "pg";
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
   const month_start = String(form.get("month_start") || "");
   const encoding = (String(form.get("encoding") || "UTF-8") || "UTF-8").toUpperCase();
   const file = form.get("file") as File | null;
-  const uploaded_by = String(form.get("uploaded_by") || "web");
+  const uploaded_by = hasBusinessOperationContext(req) ? (await getBusinessAdminSession(req))!.user!.email! : String(form.get("uploaded_by") || "web");
 
   if (!isISODate(month_start)) {
     return Response.json({ ok: false, error: "month_start(YYYY-MM-DD)が必須" }, { status: 400 });

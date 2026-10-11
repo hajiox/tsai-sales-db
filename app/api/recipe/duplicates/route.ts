@@ -124,6 +124,10 @@ export async function POST(request: Request) {
         if (body.action === "merge_group") {
             // Keep one, delete the rest in a group
             const { keepId, deleteIds } = body;
+            if (typeof keepId !== "string" || !Array.isArray(deleteIds) || deleteIds.length === 0
+                || deleteIds.includes(keepId) || new Set(deleteIds).size !== deleteIds.length) {
+                return NextResponse.json({ error: "残すレシピと削除する重複レシピを確認してください" }, { status: 400 });
+            }
 
             // Get the keep recipe's data for merging
             const { data: keepRecipe } = await supabase
@@ -131,6 +135,7 @@ export async function POST(request: Request) {
                 .select("*")
                 .eq("id", keepId)
                 .single();
+            if (!keepRecipe) return NextResponse.json({ error: "残すレシピが見つかりません" }, { status: 404 });
 
             // For each delete candidate, merge useful data into keep recipe
             for (const deleteId of deleteIds) {

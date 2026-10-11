@@ -1,10 +1,8 @@
 import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
 
-const ALLOWED_EMAIL = "aizubrandhall@gmail.com";
 
 export function getLabelCheckAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -16,9 +14,8 @@ export function getLabelCheckAdminClient() {
 }
 
 export async function getLabelCheckUserEmail(): Promise<string | null> {
-  const session = await getServerSession(authOptions);
-  const email = session?.user?.email?.trim().toLowerCase() || null;
-  return email === ALLOWED_EMAIL ? email : null;
+  const session = await getBusinessAdminSession();
+  return isBusinessAdminSession(session) ? session.user.email : null;
 }
 
 export function asOptionalText(value: unknown, maxLength: number): string | null {
