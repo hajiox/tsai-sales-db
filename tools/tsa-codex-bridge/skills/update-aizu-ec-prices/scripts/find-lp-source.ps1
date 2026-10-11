@@ -229,7 +229,8 @@ if ($FreshClone) {
     }
     $repoName = $source.github_repository.Split('/')[-1]
     $targetRoot = Join-Path $freshRoot ("$repoName-" + [guid]::NewGuid().ToString('N'))
-    $clone = Invoke-LpCli $gh.Source @('repo', 'clone', "https://github.com/$($source.github_repository).git", $targetRoot, '--', '--branch', $source.production_branch, '--single-branch')
+    # Set the new repository's config before checkout; do not change user/OS policy.
+    $clone = Invoke-LpCli $gh.Source @('repo', 'clone', "https://github.com/$($source.github_repository).git", $targetRoot, '--', '--branch', $source.production_branch, '--single-branch', '--config', 'core.longpaths=true')
     if ($clone.exit_code -ne 0) {
         throw 'Fresh LP clone failed. Verify GitHub access and the approved production branch; the partial clone is preserved for inspection.'
     }

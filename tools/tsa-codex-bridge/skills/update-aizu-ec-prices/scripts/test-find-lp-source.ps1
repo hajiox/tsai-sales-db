@@ -53,7 +53,8 @@ if ($CliArgs[0] -eq 'auth') {
 }
 if ($env:TSA_LP_TEST_SCENARIO -eq 'clone-failure') { $global:LASTEXITCODE = 1; return }
 $target = $CliArgs[3]
-& $env:TSA_LP_TEST_GIT clone --quiet --branch $CliArgs[6] --single-branch $env:TSA_LP_TEST_BARE $target
+$cloneArguments = @('clone', '--quiet') + @($CliArgs[5..($CliArgs.Count - 1)]) + @($env:TSA_LP_TEST_BARE, $target)
+& $env:TSA_LP_TEST_GIT @cloneArguments
 if ($LASTEXITCODE -ne 0) { return }
 & $env:TSA_LP_TEST_GIT -C $target remote set-url origin 'https://github.com/fixture-owner/fixture-lp.git'
 switch ($env:TSA_LP_TEST_SCENARIO) {
@@ -208,6 +209,46 @@ if ($env:TSA_LP_TEST_SCENARIO -eq 'git-status-failure' -and $CliArgs -contains '
     $deep = $sourceDir
     foreach ($i in 1..9) { $deep = Join-Path $deep "depth$i"; New-Item -ItemType Directory -Path $deep | Out-Null }
     Assert-Fails { Invoke-FixtureResolver @{ SearchRoot = $search } } 'exceeded depth 8'
+
+    # Reproduce Windows MAX_PATH during checkout using local Git and a local bare
+    # source. Neither this baseline nor the helper changes global/system config.
+    $longSeed = Join-Path $fixtureRoot 'long-seed'
+    $longBare = Join-Path $fixtureRoot 'long-fixture.git'
+    $assetRelative = 'public/assets/photo-' + ('x' * 90) + '.txt'
+    & $realGit init --quiet --initial-branch production $longSeed
+    New-Item -ItemType Directory -Path (Join-Path $longSeed 'public/assets') | Out-Null
+    Set-Content -LiteralPath (Join-Path $longSeed $assetRelative) -Value 'long path fixture content' -Encoding UTF8
+    & $realGit -C $longSeed add -- $assetRelative
+    & $realGit -C $longSeed -c user.name=Fixture -c user.email=fixture@example.test commit --quiet -m long-path-fixture
+    & $realGit clone --quiet --bare $longSeed $longBare
+    if ($LASTEXITCODE -ne 0) { throw 'Could not create the local long-path fixture.' }
+    $longWorkspace = Join-Path $fixtureRoot ('job-' + ('j' * 48))
+    $longCloneParent = Join-Path $longWorkspace '.lp-price-jobs'
+    New-Item -ItemType Directory -Path $longCloneParent | Out-Null
+    $withoutLongpaths = Join-Path $longCloneParent ('fixture-lp-' + [guid]::NewGuid().ToString('N'))
+    Assert-True ((Join-Path $withoutLongpaths $assetRelative).Length -gt 260) 'Long-path fixture did not exceed Windows MAX_PATH.'
+    $previousErrorPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $PSNativeCommandUseErrorActionPreference = $false
+    try {
+        $baselineOutput = (& $realGit -c core.longpaths=false clone --quiet --branch production --single-branch $longBare $withoutLongpaths 2>&1 | Out-String)
+        $baselineExit = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $previousErrorPreference }
+    Assert-True ($baselineExit -ne 0 -and $baselineOutput -match 'Filename too long') 'Windows Git without longpaths did not reproduce the checkout failure.'
+    $script:passed++
+    $env:TSA_LP_TEST_BARE = $longBare
+    $env:TSA_LP_TEST_SCENARIO = 'success'
+    $longResult = Invoke-FixtureResolver @{ WorkspaceRoot = $longWorkspace; FreshClone = $true; ExpectedGithubRepository = 'fixture-owner/fixture-lp'; ExpectedProductionBranch = 'production' } | ConvertFrom-Json
+    $longTarget = $longResult.project_roots[0]
+    $localLongpaths = (& $realGit -C $longTarget config --local --get core.longpaths | Out-String).Trim()
+    Assert-True ($LASTEXITCODE -eq 0 -and $localLongpaths -eq 'true') 'Helper did not persist longpaths in only the new repository.'
+    $actualAssetHash = (& $realGit -C $longTarget hash-object -- $assetRelative | Out-String).Trim()
+    Assert-True ($LASTEXITCODE -eq 0) 'The long-path asset is missing from the helper checkout.'
+    $expectedAssetHash = (& $realGit -C $longTarget rev-parse ("HEAD:" + $assetRelative) | Out-String).Trim()
+    Assert-True ($LASTEXITCODE -eq 0 -and $actualAssetHash -eq $expectedAssetHash) 'The long-path asset content does not match the committed source.'
+    $longStatus = (& $realGit -C $longTarget status --porcelain | Out-String).Trim()
+    Assert-True ($LASTEXITCODE -eq 0 -and -not $longStatus -and $longResult.cloned) 'Helper long-path clone is not complete and clean.'
+    $script:passed++
     Write-Output "PASS: $script:passed LP resolver fixture checks (no network or production writes)."
 } finally {
     foreach ($name in $previousEnvironment.Keys) {
