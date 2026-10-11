@@ -118,13 +118,17 @@ TSAの `https://v0-tsa-19.vercel.app/links` を正として、商品に一致す
 
 チャーシュー商品の価格改定では、専用LPに加えて複数商品LP `https://chasieu.aizu-syokubura.com/` も毎回確認する。対象商品のカード・価格表示だけを修正し、他のチャーシュー商品を一括置換しない。
 
-ローカル編集元を探すときは次を実行できる。
+LP編集元は次のヘルパーで新規取得する。`TASK_JSON.lpResolverPath` があればその固定済み絶対パスを使用する。省略時だけ `$skillDir` に、このジョブが実際に読み込んだ本Skillの `SKILL.md` の親ディレクトリを絶対パスで設定してヘルパーを組み立てる。ジョブのカレントディレクトリから `scripts/...` を探さず、別のコピーを代用しない。
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/find-lp-source.ps1 -LpUrl "https://example.com/" -FreshClone
+$skillDir = Split-Path -Parent '<このジョブが読み込んだSKILL.mdの絶対パス>'
+$resolver = Join-Path $skillDir 'scripts/find-lp-source.ps1' # lpResolverPathがあればその絶対パスを使う
+& $resolver -LpUrl '<TSA登録済み商品LP URL>' -FreshClone
 ```
 
-既存ローカルクローンを最新版と見なしてはならない。ジョブごとにVercelの接続先GitHubから本番ブランチを新規クローンし、`HEAD` と `origin/<production_branch>` の一致を確認したものだけを編集元にする。価格表示、構造化データ、CTA付近の価格を検索し、同じ販売条件を示す箇所だけ変更する。
+`TASK_JSON.lpWorkspaceRoot` があれば同じ呼出しへ `-WorkspaceRoot` として必ず渡す。`TASK_JSON.lpSource` がある場合は、LP資料に従って固定済みのrepositoryとproductionBranchも渡す。Fresh Cloneに `rg` は不要。実行ポリシー・認証・権限で停止した場合は迂回せず、LP工程を操作待ちにする。
+
+既存ローカルクローンを最新版と見なしてはならない。ジョブごとに承認済み公開元、またはVercelが実際に返したGitHub本番ブランチを新規クローンし、origin・チェックアウト中のブランチ・`HEAD == origin/<production_branch>`・クリーン状態を確認したものだけを編集元にする。リポジトリや本番ブランチを推測しない。価格表示、構造化データ、CTA付近の価格を対象リポジトリ内で検索し、同じ販売条件を示す箇所だけ変更する。
 
 ビルド、既存の本番デプロイ経路、登録済み商品LP URLでの価格確認まで行う。Vercelが返す生成deployment URLと登録済み独自ドメインは異なってよい。生成URLは有効なHTTP(S) URLと公開コミットを確認し、最終価格は必ずTSA登録済み商品LP URLを直接再取得して確認する。公開URLで対象商品の全変更価格を確認できなければLPだけを未完了にする。詳細はLP資料に従う。
 

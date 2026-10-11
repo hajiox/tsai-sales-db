@@ -28,6 +28,7 @@ import {
 import type { EcProductRegisterJobView } from "@/lib/ec-product-registration-codex";
 import type { EcPriceDispatchMode } from "@/lib/ec-price-reservations";
 import type { EcPriceReservationComparison } from "@/lib/ec-price-reservation-comparison";
+import { getEcPriceJobDisplay } from "@/lib/ec-price-job-display";
 
 const TARGET_STYLES: Record<EcPriceTarget, string> = {
   amazon: "bg-orange-500 hover:bg-orange-600",
@@ -111,6 +112,7 @@ export default function EcPriceSyncControls({
   const hasPrice = Number.isFinite(sellingPriceInclTax) && sellingPriceInclTax > 0;
   const hasProductLp = Boolean(productLpUrl?.trim());
   const jobIsActive = Boolean(job && ACTIVE_STATUSES.has(job.status));
+  const jobDisplay = job ? getEcPriceJobDisplay(job) : null;
   const jobIsReserved = Boolean(job?.status === "queued" && job.isReserved === true);
   const jobIsExecuting = jobIsActive && !jobIsReserved;
   const blockedByAnotherJob = dispatchMode === "immediate" && Boolean(blockingJob);
@@ -232,10 +234,12 @@ export default function EcPriceSyncControls({
   useEffect(() => {
     if (!job || !FINAL_STATUSES.has(job.status) || notifiedJobId.current === job.id) return;
     notifiedJobId.current = job.id;
-    if (job.status === "completed") toast.success(job.summary || "EC価格変更が完了しました");
+    const display = getEcPriceJobDisplay(job);
+    const summary = display.lpOnly ? display.summary : job.summary;
+    if (job.status === "completed") toast.success(summary || "EC価格変更が完了しました");
     else if (job.status === "waiting_for_user" || job.status === "needs_review") {
-      toast.warning(job.summary || "価格変更結果の確認が必要です");
-    } else toast.error(job.errorMessage || job.summary || "EC価格変更に失敗しました");
+      toast.warning(summary || "価格変更結果の確認が必要です");
+    } else toast.error((display.lpOnly ? summary : job.errorMessage || summary) || "EC価格変更に失敗しました");
     void refreshPriceHistory();
   }, [job, refreshPriceHistory]);
 
@@ -581,6 +585,12 @@ export default function EcPriceSyncControls({
           {jobIsReserved && (
             <p className="mt-2 font-medium">自動では実行されません。「予約分をまとめて実行」で開始します。</p>
           )}
+          {jobDisplay?.lpOnly && (
+            <div className="mt-2 rounded bg-white/70 px-2 py-1.5">
+              <p className="font-bold">商品LPのみ再実行</p>
+              <p className="mt-0.5 leading-relaxed">ECは今回の対象外です。前回のEC結果は価格変更履歴に保持されています。</p>
+            </div>
+          )}
           {jobIsExecuting && (
             <>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/80 ring-1 ring-inset ring-current/10">
@@ -636,7 +646,7 @@ export default function EcPriceSyncControls({
             </>
           )}
           {!jobIsActive && job.currentStep && <p className="mt-2 font-bold">{job.currentStep}</p>}
-          {(job.summary || job.errorMessage) && <p className="mt-1 leading-relaxed">{job.summary || job.errorMessage}</p>}
+          {jobDisplay?.summary && <p className="mt-1 leading-relaxed">{jobDisplay.summary}</p>}
           {job.sites.length > 0 && job.status !== "cancelled" && (
             <ul className="mt-2 space-y-1">
               {job.sites.map((site) => (
@@ -653,8 +663,16 @@ export default function EcPriceSyncControls({
           {job.lp && job.status !== "cancelled" && (
             <p className="mt-2 flex items-start gap-1.5 font-medium">
               <Link2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>商品LP: {job.lp.message || (job.lp.status === "updated" ? "公開反映確認済み" : "対象外")}</span>
+              <span>商品LP: {jobDisplay?.lpMessage || (job.lp.status === "updated" ? "公開反映確認済み" : "対象外")}</span>
             </p>
+          )}
+          {jobDisplay?.lpOnly && jobDisplay.details.length > 0 && (
+            <details className="mt-2 rounded bg-white/70 px-2 py-1.5">
+              <summary className="cursor-pointer font-medium">商品LPの詳細</summary>
+              {jobDisplay.details.map((message, index) => (
+                <p key={index} className="mt-1 whitespace-pre-wrap break-words leading-relaxed">{message}</p>
+              ))}
+            </details>
           )}
           {jobCanRetry && (
             <button
