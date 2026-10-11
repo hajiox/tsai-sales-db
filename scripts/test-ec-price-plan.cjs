@@ -100,6 +100,7 @@ function loadFunction(name, nextName) {
 const validatePlan = loadFunction("validateEcPricePlan", "validateEcPriceResultV2");
 const validateResult = loadFunction("validateEcPriceResultV2", "planToFinalResult");
 const buildPlanPrompt = loadFunction("buildEcPricePlanPrompt", "buildEcPriceWritePrompt");
+const buildWritePrompt = loadFunction("buildEcPriceWritePrompt", "validateEcPricePlan");
 const countsTemporaryTabActions = loadFunction("countEcPriceTemporaryTabActions", "isForbiddenEcPriceTabAction");
 const detectsForbiddenTabAction = loadFunction("isForbiddenEcPriceTabAction", "terminateChildProcessTree");
 const estimateDesktopCompletion = loadFunction("estimateDesktopCompletion", "bridgeTaskLabel");
@@ -807,6 +808,21 @@ assert.match(lpOnlyPrompt, /Never derive this LP target from a shipping-excluded
 assert.match(lpOnlyPrompt, /different sale unit.*uncertain mapping must remain blocked\/needs_review/);
 assert.doesNotMatch(lpOnlyPrompt, /always set reference_standard_price/i);
 const ecPlanPrompt = buildPlanPrompt(baseParameters);
+for (const prompt of [lpOnlyPrompt, buildWritePrompt(lpOnlyParameters, lpOnlyPlan)]) {
+  assert.match(prompt, /LP-ONLY PUBLIC VERIFICATION/);
+  assert.match(prompt, /read the exact TASK_JSON\.lpUrl with a direct public HTTPS request/);
+  assert.match(prompt, /Do not invoke cua_repl or any other browser tool/);
+  assert.match(prompt, /The LP phase permits zero temporary tabs/);
+  assert.doesNotMatch(prompt, /CURRENT BROWSER API/);
+  assert.doesNotMatch(prompt, /SAME-CHROME TAB POLICY|SAME-CHROME TEMPORARY-TAB FALLBACK|TAB FINALIZATION IS MANDATORY/);
+}
+assert.match(buildWritePrompt(lpOnlyParameters, lpOnlyPlan), /OPERATOR AUTHORIZATION/);
+assert.match(buildWritePrompt(lpOnlyParameters, lpOnlyPlan), /Report lp\.status=updated only after the public TASK_JSON\.lpUrl displays all planned target prices/);
+assert.match(buildWritePrompt(lpOnlyParameters, lpOnlyPlan), /inspect package\.json, its lockfile, and the existing deployment installCommand/);
+assert.match(buildWritePrompt(lpOnlyParameters, lpOnlyPlan), /npm ci with only those options/);
+assert.match(buildWritePrompt(lpOnlyParameters, lpOnlyPlan), /Do not change tracked lockfiles, dependencies, or deployment configuration/);
+assert.match(ecPlanPrompt, /CURRENT BROWSER API/);
+assert.match(buildWritePrompt(baseParameters, basePlan), /CURRENT BROWSER API/);
 assert.doesNotMatch(ecPlanPrompt, /LP-ONLY PLAN/);
 assert.match(ecPlanPrompt, /For requested EC sites, always set reference_standard_price/);
 assert.match(ecPlanPrompt, /shipping-excluded BASE listing must use delta_from_reference/);

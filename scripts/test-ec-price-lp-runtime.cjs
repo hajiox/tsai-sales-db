@@ -37,6 +37,10 @@ const summarize = new Function(`${section('summarizeSequentialEcPriceResult', 'e
 assert.doesNotMatch(summarize({sites:[],lp:{status:'blocked'}},{targets:[],lpUpdate:true}), /EC反映済み0件/);
 assert.match(summarize({sites:[{status:'updated'}],lp:{status:'updated'}},{targets:['rakuten'],lpUpdate:true}), /EC反映済み1件/);
 const calls=[];
+let planTabPolicyViolation=null;
+let writeTabPolicyViolation=null;
+const blockedLpResult = new Function(`${section('blockedLpResult', 'validateEcProductNameGenerateJobParameters')} return blockedLpResult;`)();
+const blockedEcPriceLpPlan = new Function(`${section('blockedEcPriceLpPlan', 'ecPriceLpCurrentTargetPrices')} return blockedEcPriceLpPlan;`)();
 const bindings={
   config, join:path.join, realpathSync:fs.realpathSync, mkdirSync:fs.mkdirSync, existsSync:fs.existsSync,
   scopeEcPriceLpParameters:p=>({...p,targets:[]}),
@@ -47,14 +51,15 @@ const bindings={
   assertEcPriceRecipeSnapshot:async()=>{}, ecPriceLpCurrentTargetPrices:()=>[],
   positiveEcPriceInteger:v=>v, verifyRegisteredEcPriceLp:async()=>null,
   browserPermissionRequired:()=>false,
+  blockedLpResult, blockedEcPriceLpPlan, summarizeCodexPhaseFailure:(_stderr,fallback)=>fallback,
   runEcPriceCodexPhase:async options=>{
     calls.push(options);
     if(calls.length===1){
       const root=path.join(options.workspaceDir,'.lp-price-jobs/fresh-repo');
       fs.mkdirSync(root,{recursive:true});
-      return {exitCode:0,result:{status:'ready',reference_standard_price:1944,lp:{project_root:root,source_commit:'a'.repeat(40)}}};
+      return {exitCode:0,tabPolicyViolation:planTabPolicyViolation,result:{status:'ready',reference_standard_price:1944,lp:{project_root:root,source_commit:'a'.repeat(40),message:'Fresh clone verified'}}};
     }
-    return {exitCode:0,result:{status:'completed',lp:{status:'updated',final_prices:[1944]}}};
+    return {exitCode:0,tabPolicyViolation:writeTabPolicyViolation,result:{status:'completed',lp:{status:'updated',final_prices:[1944]}}};
   },
 };
 const lpFunction = new Function(...Object.keys(bindings), `async ${section('executeSingleEcPriceLp', 'scopeEcPriceSiteParameters')} return executeSingleEcPriceLp;`)(...Object.values(bindings));
@@ -70,7 +75,23 @@ const lpFunction = new Function(...Object.keys(bindings), `async ${section('exec
   assert.equal(calls[0].workspaceDir,task.lpWorkspaceRoot);
   assert.ok(calls[1].workspaceDir.startsWith(task.lpWorkspaceRoot+path.sep));
   for(const call of calls){assert.equal(call.sandbox,'workspace-write');assert.equal(call.autoReview,true);assert.equal(call.sandboxNetworkAccess,true);}
-  console.log('LP phase sandbox, scoped workspace, resolver and retry summary tests passed.');
+  assert.equal(calls[0].abortOnTabPolicyViolation,false);
+  assert.equal(calls[1].abortOnTabPolicyViolation,true);
+  for(const call of calls)assert.equal(call.maxTemporaryTabs,0);
+  const violation='Forbidden LP browser operation';
+  const options={job,workDir,parameters:{targets:[],lpUpdate:true,lpUrl:'https://example.invalid/'},index:0,totalSteps:1,range:{start:5,middle:50,end:95}};
+  calls.length=0; planTabPolicyViolation=violation;
+  const planBlocked=await lpFunction(options);
+  assert.equal(calls.length,1,'A browser-policy violation in a ready plan must prevent the write phase');
+  assert.equal(planBlocked.resultLp.status,'blocked');
+  assert.match(planBlocked.resultLp.message,/Forbidden LP browser operation/,'Show the actual failure rather than the ready-plan message');
+  assert.doesNotMatch(planBlocked.resultLp.message,/^Fresh clone verified$/);
+  calls.length=0; planTabPolicyViolation=null; writeTabPolicyViolation=violation;
+  const writeBlocked=await lpFunction(options);
+  assert.equal(calls.length,2);
+  assert.equal(writeBlocked.resultLp.status,'blocked');
+  assert.match(writeBlocked.resultLp.message,/Forbidden LP browser operation/);
+  console.log('LP phase sandbox, scoped workspace, resolver, browser guards and failure-message tests passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>{
   // Remove only the unique temporary fixture created by this test.
   if(path.dirname(fixture)===os.tmpdir()&&path.basename(fixture).startsWith('tsa-lp-runtime-'))fs.rmSync(fixture,{recursive:true});

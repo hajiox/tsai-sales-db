@@ -2,7 +2,7 @@
 
 ## 正となるリンク集
 
-TSAレシピから `product_lp_url` が渡された場合は、そのURLを正として使用する。URLが渡されず手動調査するときだけ、ログイン済みChromeで次を開く。
+TSAレシピから `product_lp_url`、Bridgeから `TASK_JSON.lpUrl` が渡された場合は、その登録済みURLを正として使用する。LP単独工程で必須URLが欠けている場合は、その欠落を返し、ブラウザーで候補を探さない。URLが渡されない別の手動調査でだけ、ログイン済みChromeで次を開く。
 
 `https://v0-tsa-19.vercel.app/links`
 
@@ -13,6 +13,10 @@ TSAのタイトルや説明は古い場合がある。リンク先で現在の�
 ## LP単独工程の価格根拠
 
 `TASK_JSON.lpUpdate=true` かつ `TASK_JSON.targets=[]` は、ECと独立してLPだけを確認・反映する正規の工程である。EC対象、`siteBaselines`、`recoveryPlanSites` が空であることだけを理由に停止しない。対象ECを追加したり、完了済みECを再巡回・再変更したりしない。
+
+LP単独工程の計画と公開確認はデータ取得であり、ログイン済みECのUI操作はない。正確な `TASK_JSON.lpUrl` を直接HTTPS GETし、`Cache-Control: no-cache` と `Pragma: no-cache` 等でキャッシュを避ける。HTTP応答と取得HTMLのうち、対象商品の名前・販売単位・価格が対応する箇所だけを確認する。ソースの取得・検証には指定ヘルパーと既存のGit/Vercel/GitHub CLIを使う。
+
+このLP単独工程ではブラウザーツールを一切呼ばない。`cua_repl` の状態取得、`getBrowser`、既存タブ取得・遷移、新規タブ作成、Chrome DevTools MCPも対象外であり、許可される新規タブ数は0枚である。登録済みURLの直接取得で対象商品と価格を証明できなければ、HTTPエラー、必要表示がHTMLにない、商品と価格の対応が曖昧など、観測した理由を返す。別URL・別商品を代用せず、ソース内の価格だけで公開確認済みとしない。EC画面を操作する工程のChrome優先順・認証ゲートはそのまま適用する。
 
 - 公開LPとFresh Cloneで対象商品を照合し、容量・販売個数・形態・保存方法がTSAレシピの販売単位と一致し、対象表示が標準の税込価格であることを現行LPと固定入力から証明する。同一販売単位の標準価格箇所には、既存schemaの `pricing_basis="standard_price"` を使い、`target_price=TASK_JSON.newPriceInclTax` とする。これは固定済み税込目標価格を直接指定する根拠で、対象ECの指定を必要としない。
 - LP単独計画は `sites=[]`、`reference_standard_price=null` を返す。旧標準価格やECの保存値は、この標準価格のLP計画には不要である。LPの現価格は `observed_price` に記録し、旧LP価格をキャンペーンの標準基準価格に流用しない。
@@ -84,7 +88,7 @@ TSA Bridgeの `TASK_JSON.lpSource` にサーバー許可済みの公開元があ
 3. 意図したファイルだけをステージする。
 4. リポジトリの既存運用が本番ブランチへのpushでVercel公開する構成なら、簡潔なコミットを作成して既存の本番ブランチへpushする。
 5. GitHubのコミットステータスでVercel成功を確認する。別の既存デプロイ経路ならその手順を使う。
-6. TSAレシピに登録された商品LP URLを直接読み、新価格と商品内容を確認する。Vercelの一時URLだけの確認では完了にしない。
+6. TSAレシピに登録された商品LP URLをキャッシュを避けた直接HTTPS取得で読み、新価格と商品内容を確認する。LP単独工程では公開確認用のブラウザーやタブを作成しない。Vercelの一時URLだけの確認では完了にしない。
 
 公開URLで旧価格が残る場合は、デプロイ完了、CDN反映、別価格箇所の順に調べる。ローカル変更やpushだけで完了扱いしない。
 
@@ -100,3 +104,5 @@ push・本番デプロイの直前に再度fetchし、本番ブランチが編�
 2026-10-11: Skillの絶対パスからヘルパーを実行する手順へ修正。Fresh Cloneの不要なrg依存と本番ブランチ推測を除去し、限定検索・CLI認証失敗・origin/branch/HEAD/clean検証をローカルfixtureで確認。実EC/LPの価格変更は検証で実行しない。
 
 2026-10-11: LP単独工程の同一販売単位・標準価格は、既存の `standard_price` 根拠で固定済み税込目標価格を使うと明記。schemaと検証処理が `sites=[]`・`reference_standard_price=null` を許容することを確認。別販売単位・別価格基準の推測禁止は維持。
+
+2026-10-11: LP単独工程の公開情報取得と検証を登録済みURLへの直接HTTPS・no-cacheへ統一し、ブラウザーツールとタブを使わないことを明記。ECのChrome操作手順は維持。
