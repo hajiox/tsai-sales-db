@@ -63,6 +63,9 @@ const blockedLpResult = new Function(`${section('blockedLpResult', 'validateEcPr
 const blockedEcPriceLpPlan = new Function(`${section('blockedEcPriceLpPlan', 'ecPriceLpCurrentTargetPrices')} return blockedEcPriceLpPlan;`)();
 const bindResolvedPlan = new Function('isAbsolute','resolve',`${section('bindEcPriceLpResolvedPlan', 'executeSingleEcPriceLp')} return bindEcPriceLpResolvedPlan;`)(path.isAbsolute,path.resolve);
 const inside=(candidate,root)=>{const relative=path.relative(root,candidate);return relative===''||(!relative.startsWith('..'+path.sep)&&relative!=='..'&&!path.isAbsolute(relative));};
+const prepareNpmCache=new Function('lstatSync','realpathSync','join','existsSync','mkdirSync','statSync','pathIsInside','resolve',
+  `${section('prepareEcPriceLpNpmCache','ecPricePhaseEnvironment')} return prepareEcPriceLpNpmCache;`)(fs.lstatSync,fs.realpathSync,path.join,fs.existsSync,fs.mkdirSync,fs.statSync,inside,path.resolve);
+const phaseEnvironment=new Function('config',`${section('ecPricePhaseEnvironment','runEcPriceCodexPhase')} return ecPricePhaseEnvironment;`)(config);
 const validateSource=new Function('realpathSync','lstatSync','statSync','join','resolve','dirname','isAbsolute','pathIsInside',
   `${section('validateEcPriceLpResolvedSource','verifyEcPriceLpResolvedGit')} return validateEcPriceLpResolvedSource;`)(fs.realpathSync,fs.lstatSync,fs.statSync,path.join,path.resolve,path.dirname,path.isAbsolute,inside);
 const verifyGit=new Function('spawnSync','lstatSync','realpathSync','resolve',`${section('verifyEcPriceLpResolvedGit','prepareEcPriceLpSource')} return verifyEcPriceLpResolvedGit;`)(require('node:child_process').spawnSync,fs.lstatSync,fs.realpathSync,path.resolve);
@@ -79,6 +82,7 @@ const bindings={
   readRegisteredEcPriceLp:async()=>{if(publicReadIssue)throw new Error(publicReadIssue);return publicEvidence;},
   bindEcPriceLpPublicPlan:bindPublicPlan,
   bindEcPriceLpResolvedPlan:bindResolvedPlan,
+  prepareEcPriceLpNpmCache:prepareNpmCache,
   verifyEcPriceLpResolvedGit:()=>sourceChecksIssue,
   prepareEcPriceLpSource:async parameters=>{
     resolverCalls.push(parameters.lpWorkspaceRoot);
@@ -169,6 +173,37 @@ const lpFunction = new Function(...Object.keys(bindings), `async ${section('exec
   resolverExit=0; resolverHang=true; await assert.rejects(prepareSource(launchParameters),/時間内/); assert.equal(terminations,1);
   const job={id:'00000000-0000-4000-8000-000000000001'};
   const workDir=path.join(fixture,'job-artifacts'); fs.mkdirSync(workDir);
+  const cachePath=prepareNpmCache(workDir);
+  assert.equal(cachePath,path.join(workDir,'npm-cache'));
+  assert.ok(fs.statSync(cachePath).isDirectory());
+  const parentEnv={KEEP:'unchanged',NPM_CONFIG_CACHE:'shared-upper',npm_Config_Cache:'shared-mixed',npm_config_cache:'shared-lower'};
+  const parentCopy={...parentEnv};
+  const childEnv=phaseEnvironment(cachePath,parentEnv);
+  assert.equal(childEnv.npm_config_cache,cachePath);
+  assert.equal(Object.keys(childEnv).filter(key=>key.toLowerCase()==='npm_config_cache').length,1);
+  assert.equal(childEnv.KEEP,'unchanged'); assert.equal(childEnv.CODEX_HOME,config.codexHome);
+  assert.deepEqual(parentEnv,parentCopy,'Never mutate the parent process or global npm configuration');
+  assert.deepEqual(phaseEnvironment(null,parentEnv),{...parentEnv,CODEX_HOME:config.codexHome},'Plan/EC phases retain their existing environment');
+  const outsideCacheJob=path.join(fixture,'cache-link-job'); fs.mkdirSync(outsideCacheJob);
+  fs.symlinkSync(workDir,path.join(outsideCacheJob,'npm-cache'),process.platform==='win32'?'junction':'dir');
+  assert.throws(()=>prepareNpmCache(outsideCacheJob),/リンク/,'A cache junction must not redirect this job to any other directory');
+  const linkedWorkDir=path.join(fixture,'linked-job'); fs.symlinkSync(workDir,linkedWorkDir,process.platform==='win32'?'junction':'dir');
+  assert.throws(()=>prepareNpmCache(linkedWorkDir),/リンク/);
+  assert.throws(()=>prepareNpmCache(path.join(linkedWorkDir,'npm-cache')),/実パス/,'Reject an escaped ancestor directory too');
+  const launchesForCache=[];
+  const launchPhase=new Function('buildIsolatedCodexArgs','spawnSkillCodex','ecPricePhaseEnvironment',
+    `async ${section('runEcPriceCodexPhase','ecPriceEventLabel')} return runEcPriceCodexPhase;`)(
+      (_output,dirs,options)=>{launchesForCache.push({dirs,options});return ['fixture'];},
+      async(_task,_prompt,_args,options)=>{launchesForCache.at(-1).spawn=options;throw new Error('fixture stops before CLI');},
+      cache=>phaseEnvironment(cache,parentEnv));
+  const launchOptions={job:{task_key:'ec-price-update'},workDir,workspaceDir:sourceRoot,sandbox:'workspace-write',autoReview:true,sandboxNetworkAccess:true};
+  await assert.rejects(launchPhase({...launchOptions,npmCachePath:cachePath}),/fixture stops/);
+  assert.equal(launchesForCache[0].spawn.env.npm_config_cache,cachePath);
+  assert.deepEqual(launchesForCache[0].dirs,[workDir,sourceRoot],'The fixed cache needs no extra writable root');
+  assert.equal(launchesForCache[0].spawn.cwd,sourceRoot);
+  assert.equal(launchesForCache[0].options.autoReview,true); assert.equal(launchesForCache[0].options.sandboxNetworkAccess,true);
+  await assert.rejects(launchPhase({...launchOptions,sandbox:'read-only',autoReview:false,sandboxNetworkAccess:false}),/fixture stops/);
+  assert.deepEqual(launchesForCache[1].spawn.env,phaseEnvironment(null,parentEnv),'Read-only/default phases do not override the cache');
   const result=await lpFunction({job,workDir,parameters:{targets:[],lpUpdate:true,lpUrl:'https://example.invalid/'},index:0,totalSteps:1,range:{start:5,middle:50,end:95}});
   assert.equal(result.resultLp.status,'updated');
   assert.equal(calls.length,2);
@@ -181,6 +216,13 @@ const lpFunction = new Function(...Object.keys(bindings), `async ${section('exec
   assert.equal(task.lpWorkspaceRoot,path.join(config.workspace,'.lp-price-jobs',job.id));
   assert.equal(calls[0].workspaceDir,task.lpResolvedSource.project_root);
   assert.equal(calls[1].workspaceDir,task.lpResolvedSource.project_root,'Writing uses the authoritative actual clone, not an AI path');
+  assert.equal(calls[0].npmCachePath,undefined,'Planning never configures a dependency-install cache');
+  assert.equal(calls[1].npmCachePath,cachePath);
+  assert.equal(JSON.parse(calls[1].prompt).lpNpmCachePath,cachePath);
+  assert.ok(!inside(cachePath,task.lpResolvedSource.project_root),'Never create or commit npm cache inside the fresh clone');
+  const writePromptBuilder=new Function(`${section('buildEcPriceWritePrompt','validateEcPricePlan')} return buildEcPriceWritePrompt;`)();
+  assert.match(writePromptBuilder({targets:[],lpUpdate:true,lpNpmCachePath:cachePath},{}),/LP JOB-OWNED NPM CACHE/);
+  assert.doesNotMatch(writePromptBuilder({targets:['amazon'],lpUpdate:false},{}),/LP JOB-OWNED NPM CACHE/);
   assert.equal(result.planLp.project_root,task.lpResolvedSource.project_root);
   assert.equal(JSON.parse(fs.readFileSync(path.join(workDir,'ec-price-lp-plan.json'),'utf8')).lp.project_root,task.lpResolvedSource.project_root,'Persist the bound plan used by the writer');
   for(const call of calls){assert.equal(call.sandbox,'workspace-write');assert.equal(call.autoReview,true);assert.equal(call.sandboxNetworkAccess,true);}

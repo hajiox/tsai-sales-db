@@ -106,6 +106,8 @@ TSA Bridgeの `TASK_JSON.lpSource` にサーバー許可済みの公開元があ
 
 ## 検証と公開
 
+LP書込工程のnpmキャッシュは、Bridgeが `TASK_JSON.lpNpmCachePath` へ固定した当該ジョブのartifactフォルダ内の専用ディレクトリだけを使う。子プロセスには `npm_config_cache` が同じ値で設定されている。`npm ci` / `npm install` はこの絶対パスを `--cache` へ明示し、`npm run build` とその子コマンドにも同じ環境値を引き継ぐ。既存lockfile・package manager・peer依存オプションを維持する。キャッシュはfresh clone外なのでステージ・commit・デプロイ入力へ含めない。共有/globalキャッシュへのフォールバック、削除・修復、ACL/権限変更、ユーザー/global npm config変更、認証・承認回避を行わない。固定cacheが使用できなければ実際のエラーで停止する。
+
 1. `git diff --check` を実行する。
 2. `package.json` の既存スクリプトに従い、通常は `npm run build` を実行する。
 3. 意図したファイルだけをステージする。

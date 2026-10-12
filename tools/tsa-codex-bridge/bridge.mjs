@@ -2936,6 +2936,9 @@ async function executeSingleEcPriceLp({ job, workDir, parameters, index, totalSt
       }
     }
   }
+  // Keep npm's writable cache in the already authorized job-artifact directory,
+  // outside the fresh Git clone and every other job's shared cache.
+  scoped.lpNpmCachePath = prepareEcPriceLpNpmCache(workDir);
   const writeOutput = join(workDir, "ec-price-lp-result.json");
   const writeLog = join(workDir, "ec-price-lp-write-events.jsonl");
   const written = await runEcPriceCodexPhase({
@@ -2946,6 +2949,7 @@ async function executeSingleEcPriceLp({ job, workDir, parameters, index, totalSt
     autoReview: true,
     sandboxNetworkAccess: true,
     outputFile: writeOutput,
+    npmCachePath: scoped.lpNpmCachePath,
     jsonlLog: writeLog,
     schema: EC_PRICE_RESULT_SCHEMA,
     prompt: buildEcPriceWritePrompt(scoped, plan),
@@ -3303,7 +3307,31 @@ async function assertEcPriceRecipeSnapshot(job, parameters, phase) {
   }
 }
 
-async function runEcPriceCodexPhase({ job, workDir, workspaceDir = null, sandbox = null, autoReview = false, sandboxNetworkAccess = false, outputFile, jsonlLog, schema, prompt, progressStart, progressMax, eventType, activityLabel, stepPrefix = "", abortOnTabPolicyViolation, maxTemporaryTabs = 0 }) {
+function prepareEcPriceLpNpmCache(workDir) {
+  if (lstatSync(workDir).isSymbolicLink()) throw new Error("商品LPのnpmキャッシュ作業フォルダにリンクは使えません");
+  const root = realpathSync(workDir);
+  if (resolve(workDir).toLowerCase() !== resolve(root).toLowerCase()) throw new Error("商品LPのnpmキャッシュ作業フォルダの実パスが一致しません");
+  const cachePath = join(root, "npm-cache");
+  if (existsSync(cachePath) && lstatSync(cachePath).isSymbolicLink()) throw new Error("商品LPのnpmキャッシュにリンクは使えません");
+  mkdirSync(cachePath, { recursive: true });
+  const actual = realpathSync(cachePath);
+  if (!statSync(actual).isDirectory() || !pathIsInside(actual, root)
+    || resolve(actual).toLowerCase() !== resolve(cachePath).toLowerCase()) throw new Error("商品LPのnpmキャッシュが当該ジョブの作業フォルダ外です");
+  return actual;
+}
+
+function ecPricePhaseEnvironment(npmCachePath, parentEnvironment = process.env) {
+  const environment = { ...parentEnvironment, CODEX_HOME: config.codexHome };
+  if (npmCachePath) {
+    // Windows environment names are case-insensitive; never leave a competing
+    // inherited NPM_CONFIG_CACHE beside the job's fixed value.
+    for (const key of Object.keys(environment)) if (key.toLowerCase() === "npm_config_cache") delete environment[key];
+    environment.npm_config_cache = npmCachePath;
+  }
+  return environment;
+}
+
+async function runEcPriceCodexPhase({ job, workDir, workspaceDir = null, sandbox = null, autoReview = false, sandboxNetworkAccess = false, npmCachePath = null, outputFile, jsonlLog, schema, prompt, progressStart, progressMax, eventType, activityLabel, stepPrefix = "", abortOnTabPolicyViolation, maxTemporaryTabs = 0 }) {
   const args = buildIsolatedCodexArgs(outputFile, [workDir, workspaceDir], {
     schema,
     model: "gpt-6-luna",
@@ -3317,7 +3345,7 @@ async function runEcPriceCodexPhase({ job, workDir, workspaceDir = null, sandbox
   });
   const codex = await spawnSkillCodex(job.task_key, prompt, args, {
     cwd: workspaceDir || workDir,
-    env: { ...process.env, CODEX_HOME: config.codexHome },
+    env: ecPricePhaseEnvironment(npmCachePath),
     windowsHide: true,
     stdio: ["pipe", "pipe", "pipe"],
     bridgeBudget: abortOnTabPolicyViolation ? null : {
@@ -3750,6 +3778,7 @@ function buildEcPriceWritePrompt(parameters, plan) {
     "Do not touch a site not listed in targets. Do not substitute a similar product. Follow the Skill's site-specific save and verification steps.",
     "For every PLAN_JSON site with status=not_found, do not open or modify that site during the write phase. Copy it to the final result as status=not_found with null final_price and product_identifier, preserving the plan message. Process only PLAN_JSON sites with status=planned.",
     "Before building the planned LP, inspect package.json, its lockfile, and the existing deployment installCommand. If dependencies are missing, install from the existing lockfile using the repository's package manager and existing peer-dependency options (for npm/package-lock use npm ci with only those options). Do not change tracked lockfiles, dependencies, or deployment configuration to make installation/build pass; stop with the exact error instead.",
+    ...(parameters.lpNpmCachePath ? ["LP JOB-OWNED NPM CACHE: Bridge fixed TASK_JSON.lpNpmCachePath inside this job's already authorized artifact directory, outside the Git clone, and set npm_config_cache only for this child process. Use that exact cache for every npm ci/install/build command; pass --cache with the exact path for npm ci/install and preserve npm_config_cache for npm run build and its child commands. Never use, clear, repair, or change permissions/ACLs on the shared/global cache; never change global/user npm config, bypass authorization, or fall back to another cache. If the fixed job cache cannot be used, stop with the actual error. Commit only the planned source files; the cache is never an LP source or deployment input."] : []),
     "After EC sites, when PLAN_JSON.lp.required is true, run git fetch origin in the planned fresh clone and verify HEAD still equals Vercel's origin production branch before editing. Update only the exact planned LP source occurrences. Before editing, confirm each current source price still equals observed_price or already equals target_price; otherwise block the LP without overwriting. Build with the repository's existing command, commit and push only the planned files through the existing production branch, wait for the existing Vercel deployment, then verify every planned price at TASK_JSON.lpUrl using a direct public HTTP read. Do not create a Chrome tab for LP verification.",
     "Report lp.status=updated only after the public TASK_JSON.lpUrl displays all planned target prices for the exact product. Otherwise report blocked/not_found with the real partial state; a required LP that is not updated prevents overall completed status.",
     "When PLAN_JSON.lp.required is false return lp.status=not_applicable with null URL/deployment/deployed_commit and empty final_prices/changed_files, and do not inspect or edit any LP.",
