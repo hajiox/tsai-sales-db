@@ -140,6 +140,7 @@ function createHarness(job = fixtureJob) {
     props, calls, notifications, nativeConfirmations, render, find, text, flush, refresh, open,
     posts: () => calls.filter(({ options }) => options.method === "POST"),
     setJob: (nextJob) => { currentJob = structuredClone(nextJob); },
+    notifyFinal: () => effects.at(-1)(),
   };
 }
 
@@ -177,6 +178,7 @@ function createHarness(job = fixtureJob) {
     dispatchMode: "immediate",
     expectedPriceInclTax: 1944,
     expectedRecipeSnapshot: execute.props.expectedRecipeSnapshot,
+    expectedRetryScope: { targets: [], verificationOnlyTargets: [], lpUpdate: true },
   }, "Retain the existing locked retry API contract");
   assert.equal(execute.posts()[0].options.headers["content-type"], "application/json");
 
@@ -192,9 +194,39 @@ function createHarness(job = fixtureJob) {
   });
   await mixed.refresh();
   mixed.open();
-  assert.match(mixed.text(mixed.find("AlertDialogDescription")), /対象: Yahoo・商品LP/,
-    "Keep completed, pending and absent EC targets out of the retry confirmation");
+  assert.match(mixed.text(mixed.find("AlertDialogDescription")), /対象: Amazon（反映確認のみ）・Yahoo・商品LP/,
+    "Keep successful/absent sites out, but allow pending prices to be verified without resubmission");
+  assert.match(mixed.text(mixed.find("AlertDialogDescription")), /価格を再送信しません/);
   assert.equal(mixed.posts().length, 0);
+
+  const completedLp = createHarness({
+    ...fixtureJob,
+    status: "completed",
+    lp: { required: true, status: "updated", message: "公開確認済み" },
+    retryScope: { targets: ["amazon"], verificationOnlyTargets: ["amazon"], lpUpdate: false },
+  });
+  await completedLp.refresh();
+  assert.match(completedLp.text(completedLp.render()), /未完了工程あり/);
+  completedLp.open();
+  assert.match(completedLp.text(completedLp.find("AlertDialogDescription")), /対象: Amazon（反映確認のみ）/);
+  completedLp.find("AlertDialogAction", "実行する").props.onClick();
+  await completedLp.flush();
+  assert.deepEqual(JSON.parse(completedLp.posts()[0].options.body).expectedRetryScope,
+    { targets: ["amazon"], verificationOnlyTargets: ["amazon"], lpUpdate: false },
+    "A completed LP-only retry must keep unfinished ancestor EC available without reprocessing the LP");
+
+  const terminal = createHarness({ ...fixtureJob, status: "queued" });
+  await terminal.refresh();
+  terminal.setJob({
+    ...fixtureJob, status: "completed", lp: { required: true, status: "updated" },
+    retryScope: { targets: ["amazon"], verificationOnlyTargets: ["amazon"], lpUpdate: false },
+  });
+  await terminal.refresh();
+  terminal.notifyFinal();
+  await terminal.flush();
+  assert.equal(terminal.notifications.at(-1)?.kind, "warning",
+    "Terminal polling must not announce whole-campaign success while ancestor work remains");
+  assert.match(terminal.notifications.at(-1)?.message, /未完了の工程が残っています/);
 
   for (const change of [
     (harness) => { harness.props.sellingPriceInclTax = 2000; },
@@ -203,6 +235,7 @@ function createHarness(job = fixtureJob) {
     (harness) => { harness.props.ecProductName = "別の商品"; },
     async (harness) => { harness.setJob({ ...fixtureJob, id: "different-job" }); await harness.refresh(); },
     async (harness) => { harness.setJob({ ...fixtureJob, targets: ["rakuten"] }); await harness.refresh(); },
+    async (harness) => { harness.setJob({ ...fixtureJob, retryScope: { targets: ["amazon"], verificationOnlyTargets: ["amazon"], lpUpdate: true } }); await harness.refresh(); },
   ]) {
     const stale = createHarness();
     await stale.refresh();

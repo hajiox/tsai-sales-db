@@ -33,6 +33,7 @@ import {
   getEcPriceTargetLabel,
   type EcPriceHistoryEntry,
   type EcPriceJobView,
+  type EcPriceRetryScope,
   type EcPriceTarget,
 } from "@/lib/ec-price-codex";
 import type { EcProductRegisterJobView } from "@/lib/ec-product-registration-codex";
@@ -90,6 +91,7 @@ type RetryConfirmation = {
   productName: string;
   priceInclTax: number;
   recipeSnapshotJson: string;
+  retryScopeJson: string;
 };
 
 interface EcPriceSyncControlsProps {
@@ -137,13 +139,16 @@ export default function EcPriceSyncControls({
   const jobIsReserved = Boolean(job?.status === "queued" && job.isReserved === true);
   const jobIsExecuting = jobIsActive && !jobIsReserved;
   const blockedByAnotherJob = dispatchMode === "immediate" && Boolean(blockingJob);
-  const unfinishedTargets = job
-    ? getEcPriceRetryTargets(job.targets, job.sites, job.planValidated)
-    : [];
-  const unfinishedLp = Boolean(job?.lp?.required && job.lp.status !== "updated");
+  const retryScope: EcPriceRetryScope = job?.retryScope || {
+    targets: job ? getEcPriceRetryTargets(job.targets, job.sites, job.planValidated) : [],
+    verificationOnlyTargets: job?.sites.filter((site) => site.status === "submitted_pending").map((site) => site.site) || [],
+    lpUpdate: Boolean(job?.lp?.required && job.lp.status !== "updated"),
+  };
+  const unfinishedTargets = retryScope.targets;
+  const unfinishedLp = retryScope.lpUpdate;
   const jobCanRetry = Boolean(job && !jobIsActive && (unfinishedTargets.length > 0 || unfinishedLp));
   const retryTargetLabel = [
-    ...(unfinishedTargets.length > 0 ? [getEcPriceTargetLabel(unfinishedTargets)] : []),
+    ...unfinishedTargets.map((target) => `${getEcPriceTargetLabel([target])}${retryScope.verificationOnlyTargets.includes(target) ? "（反映確認のみ）" : ""}`),
     ...(unfinishedLp ? ["商品LP"] : []),
   ].join("・");
   const disabled = hasUnsavedChanges || isSaving || submitting || jobIsActive || blockedByAnotherJob || !hasPrice;
@@ -261,7 +266,9 @@ export default function EcPriceSyncControls({
     notifiedJobId.current = job.id;
     const display = getEcPriceJobDisplay(job);
     const summary = display.lpOnly ? display.summary : job.summary;
-    if (job.status === "completed") toast.success(summary || "EC価格変更が完了しました");
+    if (job.status === "completed" && job.retryScope && (job.retryScope.targets.length > 0 || job.retryScope.lpUpdate)) {
+      toast.warning("今回の工程は完了しました。未完了の工程が残っています");
+    } else if (job.status === "completed") toast.success(summary || "EC価格変更が完了しました");
     else if (job.status === "waiting_for_user" || job.status === "needs_review") {
       toast.warning(summary || "価格変更結果の確認が必要です");
     } else toast.error((display.lpOnly ? summary : job.errorMessage || summary) || "EC価格変更に失敗しました");
@@ -339,6 +346,7 @@ export default function EcPriceSyncControls({
       productName: ecProductName || recipeName,
       priceInclTax: sellingPriceInclTax,
       recipeSnapshotJson: JSON.stringify(expectedRecipeSnapshot),
+      retryScopeJson: JSON.stringify(retryScope),
     });
   };
 
@@ -348,7 +356,8 @@ export default function EcPriceSyncControls({
     if (confirmed.recipeId !== recipeId || confirmed.jobId !== job.id
       || confirmed.targetLabel !== retryTargetLabel || confirmed.productName !== (ecProductName || recipeName)
       || confirmed.priceInclTax !== sellingPriceInclTax
-      || confirmed.recipeSnapshotJson !== JSON.stringify(expectedRecipeSnapshot)) {
+      || confirmed.recipeSnapshotJson !== JSON.stringify(expectedRecipeSnapshot)
+      || confirmed.retryScopeJson !== JSON.stringify(retryScope)) {
       setRetryConfirmation(null);
       toast.warning("再実行する商品・価格・対象が変わったため、確認し直してください");
       return;
@@ -365,6 +374,7 @@ export default function EcPriceSyncControls({
           dispatchMode: "immediate",
           expectedPriceInclTax: confirmed.priceInclTax,
           expectedRecipeSnapshot: JSON.parse(confirmed.recipeSnapshotJson),
+          expectedRetryScope: JSON.parse(confirmed.retryScopeJson),
         }),
       });
       const payload = await response.json();
@@ -480,7 +490,7 @@ export default function EcPriceSyncControls({
     ? "予約済み・未実行"
     : jobIsActive ? executionPhase
     : job?.status === "completed"
-      ? "完了"
+      ? jobCanRetry ? "未完了工程あり" : "完了"
       : job?.status === "waiting_for_user"
         ? "操作待ち"
         : job?.status === "needs_review"
@@ -492,13 +502,13 @@ export default function EcPriceSyncControls({
               : "実行履歴なし";
   const jobStatusStyle = jobIsReserved
     ? "border-slate-200 bg-slate-50 text-slate-600"
-    : job?.status === "completed"
+    : job?.status === "completed" && !jobCanRetry
     ? "border-emerald-200 bg-emerald-50 text-emerald-700"
     : job?.status === "failed"
       ? "border-red-200 bg-red-50 text-red-700"
       : job?.status === "cancelled"
         ? "border-slate-200 bg-slate-50 text-slate-600"
-    : job?.status === "waiting_for_user" || job?.status === "needs_review" || heartbeatStale
+    : jobCanRetry || job?.status === "waiting_for_user" || job?.status === "needs_review" || heartbeatStale
           ? "border-amber-300 bg-amber-50 text-amber-800"
           : "border-blue-200 bg-blue-50 text-blue-700";
   const previousSitePrices = EC_PRICE_TARGETS.flatMap((target) => {
@@ -528,6 +538,7 @@ export default function EcPriceSyncControls({
                   <p>価格（税込）: ¥{retryConfirmation?.priceInclTax.toLocaleString("ja-JP")}</p>
                 </div>
                 <p>反映済み・対象商品なしの工程は再実行しません。実行しますか？</p>
+                {retryConfirmation?.targetLabel.includes("反映確認のみ") && <p>反映待ちは現在価格の確認だけを行い、価格を再送信しません。</p>}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -706,6 +717,7 @@ export default function EcPriceSyncControls({
           )}
           {!jobIsActive && job.currentStep && <p className="mt-2 font-bold">{job.currentStep}</p>}
           {jobDisplay?.summary && <p className="mt-1 leading-relaxed">{jobDisplay.summary}</p>}
+          {job?.retryScope && jobCanRetry && <p className="mt-1 leading-relaxed">同じ価格改定の未完了: {retryTargetLabel}</p>}
           {job.sites.length > 0 && job.status !== "cancelled" && (
             <ul className="mt-2 space-y-1">
               {job.sites.map((site) => (

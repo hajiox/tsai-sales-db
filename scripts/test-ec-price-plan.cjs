@@ -58,9 +58,9 @@ const retryTargetsSource = ecPriceCodexSource.slice(
   ecPriceCodexSource.indexOf("export function getEcPriceRetryTargets("),
   ecPriceCodexSource.indexOf("export type EcPriceHistorySite"),
 );
-assert.match(retryTargetsSource, /return !site \|\| site\.status === "blocked";/);
-assert.doesNotMatch(retryTargetsSource, /submitted_pending/);
-assert.match(ecPriceJobRouteSource, /retryResult\.validated_plan_checkpoint === true/);
+assert.match(retryTargetsSource, /site\.status === "blocked"/);
+assert.match(retryTargetsSource, /submitted_pending/);
+assert.match(ecPriceCodexSource, /result\.validated_plan_checkpoint === true/);
 assert.match(bridgeSource, /ecPriceProtocolVersion: 3/);
 const verifiedFourPack = verifiedRegistry.products.find((product) => product.janCode === "4571318633625");
 assert.ok(verifiedFourPack, "オーション麺4食の確定識別子が必要です");
@@ -186,6 +186,7 @@ assert.match(pricePromptSource, /OPERATION BUDGET: complete this read-only phase
 assert.match(pricePromptSource, /await cua\.getState\(\)/);
 assert.match(pricePromptSource, /cua\.getTab\(tabId, \{ browser: browserId \}\)/);
 assert.match(pricePromptSource, /cua\.createBrowserTab\(\\"chrome\\"/);
+assert.match(pricePromptSource, /never pass the numeric inventory ID/);
 assert.match(ecPriceSkillSource, /CLIは必ず `--ephemeral`/);
 assert.doesNotMatch(ecPriceSkillSource, /chrome:control-chrome|chrome\.tabs\.new\(\)|markHandoff|markDeliverable/);
 assert.match(bridgeSource, /function buildReusableEcPriceRecoveryPlan/);
@@ -226,6 +227,16 @@ assert.equal(
   false,
   "制限内の同一Chrome一時タブは許可する",
 );
+for (const code of [
+  "await cua.createBrowserTab('1', officialUrl, { sessionName: 'TSA EC' });",
+  "await cua.createBrowserTab(browserId, officialUrl, { sessionName: 'TSA EC' });",
+]) {
+  assert.equal(
+    detectsForbiddenTabAction({ type: "item.started", item: { type: "mcp_tool_call", arguments: { code } } }),
+    true,
+    "実障害の数値ID・変数でのタブ作成を引き続き拒否し、許可範囲を広げない",
+  );
+}
 assert.equal(
   detectsForbiddenTabAction({
     type: "item.started",
@@ -457,6 +468,10 @@ const authorizedJobParameters = {
   },
 };
 assert.equal(validateJobParameters(authorizedJobParameters).operatorAuthorization.executionAuthorized, true);
+assert.deepEqual(validateJobParameters({ ...authorizedJobParameters, verificationOnlyTargets: ["amazon"] }).verificationOnlyTargets, ["amazon"]);
+for (const verificationOnlyTargets of [["base"], ["amazon", "amazon"], "amazon"]) {
+  assert.throws(() => validateJobParameters({ ...authorizedJobParameters, verificationOnlyTargets }), /確認専用EC/);
+}
 assert.deepEqual(validateJobParameters(authorizedJobParameters).productMappings.amazon, ["4食 商品"]);
 assert.deepEqual(validateJobParameters(authorizedJobParameters).verifiedProductIdentifiers.amazon, [
   { kind: "asin", value: "B0BYV7DRDS" },

@@ -5,7 +5,7 @@ import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/s
 import {
   ecPriceLpResultFromUnknown,
   ecPriceHistoryFromJobs,
-  getEcPriceRetryTargets,
+  getEcPriceRetryScope,
   normalizeEcPriceTargets,
   type EcPriceJobView,
 } from "@/lib/ec-price-codex";
@@ -281,7 +281,7 @@ export async function GET(
         .eq("task_key", "ec_price_update")
         .contains("parameters", { recipeId })
         .order("created_at", { ascending: false })
-        .limit(50),
+        .limit(200),
       findGlobalImmediateEcPriceJob(supabase),
     ]);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -292,7 +292,10 @@ export async function GET(
     return NextResponse.json({
       ok: true,
       activeJob: active ? toJobView(active as Record<string, unknown>) : null,
-      latestJob: latest ? toJobView(latest as Record<string, unknown>) : null,
+      latestJob: latest ? {
+        ...toJobView(latest as Record<string, unknown>),
+        retryScope: getEcPriceRetryScope(jobs, latest),
+      } : null,
       blockingJob: blocking ? toBlockingJobView(blocking) : null,
       history: ecPriceHistoryFromJobs(jobs),
     }, { headers: { "Cache-Control": "no-store" } });
@@ -308,7 +311,19 @@ export async function GET(
   if (!data || String(asObject(data.parameters).recipeId || "") !== recipeId) {
     return NextResponse.json({ error: "価格変更タスクが見つかりません" }, { status: 404 });
   }
-  return NextResponse.json({ ok: true, job: toJobView(data) });
+  const job = toJobView(data);
+  if (!ACTIVE_STATUSES.includes(String(data.status))) {
+    const { data: rows, error: historyError } = await supabase
+      .from("web_sales_codex_jobs")
+      .select("id,status,parameters,result,created_at")
+      .eq("task_key", "ec_price_update")
+      .contains("parameters", { recipeId })
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (historyError) return NextResponse.json({ error: historyError.message }, { status: 500 });
+    job.retryScope = getEcPriceRetryScope([...(rows || []), data], data);
+  }
+  return NextResponse.json({ ok: true, job });
 }
 
 export async function POST(
@@ -347,17 +362,17 @@ export async function POST(
 
     const recipeSnapshot = buildEcPriceRecipeSnapshot(recipe as Record<string, unknown>);
     let lpUpdate = Boolean(recipeSnapshot.productLpUrl);
+    let verificationOnlyTargets: typeof targets = [];
     let inheritedBatchId: string | null = null;
     if (retryUnfinishedFromJobId) {
       const { data: retrySource, error: retrySourceError } = await supabase
         .from("web_sales_codex_jobs")
-        .select("id,status,parameters,result")
+        .select("id,status,parameters,result,created_at")
         .eq("id", retryUnfinishedFromJobId)
         .eq("task_key", "ec_price_update")
         .maybeSingle();
       if (retrySourceError) throw retrySourceError;
       const retryParameters = asObject(retrySource?.parameters);
-      const retryResult = asObject(retrySource?.result);
       if (
         !retrySource
         || String(retryParameters.recipeId || "") !== recipeId
@@ -371,16 +386,32 @@ export async function POST(
       inheritedBatchId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sourceBatchId)
         ? sourceBatchId
         : null;
-      const sourceTargets = normalizeEcPriceTargets(retryParameters.targets);
-      const sourceSites = Array.isArray(retryResult.sites) ? retryResult.sites.map(asObject) : [];
-      targets = getEcPriceRetryTargets(
-        sourceTargets,
-        sourceSites,
-        retryResult.validated_plan_checkpoint === true,
+      const { data: retryHistory, error: retryHistoryError } = await supabase
+        .from("web_sales_codex_jobs")
+        .select("id,status,parameters,result,created_at")
+        .eq("task_key", "ec_price_update")
+        .contains("parameters", { recipeId })
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (retryHistoryError) throw retryHistoryError;
+      const retryScope = getEcPriceRetryScope(
+        [...(retryHistory || []), retrySource],
+        retrySource,
       );
+      const expectedScope = asObject(body.expectedRetryScope);
+      if (
+        !Array.isArray(expectedScope.targets)
+        || !Array.isArray(expectedScope.verificationOnlyTargets)
+        || !sameTargets(expectedScope.targets, retryScope.targets)
+        || !sameTargets(expectedScope.verificationOnlyTargets, retryScope.verificationOnlyTargets)
+        || expectedScope.lpUpdate !== retryScope.lpUpdate
+      ) {
+        return NextResponse.json({ error: "未完了工程の状態が変わりました。画面を再読込して確認し直してください" }, { status: 409 });
+      }
+      targets = retryScope.targets;
+      verificationOnlyTargets = retryScope.verificationOnlyTargets;
       requestedTargets = [...targets];
-      const sourceLp = ecPriceLpResultFromUnknown(retryResult.lp);
-      lpUpdate = Boolean(recipeSnapshot.productLpUrl) && sourceLp?.status !== "updated";
+      lpUpdate = retryScope.lpUpdate;
       if (targets.length === 0 && !lpUpdate) {
         return NextResponse.json({ error: "再実行が必要なEC・商品LPはありません" }, { status: 409 });
       }
@@ -537,6 +568,7 @@ export async function POST(
     const parameters = {
       taskKey: "ec_price_update",
       targets,
+      verificationOnlyTargets,
       ...recipeSnapshot,
       recipeSnapshot,
       priceRevisionId: currentRevision?.id || null,

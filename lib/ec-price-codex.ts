@@ -66,6 +66,13 @@ export type EcPriceJobView = {
   heartbeatAt: string | null;
   updatedAt: string | null;
   completedAt: string | null;
+  retryScope?: EcPriceRetryScope;
+};
+
+export type EcPriceRetryScope = {
+  targets: EcPriceTarget[];
+  verificationOnlyTargets: EcPriceTarget[];
+  lpUpdate: boolean;
 };
 
 export function getEcPriceRetryTargets(
@@ -78,8 +85,57 @@ export function getEcPriceRetryTargets(
   const sites = Array.isArray(sitesInput) ? sitesInput.map(asObject) : [];
   return targets.filter((target) => {
     const site = sites.find((candidate) => candidate.site === target);
-    return !site || site.status === "blocked";
+    return !site || site.status === "blocked" || site.status === "submitted_pending";
   });
+}
+
+// Retries contain only their own targets. Keep the latest result for each
+// attempted target in this exact price revision, rather than treating the
+// latest LP-only result as completion of the earlier EC work.
+export function getEcPriceRetryScope(jobsInput: unknown, sourceInput: unknown): EcPriceRetryScope {
+  const source = asObject(sourceInput);
+  const sourceParameters = asObject(source.parameters);
+  const sourceSnapshot = asObject(sourceParameters.recipeSnapshot);
+  const snapshotKeys = Object.keys(sourceSnapshot);
+  const jobs = (Array.isArray(jobsInput) ? jobsInput : []).map(asObject)
+    .filter((job) => {
+      const parameters = asObject(job.parameters);
+      const snapshot = asObject(parameters.recipeSnapshot);
+      return snapshotKeys.length > 0
+        && parameters.recipeId === sourceParameters.recipeId
+        && Number(parameters.newPriceInclTax) === Number(sourceParameters.newPriceInclTax)
+        && (parameters.priceRevisionId || null) === (sourceParameters.priceRevisionId || null)
+        && Object.keys(snapshot).length === snapshotKeys.length
+        && snapshotKeys.every((key) => snapshot[key] === sourceSnapshot[key]);
+    })
+    .sort((left, right) => String(right.created_at || "").localeCompare(String(left.created_at || "")));
+  const siteStates = new Map<EcPriceTarget, { retry: boolean; verificationOnly: boolean }>();
+  let lpUpdate: boolean | null = null;
+  for (const job of jobs) {
+    const parameters = asObject(job.parameters);
+    const result = asObject(job.result);
+    const targets = normalizeEcPriceTargets(parameters.targets);
+    const sites = Array.isArray(result.sites) ? result.sites.map(asObject) : [];
+    const retryTargets = getEcPriceRetryTargets(targets, sites, result.validated_plan_checkpoint === true);
+    for (const target of targets) {
+      if (siteStates.has(target)) continue;
+      const site = sites.find((candidate) => candidate.site === target);
+      siteStates.set(target, {
+        retry: retryTargets.includes(target),
+        verificationOnly: site?.status === "submitted_pending"
+          || normalizeEcPriceTargets(parameters.verificationOnlyTargets).includes(target),
+      });
+    }
+    if (lpUpdate === null && parameters.lpUpdate === true) {
+      lpUpdate = Boolean(sourceSnapshot.productLpUrl) && ecPriceLpResultFromUnknown(result.lp)?.status !== "updated";
+    }
+  }
+  const targets = EC_PRICE_TARGETS.map(({ id }) => id).filter((target) => siteStates.get(target)?.retry);
+  return {
+    targets,
+    verificationOnlyTargets: targets.filter((target) => siteStates.get(target)?.verificationOnly),
+    lpUpdate: lpUpdate === true,
+  };
 }
 
 export type EcPriceHistorySite = {

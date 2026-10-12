@@ -2609,6 +2609,24 @@ async function executeSingleEcPriceSite({ job, workDir, parameters, site, index,
     }
   }
 
+  const verificationResult = ecPriceVerificationOnlyResult(scoped, planSite);
+  if (verificationResult) {
+    await updateJob(job.id, {
+      status: "running",
+      progress: range.end,
+      currentStep: `${prefix}反映状況を読み取り確認しました（再送信なし）`,
+      message: verificationResult.message,
+      eventType: "ec_price_site_pending_verified",
+      payload: { site, finalPrice: verificationResult.final_price, status: verificationResult.status },
+    });
+    return {
+      planSite,
+      resultSite: verificationResult,
+      referencePrice: positiveEcPriceInteger(plan.reference_standard_price),
+      operatorWait: false,
+    };
+  }
+
   const writeOutput = join(workDir, `ec-price-${site}-result.json`);
   const writeLog = join(workDir, `ec-price-${site}-write-events.jsonl`);
   const written = await runEcPriceCodexPhase({
@@ -2831,6 +2849,7 @@ function scopeEcPriceSiteParameters(parameters, site, referenceStandardPrice = n
   return {
     ...parameters,
     targets: [site],
+    verificationOnlyTargets: (parameters.verificationOnlyTargets || []).filter((target) => target === site),
     productLpUrl: null,
     recipeSnapshot: { ...parameters.recipeSnapshot, productLpUrl: null },
     siteBaselines: { [site]: suppliedBaseline ?? lockedBaseline },
@@ -2846,6 +2865,7 @@ function scopeEcPriceSiteParameters(parameters, site, referenceStandardPrice = n
 
 function buildReusableEcPriceRecoveryPlan(parameters) {
   if (!Array.isArray(parameters.targets) || parameters.targets.length !== 1) return null;
+  if (parameters.verificationOnlyTargets?.includes(parameters.targets[0])) return null;
   if (!Array.isArray(parameters.recoveryPlanSites) || parameters.recoveryPlanSites.length !== 1) return null;
   const site = parameters.targets[0];
   const recovery = parameters.recoveryPlanSites[0];
@@ -2872,9 +2892,29 @@ function scopeEcPriceLpParameters(parameters) {
     targets: [],
     siteBaselines: {},
     recoveryPlanSites: [],
+    verificationOnlyTargets: [],
     productMappings: {},
     verifiedProductIdentifiers: {},
     operatorAuthorization: { ...parameters.operatorAuthorization, targets: [] },
+  };
+}
+
+function ecPriceVerificationOnlyResult(parameters, planSite) {
+  if (!parameters.verificationOnlyTargets?.includes(planSite.site)) return null;
+  const prior = parameters.recoveryPlanSites?.find((entry) => entry.site === planSite.site);
+  const priorObserved = positiveEcPriceInteger(prior?.observed_price);
+  const observed = positiveEcPriceInteger(planSite.observed_price);
+  const unchanged = prior?.status === "planned"
+    && Number(prior.target_price) === Number(planSite.target_price)
+    && priorObserved !== null && priorObserved === observed;
+  return {
+    site: planSite.site,
+    status: unchanged ? "submitted_pending" : "blocked",
+    final_price: positiveEcPriceInteger(planSite.observed_price),
+    product_identifier: planSite.product_identifier,
+    message: unchanged
+      ? "送信済み価格の反映状況だけを新しい読取工程で確認しました。保存済み価格は前回と同じで、再送信・価格変更は行っていません。"
+      : "反映確認専用の工程で、前回の観測価格または検証済み計画と異なる状態を確認しました。再送信・価格変更は行っていません。",
   };
 }
 
@@ -3007,10 +3047,16 @@ function bindEcPriceLpPublicPlan(plan, evidence) {
     const ids = [...new Set(blocks.filter((block) => String(update.occurrence_evidence || "").includes(block.block_id)).map((block) => block.block_id))];
     if (ids.length !== 1) return { issue: "商品LPの変更箇所と公開商品ブロックの対応が確定していません", bindings: [] };
     const matching = blocks.filter((block) => block.block_id === ids[0]);
-    if (matching.some((block) => !Array.isArray(block.prices) || block.prices.length !== 1 || block.prices[0] !== Number(update.observed_price))) {
+    if (matching.some((block) => {
+      const itemPrices = block.item_prices === undefined ? block.prices : block.item_prices;
+      return !Array.isArray(itemPrices) || itemPrices.length !== 1 || itemPrices[0] !== Number(update.observed_price);
+    })) {
       return { issue: "商品LPの公開商品ブロックと計画中の現価格が一致しないか、価格基準が複数あります", bindings: [] };
     }
-    bindings.push({ block_id: ids[0], observed_price: Number(update.observed_price), target_price: Number(update.target_price) });
+    bindings.push({
+      block_id: ids[0], observed_price: Number(update.observed_price), target_price: Number(update.target_price),
+      ...(Array.isArray(matching[0]?.shipping_prices) ? { shipping_prices: matching[0].shipping_prices } : {}),
+    });
   }
   return { issue: bindings.length ? null : "商品LPの公開商品ブロック根拠がありません", bindings };
 }
@@ -3024,7 +3070,11 @@ async function verifyRegisteredEcPriceLp(lpUrl, prices, bindings = []) {
     const evidence = await readRegisteredEcPriceLp(lpUrl);
     for (const binding of bindings) {
       const matching = evidence.product_blocks.filter((block) => block.block_id === binding.block_id);
-      if (!matching.length || matching.some((block) => block.prices.length !== 1 || block.prices[0] !== binding.target_price)) {
+      if (!matching.length || matching.some((block) => {
+        const itemPrices = block.item_prices === undefined ? block.prices : block.item_prices;
+        return !Array.isArray(itemPrices) || itemPrices.length !== 1 || itemPrices[0] !== binding.target_price
+          || (binding.shipping_prices !== undefined && JSON.stringify(block.shipping_prices) !== JSON.stringify(binding.shipping_prices));
+      })) {
         return `商品LP登録URLの対象商品ブロックで目標価格${binding.target_price}円を確認できません`;
       }
     }
@@ -3339,6 +3389,13 @@ function validateEcPriceJobParametersV2(input) {
   if (!Number.isInteger(newPriceInclTax) || newPriceInclTax <= 0 || !Number.isInteger(newPriceExTax) || newPriceExTax <= 0) {
     throw new Error("価格変更額が正しくありません");
   }
+  const verificationInput = parameters.verificationOnlyTargets === undefined ? [] : parameters.verificationOnlyTargets;
+  if (!Array.isArray(verificationInput)
+    || verificationInput.some((site) => typeof site !== "string" || !targets.includes(site))
+    || new Set(verificationInput).size !== verificationInput.length) {
+    throw new Error("価格反映の確認専用ECが正しくありません");
+  }
+  const verificationOnlyTargets = [...verificationInput];
   const recipeId = String(parameters.recipeId || "").trim();
   if (!recipeId) throw new Error("価格変更対象のレシピIDがありません");
   const authorization = parameters.operatorAuthorization && typeof parameters.operatorAuthorization === "object" && !Array.isArray(parameters.operatorAuthorization)
@@ -3440,6 +3497,7 @@ function validateEcPriceJobParametersV2(input) {
     newPriceExTax,
     siteBaselines,
     recoveryPlanSites,
+    verificationOnlyTargets,
     productMappings,
     verifiedProductIdentifiers,
     lpUpdate,
@@ -3470,6 +3528,7 @@ function buildEcPricePlanPrompt(parameters) {
     "SAME-CHROME TAB POLICY: from that one state snapshot, find already-open Chrome tabs on each requested site's official host. Acquire candidates with cua.getTab(tabId, { browser: browserId }) and prefer a visibly signed-in non-login page.",
     "If multiple existing tabs match one EC and one cannot be acquired because another browser session owns it, try the remaining matching official tabs. Do not block until every matching candidate has been tried.",
     "SAME-CHROME TEMPORARY-TAB FALLBACK: if every matching existing tab is unavailable or none exists, create exactly one temporary tab for that EC with cua.createBrowserTab(\"chrome\", officialUrl, { sessionName: \"TSA EC\" }). Continue only when that same Chrome profile is visibly signed in.",
+    "IMPORTANT: browserId from cua.getState is only for cua.getTab(..., { browser: browserId }). For cua.createBrowserTab, the first argument MUST be the literal string \"chrome\"; never pass the numeric inventory ID, a browserId variable, or another browser name. Those calls are outside this job's allowed browser contract.",
     "TAB FINALIZATION IS MANDATORY: never close an operator-owned existing tab. Close only the temporary tab created by this session after the site's final read. Return the JSON result immediately after the last browser action.",
     "Create at most one temporary Chrome tab per requested EC in this phase. Do not create an in-app-browser, Edge, another browser, new window, incognito window, or temporary profile. Do not close, replace, or discard any operator-owned pre-existing tab.",
     "Do not ask the operator to click a Chrome-top cancellation control when an existing tab is contended. The automatic same-Chrome temporary-tab fallback is required first. Report browser connection failure only when both all existing candidates and the one temporary same-Chrome tab fail.",
@@ -3487,7 +3546,7 @@ function buildEcPricePlanPrompt(parameters) {
     "Use pricing_rule=delta_from_reference whenever the EC listing has a different price basis, including multi-item sets or shipping-excluded BASE items. Calculate target_price = basis_price + (new standard price - standard_baseline_price) * unit_multiplier.",
     "For BASE and BASE-managed TikTok, inspect and record shipping_mode=included or excluded. For other sites use the verified mode when visible, otherwise not_checked. A shipping-excluded BASE listing must use delta_from_reference. A free-shipping TikTok 2-item listing still uses delta_from_reference with unit_multiplier=2, not the single-unit standard price.",
     parameters.lpUpdate && parameters.targets.length === 0
-      ? "LP-ONLY PLAN: TASK_JSON.targets=[] and empty siteBaselines are intentional. Return sites=[] and reference_standard_price=null. For each LP price occurrence with proven exact product, the same single sale unit as the TSA recipe, and a standard item-price basis, set pricing_basis=standard_price and target_price exactly to TASK_JSON.newPriceInclTax independently of EC sites. Do not open or read EC seller pages in this LP-only phase; no old standard-price baseline is required. Never derive this LP target from a shipping-excluded BASE price or a marketplace link alone. A different sale unit, explicit shipping-excluded/site-specific price basis, or uncertain mapping must remain blocked/needs_review; never relabel it standard_price or guess a target to make the plan ready."
+      ? "LP-ONLY PLAN: TASK_JSON.targets=[] and empty siteBaselines are intentional. Return sites=[] and reference_standard_price=null. For each LP price occurrence with proven exact product, the same single sale unit as the TSA recipe, and a standard item-price basis, set pricing_basis=standard_price and target_price exactly to TASK_JSON.newPriceInclTax independently of EC sites. Do not open or read EC seller pages in this LP-only phase; no old standard-price baseline is required. Never derive this LP target from a shipping-excluded BASE price or a marketplace link alone. Separately stated shipping alone does not prove a different item-price basis: only when the exact product, single sale unit and separately stated shipping conditions match the verified facts in lp-workflow.md, update the standard item price and leave shipping unchanged. Use product_blocks.item_prices for item amounts and shipping_prices only for shipping; never replace a shipping amount as an item price. A different sale unit, unproven shipping/site-specific price basis, or uncertain mapping must remain blocked/needs_review; never relabel it standard_price or guess a target to make the plan ready."
       : "For requested EC sites, always set reference_standard_price to a verified standard-marketplace price or supplied site baseline representing the campaign's old standard price. Do this even when only a standard-price site is requested, so later BASE work can reuse the same campaign baseline.",
     "When TASK_JSON.siteBaselines[site] is supplied, it is the job-locked pre-change standard baseline from server history or the first verified site in this job. Use it exactly and never replace it by rereading another marketplace that an earlier job phase may already have updated.",
     "If a requested EC site has no supplied baseline and verified standard marketplaces for the exact product disagree, use needs_review and do not plan any writes.",
@@ -3517,6 +3576,7 @@ function buildEcPriceWritePrompt(parameters, plan) {
     "SAME-CHROME TAB POLICY: from that one state snapshot, find already-open Chrome tabs on each requested site's official host. Acquire candidates with cua.getTab(tabId, { browser: browserId }) and prefer a visibly signed-in non-login page.",
     "If multiple existing tabs match one EC and one cannot be acquired because another browser session owns it, try the remaining matching official tabs. Do not block until every matching candidate has been tried.",
     "SAME-CHROME TEMPORARY-TAB FALLBACK: if every matching existing tab is unavailable or none exists, create exactly one temporary tab for that EC with cua.createBrowserTab(\"chrome\", officialUrl, { sessionName: \"TSA EC\" }). Continue only when that same Chrome profile is visibly signed in.",
+    "IMPORTANT: browserId from cua.getState is only for cua.getTab(..., { browser: browserId }). For cua.createBrowserTab, the first argument MUST be the literal string \"chrome\"; never pass the numeric inventory ID, a browserId variable, or another browser name. Those calls are outside this job's allowed browser contract.",
     "TAB FINALIZATION IS MANDATORY: never close an operator-owned existing tab. Close only the temporary tab created by this session after save and final verification. Return the JSON result immediately after the last browser action.",
     "Create at most one temporary Chrome tab per requested EC in this phase. Do not create an in-app-browser, Edge, another browser, new window, incognito window, or temporary profile. Do not close, replace, or discard any operator-owned pre-existing tab.",
     "Do not ask the operator to click a Chrome-top cancellation control when an existing tab is contended. The automatic same-Chrome temporary-tab fallback is required first. Report browser connection failure only when both all existing candidates and the one temporary same-Chrome tab fail.",

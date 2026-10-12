@@ -31,6 +31,39 @@ function pricesIn(text) {
   return [...new Set([...text.matchAll(YEN)].map(match => Number((match[1] || match[2]).replace(/[,\s]/g, ''))).filter(value => Number.isSafeInteger(value) && value >= 0))];
 }
 
+function classifiedPrices(blockText) {
+  const paragraphs = blockText.split(/\n+/).map(normalized).filter(Boolean);
+  const occurrences = [];
+  for (let index = 0; index < paragraphs.length; index++) {
+    const text = paragraphs[index];
+    const matches = [...text.matchAll(YEN)];
+    // A separate "全国一律" amount is shipping only when the preceding
+    // paragraph explicitly states separate shipping. Unlabelled prices stay
+    // item-price candidates, so discounts/other products remain ambiguous.
+    const inheritedShipping = matches.length === 1
+      && /送料\s*(?:別途|別)\s*$/.test(paragraphs[index - 1] || '')
+      && /^(?:\d+(?:個|点)まで\s*)?(?:全国)?一律\s*<PRICE>(?:\s*\d+(?:個|点)まで)?$/.test(text.replace(YEN, '<PRICE>'));
+    let previousEnd = 0;
+    for (const match of matches) {
+      const value = Number((match[1] || match[2]).replace(/[,\s]/g, ''));
+      if (!Number.isSafeInteger(value) || value < 0) continue;
+      const prefix = text.slice(previousEnd, match.index);
+      const explicitShipping = /(?:送料|配送料|配送(?:料|料金))\s*(?:[は:：=]\s*)?(?:別途\s*)?(?:(?:全国)?一律\s*)?(?:\d+(?:個|点)まで\s*)?(?:(?:全国)?一律\s*)?$/.test(prefix);
+      const kind = explicitShipping || inheritedShipping ? 'shipping' : 'item';
+      const excerptStart = Math.max(0, match.index - 80);
+      const excerptEnd = Math.min(text.length, match.index + match[0].length + 80);
+      const sourceText = (inheritedShipping ? paragraphs[index - 1].slice(-60) + ' / ' : '') + text.slice(excerptStart, excerptEnd);
+      occurrences.push({ value, kind, source_text: sourceText.slice(0, 200) });
+      previousEnd = match.index + match[0].length;
+    }
+  }
+  return {
+    item_prices: [...new Set(occurrences.filter(entry => entry.kind === 'item').map(entry => entry.value))],
+    shipping_prices: [...new Set(occurrences.filter(entry => entry.kind === 'shipping').map(entry => entry.value))],
+    price_evidence: occurrences,
+  };
+}
+
 function blockId(text) {
   return 'LPB_' + createHash('sha256').update(text.replace(YEN, '<PRICE>'), 'utf8').digest('hex').slice(0, 16);
 }
@@ -152,9 +185,15 @@ function extractLpEvidence(html, options = {}) {
     if (!remaining || productBlocks.length >= 16) { truncated = true; break; }
     const text = candidate.text.slice(0, Math.min(2000, remaining));
     const prices = pricesIn(candidate.text);
-    truncated ||= text.length < candidate.text.length || prices.length > 32;
+    const classified = classifiedPrices(textOf(candidate.node));
+    truncated ||= text.length < candidate.text.length || prices.length > 32 || classified.price_evidence.length > 8;
     remaining -= text.length;
-    productBlocks.push({ block_id: blockId(candidate.text), text, prices: prices.slice(0, 32) });
+    productBlocks.push({
+      block_id: blockId(candidate.text), text, prices: prices.slice(0, 32),
+      item_prices: classified.item_prices.slice(0, 32),
+      shipping_prices: classified.shipping_prices.slice(0, 32),
+      price_evidence: classified.price_evidence.slice(0, 8),
+    });
   }
   return {
     title: title.slice(0, 300), evidence_scope: mainNodes.length ? 'main' : 'body',
