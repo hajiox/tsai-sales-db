@@ -804,7 +804,7 @@ export default function EcPriceSyncControls({
           {job.lp && job.status !== "cancelled" && (
             <p className="mt-2 flex items-start gap-1.5 font-medium">
               <Link2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>商品LP: {jobDisplay?.lpMessage || (job.lp.status === "updated" ? "公開反映確認済み" : "対象外")}</span>
+              <span>商品LP: {job.lp.status === "not_applicable" ? "今回の実行では商品LPは対象外です" : jobDisplay?.lpMessage || (job.lp.status === "updated" ? "公開反映確認済み" : "対象外")}</span>
             </p>
           )}
           {jobDisplay?.lpOnly && jobDisplay.details.length > 0 && (
