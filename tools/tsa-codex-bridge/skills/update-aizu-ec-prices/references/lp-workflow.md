@@ -51,6 +51,10 @@ node '<TASK_JSON.lpPublicReaderPathの絶対パス>' --url '<TASK_JSON.lpUrl>'
 
 ## ローカル編集元の発見
 
+Bridgeの `TASK_JSON.lpResolvedSource` がある場合、当該ジョブで一度実行したresolverの唯一の新規cloneを、URL/host・GitHub origin・本番ブランチ・コミット・クリーン状態・realpath境界までBridgeが検証済みである。計画のカレントディレクトリはその実clone。相対パスで読み取り、`source_file` も相対パスで返す。resolverの再実行、別clone、UUID・絶対パスの再構築、過去ジョブのroot流用はしない。計画JSONでは `project_root=null`、`github_repository`・`production_branch`・`source_commit` は空文字とし、Bridgeが検証済みの4項目を束縛する。非空の矛盾値は自動補正されずブロックされる。計画中はcloneを変更しない。書込工程は同じ束縛済みrootを使い、以下のGit更新確認・変更箇所確認を維持する。
+
+以下の手動resolver手順は `lpResolvedSource` がない工程だけで使用する。
+
 既定の作業ルートは `C:\作業用`。
 
 ```powershell

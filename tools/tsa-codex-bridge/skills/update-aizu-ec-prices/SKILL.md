@@ -133,7 +133,9 @@ Bridgeから `TASK_JSON.lpUrl` が渡された工程は、その登録済みURL�
 
 チャーシュー商品の価格改定では、専用LPに加えて複数商品LP `https://chasieu.aizu-syokubura.com/` も毎回確認する。対象商品のカード・価格表示だけを修正し、他のチャーシュー商品を一括置換しない。
 
-LP編集元は次のヘルパーで新規取得する。`TASK_JSON.lpResolverPath` があればその固定済み絶対パスを使用する。省略時だけ `$skillDir` に、このジョブが実際に読み込んだ本Skillの `SKILL.md` の親ディレクトリを絶対パスで設定してヘルパーを組み立てる。ジョブのカレントディレクトリから `scripts/...` を探さず、別のコピーを代用しない。
+`TASK_JSON.lpResolvedSource` がある時は、Bridgeが当該ジョブ内でヘルパーを一度実行し、URL・host・唯一の新規clone・GitHub origin・本番ブランチ・`HEAD == origin/<production_branch> == source_commit`・クリーン状態・実パス境界を検証済みである。計画工程のカレントディレクトリはその実cloneなので、ファイルを相対パスで読み、`source_file` も相対パスで返す。resolverの再実行、別clone、UUIDや絶対パスの手入力・再構築、過去ジョブの編集元流用をしない。計画JSONの `project_root` は `null`、`github_repository`・`production_branch`・`source_commit` は空文字で返す。これら4項目はBridgeが検証済み結果から固定する。非空で矛盾した値は修正されず拒否される。計画中にcloneへファイルを作成・編集しない。
+
+`lpResolvedSource` がない手動工程だけ、LP編集元を次のヘルパーで新規取得する。`TASK_JSON.lpResolverPath` があればその固定済み絶対パスを使用する。省略時だけ `$skillDir` に、このジョブが実際に読み込んだ本Skillの `SKILL.md` の親ディレクトリを絶対パスで設定してヘルパーを組み立てる。ジョブのカレントディレクトリから `scripts/...` を探さず、別のコピーを代用しない。
 
 ```powershell
 $skillDir = Split-Path -Parent '<このジョブが読み込んだSKILL.mdの絶対パス>'
