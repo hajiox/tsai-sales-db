@@ -141,6 +141,8 @@ const post = (body = requestBody) => route.POST({ json: async () => body }, { pa
   for (const body of [
     { ...requestBody, expectedRetryScope: { ...expectedScope, targets: ["amazon", "rakuten"] } },
     { ...requestBody, expectedRetryScope: { ...expectedScope, verificationOnlyTargets: [] } },
+    { ...requestBody, expectedRetryScope: { ...expectedScope, targets: ["amazon", "unknown"] } },
+    { ...requestBody, expectedRetryScope: { ...expectedScope, targets: ["amazon", "amazon"] } },
     { ...requestBody, expectedRetryScope: undefined },
     { ...requestBody, expectedPriceInclTax: 2000 },
     { ...requestBody, expectedRecipeSnapshot: { ...recipe, name: "different" } },
@@ -155,5 +157,79 @@ const post = (body = requestBody) => route.POST({ json: async () => body }, { pa
   reset(); state.admin = false;
   assert.equal((await post()).status, 401);
   assert.equal(state.writes.length, 0, "Retain administrator authorization");
-  console.log("EC price retry scope tests passed (history, pending readonly contract, identity/revision, stale confirmation and authorization).");
+
+  const subsetOriginal = structuredClone(original);
+  subsetOriginal.result.sites = original.result.sites.map((site) => ({ ...site,
+    status: site.site === "base" ? "updated" : site.site === "yahoo" ? "submitted_pending" : "blocked" }));
+  const fullScope = { targets: ["amazon", "rakuten", "yahoo"], verificationOnlyTargets: ["yahoo"], lpUpdate: true };
+  const subsetBody = { ...requestBody, retryUnfinishedFromJobId: original.id, expectedRetryScope: fullScope };
+  for (const [selection, expectedTargets, expectedReadonly, expectedLp] of [
+    [{ targets: ["yahoo"], lpUpdate: false }, ["yahoo"], ["yahoo"], false],
+    [{ targets: ["rakuten"], lpUpdate: true }, ["rakuten"], [], true],
+    [{ targets: [], lpUpdate: true }, [], [], true],
+    [undefined, fullScope.targets, ["yahoo"], true],
+  ]) {
+    reset([subsetOriginal]);
+    const response = await post({ ...subsetBody, selectedRetryScope: selection });
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    const queued = state.writes.find(({ table }) => table === "web_sales_codex_jobs").value;
+    assert.deepEqual(plain(queued.parameters.targets), expectedTargets);
+    assert.deepEqual(plain(queued.parameters.verificationOnlyTargets), expectedReadonly, "Readonly scope is derived from the server, never promoted to a write");
+    assert.equal(queued.parameters.lpUpdate, expectedLp);
+    assert.deepEqual(plain(queued.parameters.recoveryPlanSites.map((site) => site.site)), expectedTargets);
+    assert.deepEqual(plain(queued.parameters.recipeSnapshot), plain(snapshot));
+    assert.equal(queued.parameters.newPriceInclTax, 1944);
+    const completed = { ...queued, status: "completed", result: { validated_plan_checkpoint: true,
+      sites: expectedTargets.map((site) => ({ site, status: "updated", final_price: 1944 })),
+      lp: { required: expectedLp, status: expectedLp ? "updated" : "not_applicable" } } };
+    assert.deepEqual(plain(getEcPriceRetryScope([completed, subsetOriginal], completed)), {
+      targets: fullScope.targets.filter((target) => !expectedTargets.includes(target)),
+      verificationOnlyTargets: expectedTargets.includes("yahoo") ? [] : ["yahoo"],
+      lpUpdate: !expectedLp,
+    }, "Unselected unfinished work remains visible after the selected work completes");
+  }
+  for (const selection of [
+    null, [], "yahoo", {}, { targets: "yahoo", lpUpdate: false },
+    { targets: ["yahoo"], lpUpdate: "false" }, { targets: ["yahoo", "yahoo"], lpUpdate: false },
+    { targets: ["unknown"], lpUpdate: false }, { targets: ["YAHOO"], lpUpdate: false },
+    { targets: ["base"], lpUpdate: false }, { targets: [], lpUpdate: false },
+    { targets: [null], lpUpdate: false }, { targets: ["yahoo"], lpUpdate: false, verificationOnlyTargets: [] },
+  ]) {
+    reset([subsetOriginal]);
+    assert.equal((await post({ ...subsetBody, selectedRetryScope: selection })).status, 400, JSON.stringify(selection));
+    assert.equal(state.writes.length, 0, "Invalid or expanded selections must never enqueue work");
+  }
+  reset();
+  assert.equal((await post({ ...requestBody, selectedRetryScope: { targets: ["amazon"], lpUpdate: true } })).status, 400,
+    "A completed LP cannot be added to the selected retry");
+  assert.equal(state.writes.length, 0);
+  const changedUnselected = structuredClone(subsetOriginal);
+  changedUnselected.result.sites.find((site) => site.site === "amazon").status = "updated";
+  reset([changedUnselected]);
+  assert.equal((await post({ ...subsetBody, selectedRetryScope: { targets: ["yahoo"], lpUpdate: false } })).status, 409,
+    "Even a changed unselected target invalidates the frozen full-scope confirmation");
+  assert.equal(state.writes.length, 0);
+  for (const activeScope of [
+    { verificationOnlyTargets: [], lpUpdate: false },
+    { verificationOnlyTargets: ["yahoo"], lpUpdate: true },
+  ]) {
+    const active = { ...subsetOriginal, id: "active-other-scope", status: "running", created_at: "2026-10-12T04:00:00Z",
+      parameters: { ...subsetOriginal.parameters, targets: ["yahoo"], ...activeScope },
+      result: { validated_plan_checkpoint: true, sites: [{ site: "yahoo", status: "submitted_pending" }],
+        lp: { required: activeScope.lpUpdate, status: activeScope.lpUpdate ? "blocked" : "not_applicable" } } };
+    reset([subsetOriginal, active]);
+    assert.equal((await post({ ...subsetBody, selectedRetryScope: { targets: ["yahoo"], lpUpdate: false } })).status, 409,
+      "An active job with a different LP or write scope must not be reused");
+    assert.equal(state.writes.length, 0);
+  }
+  const matchingActive = { ...subsetOriginal, id: "active-matching-subset", status: "running", created_at: "2026-10-12T04:00:00Z",
+    parameters: { ...subsetOriginal.parameters, targets: ["yahoo"], verificationOnlyTargets: ["yahoo"], lpUpdate: false },
+    result: { validated_plan_checkpoint: true, sites: [{ site: "yahoo", status: "submitted_pending" }] } };
+  reset([subsetOriginal, matchingActive]);
+  const reused = await post({ ...subsetBody, selectedRetryScope: { targets: ["yahoo"], lpUpdate: false } });
+  assert.equal(reused.status, 200);
+  assert.equal(reused.body.reused, true, "The exact active readonly subset remains idempotently reusable");
+  assert.equal(reused.body.job.id, matchingActive.id);
+  assert.equal(state.writes.length, 0);
+  console.log("EC price retry scope tests passed (history, readonly subsets, invalid selections, identity/revision, stale confirmation and authorization).");
 })().catch((error) => { console.error(error); process.exitCode = 1; });

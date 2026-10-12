@@ -94,7 +94,9 @@ function createHarness(job = fixtureJob) {
       window: { confirm: (message) => { nativeConfirmations.push(message); return false; } },
       async fetch(url, options = {}) {
         calls.push({ url, options });
-        if (options.method === "POST") return { ok: true, json: async () => ({ job: { ...currentJob, status: "queued" } }) };
+        if (options.method === "POST") return { ok: true, json: async () => ({
+          job: { ...currentJob, status: "queued" }, reserved: JSON.parse(options.body).dispatchMode === "reserved",
+        }) };
         return { ok: true, json: async () => url.endsWith("/ec-price-jobs") ? { latestJob: currentJob, history: [] } : {} };
       },
     }, { filename });
@@ -138,6 +140,11 @@ function createHarness(job = fixtureJob) {
   }
   return {
     props, calls, notifications, nativeConfirmations, render, find, text, flush, refresh, open,
+    checkbox: (label) => {
+      const input = nodes(tree).find((node) => node.type === "input" && node.props["aria-label"] === label);
+      assert.ok(input, `Missing checkbox: ${label}`);
+      return input;
+    },
     posts: () => calls.filter(({ options }) => options.method === "POST"),
     setJob: (nextJob) => { currentJob = structuredClone(nextJob); },
     notifyFinal: () => effects.at(-1)(),
@@ -179,6 +186,7 @@ function createHarness(job = fixtureJob) {
     expectedPriceInclTax: 1944,
     expectedRecipeSnapshot: execute.props.expectedRecipeSnapshot,
     expectedRetryScope: { targets: [], verificationOnlyTargets: [], lpUpdate: true },
+    selectedRetryScope: { targets: [], lpUpdate: true },
   }, "Retain the existing locked retry API contract");
   assert.equal(execute.posts()[0].options.headers["content-type"], "application/json");
 
@@ -198,6 +206,49 @@ function createHarness(job = fixtureJob) {
     "Keep successful/absent sites out, but allow pending prices to be verified without resubmission");
   assert.match(mixed.text(mixed.find("AlertDialogDescription")), /価格を再送信しません/);
   assert.equal(mixed.posts().length, 0);
+
+  const fullScope = { targets: ["amazon", "rakuten", "yahoo"], verificationOnlyTargets: ["yahoo"], lpUpdate: true };
+  const selectableJob = { ...fixtureJob, retryScope: fullScope };
+  const selection = createHarness(selectableJob);
+  await selection.refresh();
+  selection.open();
+  for (const label of ["Amazon", "楽天", "Yahoo", "商品LP"]) {
+    assert.equal(selection.checkbox(`${label}を再実行`).props.checked, true, "Default selection includes every unfinished step");
+  }
+  for (const label of ["Amazon", "楽天", "商品LP"]) {
+    selection.checkbox(`${label}を再実行`).props.onChange({ target: { checked: false } });
+    selection.render();
+  }
+  assert.match(selection.text(selection.find("AlertDialogDescription")), /対象: Yahoo（反映確認のみ）/);
+  selection.find("AlertDialogAction").props.onClick();
+  await selection.flush();
+  const selectedPayload = JSON.parse(selection.posts()[0].options.body);
+  assert.deepEqual(selectedPayload.expectedRetryScope, fullScope, "Freeze and send the full scope even when Amazon is left unselected");
+  assert.deepEqual(selectedPayload.selectedRetryScope, { targets: ["yahoo"], lpUpdate: false });
+  assert.equal("verificationOnlyTargets" in selectedPayload.selectedRetryScope, false, "Only the server determines readonly targets");
+
+  const empty = createHarness(selectableJob);
+  await empty.refresh(); empty.open();
+  for (const label of ["Amazon", "楽天", "Yahoo", "商品LP"]) {
+    empty.checkbox(`${label}を再実行`).props.onChange({ target: { checked: false } }); empty.render();
+  }
+  assert.equal(empty.find("AlertDialogAction").props.disabled, true);
+  empty.find("AlertDialogAction").props.onClick(); await empty.flush();
+  assert.equal(empty.posts().length, 0, "An empty subset cannot enqueue even if the handler is called directly");
+  empty.checkbox("商品LPを再実行").props.onChange({ target: { checked: true } }); empty.render();
+  assert.match(empty.text(empty.find("AlertDialogDescription")), /対象: 商品LP/);
+  empty.find("AlertDialogAction").props.onClick(); await empty.flush();
+  assert.deepEqual(JSON.parse(empty.posts()[0].options.body).selectedRetryScope, { targets: [], lpUpdate: true },
+    "LP-only retry does not include any unselected EC");
+
+  const subsetStale = createHarness(selectableJob);
+  await subsetStale.refresh(); subsetStale.open();
+  subsetStale.checkbox("Amazonを再実行").props.onChange({ target: { checked: false } }); subsetStale.render();
+  subsetStale.setJob({ ...selectableJob, retryScope: { ...fullScope, targets: ["rakuten", "yahoo"] } });
+  await subsetStale.refresh();
+  subsetStale.find("AlertDialogAction").props.onClick(); await subsetStale.flush();
+  assert.equal(subsetStale.posts().length, 0, "An unselected target changing still invalidates confirmation");
+  assert.equal(subsetStale.notifications.at(-1)?.kind, "warning");
 
   const completedLp = createHarness({
     ...fixtureJob,
@@ -259,11 +310,46 @@ function createHarness(job = fixtureJob) {
   await busy.flush();
   assert.equal(busy.posts().length, 0, "Unsaved changes must retain the existing submission guard");
 
-  const normal = createHarness();
-  await normal.refresh();
-  normal.find("button", "Amazon").props.onClick();
-  await normal.flush();
-  assert.equal(normal.nativeConfirmations.length, 1, "Normal EC confirmations remain unchanged");
-  assert.equal(normal.posts().length, 0);
-  console.log("EC price retry confirmation flow tests passed (cancel, locked payload, duplicate/stale guards, normal EC confirmation).");
+  for (const dispatchMode of ["immediate", "reserved"]) {
+    const normal = createHarness();
+    await normal.refresh();
+    if (dispatchMode === "reserved") { normal.find("button", "一括実行へ予約").props.onClick(); normal.render(); }
+    normal.find("button", dispatchMode === "reserved" ? "Amazonを予約" : "Amazon").props.onClick(); normal.render();
+    assert.equal(normal.find("AlertDialog").props.open, true);
+    assert.match(normal.text(normal.find("AlertDialogDescription")), /対象: Amazon/);
+    assert.match(normal.text(normal.find("AlertDialogDescription")), /商品: 試験用商品/);
+    assert.match(normal.text(normal.find("AlertDialogDescription")), dispatchMode === "reserved" ? /予約価格（税込）: ¥1,944/ : /新価格（税込）: ¥1,944/);
+    assert.match(normal.text(normal.find("AlertDialogDescription")), /商品LPも必須更新: https:\/\/lp.example.test\//);
+    if (dispatchMode === "reserved") assert.match(normal.text(normal.find("AlertDialogDescription")), /押すまでECサイトは変更しません/);
+    assert.equal(normal.posts().length, 0, "Opening normal confirmation does not enqueue");
+    assert.equal(normal.nativeConfirmations.length, 0, "Normal immediate and reserved flow use the app dialog");
+    const normalAction = normal.find("AlertDialogAction", dispatchMode === "reserved" ? "予約する" : "実行する");
+    normalAction.props.onClick(); normalAction.props.onClick(); await normal.flush();
+    assert.equal(normal.posts().length, 1, "Normal confirmation is protected from duplicate clicks");
+    assert.deepEqual(JSON.parse(normal.posts()[0].options.body), {
+      targets: ["amazon"], dispatchMode, expectedPriceInclTax: 1944, expectedRecipeSnapshot: normal.props.expectedRecipeSnapshot,
+    }, "Normal enqueue keeps the confirmed immutable target, dispatch mode, price and snapshot");
+  }
+  const normalCancel = createHarness();
+  await normalCancel.refresh();
+  normalCancel.find("button", "Amazon").props.onClick(); normalCancel.render();
+  normalCancel.find("AlertDialog").props.onOpenChange(false); normalCancel.render();
+  assert.equal(normalCancel.posts().length, 0);
+  assert.equal(normalCancel.find("AlertDialog").props.open, false, "Cancel closes and invalidates normal confirmation");
+  for (const change of [
+    (harness) => { harness.props.sellingPriceInclTax = 2000; },
+    (harness) => { harness.props.expectedRecipeSnapshot.product.code = "changed"; },
+    (harness) => { harness.props.recipeId = "changed-recipe"; },
+    (harness) => { harness.props.ecProductName = "changed-product"; },
+    (harness) => { harness.props.productLpUrl = "https://other.example.test/"; },
+    (harness) => { harness.find("button", "一括実行へ予約").props.onClick(); },
+  ]) {
+    const normalStale = createHarness(); await normalStale.refresh();
+    normalStale.find("button", "Amazon").props.onClick(); normalStale.render();
+    change(normalStale); normalStale.render();
+    normalStale.find("AlertDialogAction", "実行する").props.onClick(); await normalStale.flush();
+    assert.equal(normalStale.posts().length, 0, "Changed normal confirmation inputs must require a fresh confirmation");
+    assert.equal(normalStale.notifications.at(-1)?.kind, "warning");
+  }
+  console.log("EC price confirmation tests passed (retry subsets/readonly, normal immediate/reserved dialogs, cancel/empty, locked payload, duplicate/stale guards).");
 })().catch((error) => { console.error(error); process.exitCode = 1; });

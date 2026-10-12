@@ -8,6 +8,7 @@ import {
   getEcPriceRetryScope,
   normalizeEcPriceTargets,
   type EcPriceJobView,
+  type EcPriceRetryScope,
 } from "@/lib/ec-price-codex";
 import {
   buildEcPriceRecipeSnapshot,
@@ -43,7 +44,8 @@ function asObject(value: unknown): Record<string, unknown> {
 }
 
 function sameTargets(left: unknown, right: string[]) {
-  const normalized = normalizeEcPriceTargets(left).sort();
+  if (!Array.isArray(left) || left.some((target) => typeof target !== "string")) return false;
+  const normalized = [...left].sort();
   const expected = [...right].sort();
   return normalized.length === expected.length && normalized.every((target, index) => target === expected[index]);
 }
@@ -184,16 +186,19 @@ async function resolveExistingJob(input: {
   targets: string[];
   recipeSnapshot: EcPriceRecipeSnapshot;
   authorizedBy: string;
+  retryScope?: EcPriceRetryScope;
 }) {
-  const { supabase, active, dispatchMode, newPriceInclTax, targets, recipeSnapshot, authorizedBy } = input;
-  if (!jobMatchesRequest(active, newPriceInclTax, targets, recipeSnapshot)) {
+  const { supabase, active, dispatchMode, newPriceInclTax, targets, recipeSnapshot, authorizedBy, retryScope } = input;
+  const activeParameters = asObject(active.parameters);
+  if (!jobMatchesRequest(active, newPriceInclTax, targets, recipeSnapshot)
+    || (retryScope && (Boolean(activeParameters.lpUpdate) !== retryScope.lpUpdate
+      || !sameTargets(activeParameters.verificationOnlyTargets || [], retryScope.verificationOnlyTargets)))) {
     return NextResponse.json(
       { error: "この商品の別の価格変更が実行中または予約済みです。完了または取消後に再実行してください" },
       { status: 409 },
     );
   }
 
-  const activeParameters = asObject(active.parameters);
   const reserved = isReservedEcPriceJob(active.status, activeParameters);
   if (dispatchMode === "reserved") {
     if (!reserved) {
@@ -408,13 +413,26 @@ export async function POST(
       ) {
         return NextResponse.json({ error: "未完了工程の状態が変わりました。画面を再読込して確認し直してください" }, { status: 409 });
       }
-      targets = retryScope.targets;
-      verificationOnlyTargets = retryScope.verificationOnlyTargets;
-      requestedTargets = [...targets];
-      lpUpdate = retryScope.lpUpdate;
-      if (targets.length === 0 && !lpUpdate) {
+      if (retryScope.targets.length === 0 && !retryScope.lpUpdate) {
         return NextResponse.json({ error: "再実行が必要なEC・商品LPはありません" }, { status: 409 });
       }
+      const selectedScope = body.selectedRetryScope === undefined
+        ? { targets: retryScope.targets, lpUpdate: retryScope.lpUpdate }
+        : asObject(body.selectedRetryScope);
+      if (!Array.isArray(selectedScope.targets) || typeof selectedScope.lpUpdate !== "boolean"
+        || Object.keys(selectedScope).some((key) => key !== "targets" && key !== "lpUpdate")
+        || selectedScope.targets.some((target) => !retryScope.targets.includes(target))
+        || new Set(selectedScope.targets).size !== selectedScope.targets.length
+        || (selectedScope.lpUpdate && !retryScope.lpUpdate)
+        || (selectedScope.targets.length === 0 && !selectedScope.lpUpdate)) {
+        return NextResponse.json({ error: "未完了のEC・商品LPから実行する工程を選択してください" }, { status: 400 });
+      }
+      const selectedTargets = selectedScope.targets;
+      targets = retryScope.targets.filter((target) => selectedTargets.includes(target));
+      // Confirmation-only work cannot be promoted to a write by the caller.
+      verificationOnlyTargets = retryScope.verificationOnlyTargets.filter((target) => targets.includes(target));
+      requestedTargets = [...targets];
+      lpUpdate = selectedScope.lpUpdate;
     }
     const inactiveTargets = inactiveEcOperationTargets(targets);
     if (inactiveTargets.length) return NextResponse.json({ error: ecOperationBlockedMessage(inactiveTargets), code: "EC_CHANNEL_INACTIVE" }, { status: 409 });
@@ -477,6 +495,7 @@ export async function POST(
         targets,
         recipeSnapshot,
         authorizedBy: session.user?.email || ADMIN_EMAIL,
+        ...(retryUnfinishedFromJobId ? { retryScope: { targets, verificationOnlyTargets, lpUpdate } } : {}),
       });
     }
 
@@ -634,6 +653,7 @@ export async function POST(
           targets,
           recipeSnapshot,
           authorizedBy: session.user?.email || ADMIN_EMAIL,
+          ...(retryUnfinishedFromJobId ? { retryScope: { targets, verificationOnlyTargets, lpUpdate } } : {}),
         });
       }
     }

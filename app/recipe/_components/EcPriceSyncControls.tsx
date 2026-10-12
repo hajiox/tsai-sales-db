@@ -92,6 +92,17 @@ type RetryConfirmation = {
   priceInclTax: number;
   recipeSnapshotJson: string;
   retryScopeJson: string;
+  selectedScope: Pick<EcPriceRetryScope, "targets" | "lpUpdate">;
+};
+
+type EnqueueConfirmation = {
+  recipeId: string;
+  targets: EcPriceTarget[];
+  dispatchMode: EcPriceDispatchMode;
+  productName: string;
+  priceInclTax: number;
+  recipeSnapshotJson: string;
+  productLpUrl: string | null;
 };
 
 interface EcPriceSyncControlsProps {
@@ -129,7 +140,9 @@ export default function EcPriceSyncControls({
   const [queueLoading, setQueueLoading] = useState(true);
   const [queueAction, setQueueAction] = useState(false);
   const [retryConfirmation, setRetryConfirmation] = useState<RetryConfirmation | null>(null);
+  const [enqueueConfirmation, setEnqueueConfirmation] = useState<EnqueueConfirmation | null>(null);
   const retrySubmitting = useRef(false);
+  const enqueueSubmitting = useRef(false);
   const notifiedJobId = useRef<string | null>(null);
   const hasHydratedJobHistory = useRef(false);
   const hasPrice = Number.isFinite(sellingPriceInclTax) && sellingPriceInclTax > 0;
@@ -151,6 +164,13 @@ export default function EcPriceSyncControls({
     ...unfinishedTargets.map((target) => `${getEcPriceTargetLabel([target])}${retryScope.verificationOnlyTargets.includes(target) ? "（反映確認のみ）" : ""}`),
     ...(unfinishedLp ? ["商品LP"] : []),
   ].join("・");
+  const retryChoiceScope: EcPriceRetryScope = retryConfirmation ? JSON.parse(retryConfirmation.retryScopeJson) : retryScope;
+  const selectedRetryTargetLabel = retryConfirmation ? [
+    ...retryConfirmation.selectedScope.targets.map((target) => `${getEcPriceTargetLabel([target])}${retryChoiceScope.verificationOnlyTargets.includes(target) ? "（反映確認のみ）" : ""}`),
+    ...(retryConfirmation.selectedScope.lpUpdate ? ["商品LP"] : []),
+  ].join("・") : "";
+  const retrySelectionEmpty = Boolean(retryConfirmation
+    && retryConfirmation.selectedScope.targets.length === 0 && !retryConfirmation.selectedScope.lpUpdate);
   const disabled = hasUnsavedChanges || isSaving || submitting || jobIsActive || blockedByAnotherJob || !hasPrice;
   const qoo10Missing = Boolean(
     job?.sites.some((site) => site.site === "qoo10" && site.status === "not_found")
@@ -275,44 +295,37 @@ export default function EcPriceSyncControls({
     void refreshPriceHistory();
   }, [job, refreshPriceHistory]);
 
-  const enqueue = async (targets: EcPriceTarget[]) => {
-    if (disabled) return;
-    const targetLabel = getEcPriceTargetLabel(targets);
-    const productName = ecProductName || recipeName;
-    const isReservation = dispatchMode === "reserved";
-    const confirmed = window.confirm(
-      isReservation
-        ? [
-          `${targetLabel}の価格変更を一括実行予約へ追加します。`,
-          "",
-          `商品: ${productName}`,
-          `予約価格（税込）: ¥${sellingPriceInclTax.toLocaleString("ja-JP")}`,
-          ...(hasProductLp ? ["", `商品LPも必須更新: ${productLpUrl}`] : []),
-          "",
-          "「予約分をまとめて実行」を押すまでECサイトは変更しません。予約しますか？",
-        ].join("\n")
-        : [
-          `${targetLabel}の販売価格を変更します。`,
-          "",
-          `商品: ${productName}`,
-          `新価格（税込）: ¥${sellingPriceInclTax.toLocaleString("ja-JP")}`,
-          ...(hasProductLp ? ["", `商品LPも必須更新: ${productLpUrl}`] : []),
-          "",
-          "事務所PCのCodexがログイン済みEC管理画面を操作します。実行しますか？",
-        ].join("\n"),
-    );
-    if (!confirmed) return;
+  const enqueue = (targets: EcPriceTarget[]) => {
+    if (disabled || enqueueSubmitting.current) return;
+    setEnqueueConfirmation({ recipeId, targets: [...targets], dispatchMode,
+      productName: ecProductName || recipeName, priceInclTax: sellingPriceInclTax,
+      recipeSnapshotJson: JSON.stringify(expectedRecipeSnapshot), productLpUrl: productLpUrl || null });
+  };
 
+  const confirmEnqueue = async () => {
+    const confirmed = enqueueConfirmation;
+    if (!confirmed || disabled || enqueueSubmitting.current) return;
+    if (confirmed.recipeId !== recipeId || confirmed.dispatchMode !== dispatchMode
+      || confirmed.productName !== (ecProductName || recipeName) || confirmed.priceInclTax !== sellingPriceInclTax
+      || confirmed.recipeSnapshotJson !== JSON.stringify(expectedRecipeSnapshot)
+      || confirmed.productLpUrl !== (productLpUrl || null)) {
+      setEnqueueConfirmation(null);
+      toast.warning("実行する商品・価格・方法が変わったため、確認し直してください");
+      return;
+    }
+    const isReservation = confirmed.dispatchMode === "reserved";
+    enqueueSubmitting.current = true;
+    setEnqueueConfirmation(null);
     setSubmitting(true);
     try {
-      const response = await fetch(`/api/recipe/${recipeId}/ec-price-jobs`, {
+      const response = await fetch(`/api/recipe/${confirmed.recipeId}/ec-price-jobs`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          targets,
-          dispatchMode,
-          expectedPriceInclTax: sellingPriceInclTax,
-          expectedRecipeSnapshot,
+          targets: confirmed.targets,
+          dispatchMode: confirmed.dispatchMode,
+          expectedPriceInclTax: confirmed.priceInclTax,
+          expectedRecipeSnapshot: JSON.parse(confirmed.recipeSnapshotJson),
         }),
       });
       const payload = await response.json();
@@ -333,6 +346,7 @@ export default function EcPriceSyncControls({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : (isReservation ? "価格変更を予約できません" : "価格変更を開始できません"));
     } finally {
+      enqueueSubmitting.current = false;
       setSubmitting(false);
     }
   };
@@ -347,6 +361,18 @@ export default function EcPriceSyncControls({
       priceInclTax: sellingPriceInclTax,
       recipeSnapshotJson: JSON.stringify(expectedRecipeSnapshot),
       retryScopeJson: JSON.stringify(retryScope),
+      selectedScope: { targets: [...retryScope.targets], lpUpdate: retryScope.lpUpdate },
+    });
+  };
+
+  const changeRetrySelection = (target: EcPriceTarget | "lp", checked: boolean) => {
+    setRetryConfirmation((current) => {
+      if (!current) return null;
+      const fullScope = JSON.parse(current.retryScopeJson) as EcPriceRetryScope;
+      return { ...current, selectedScope: {
+        targets: fullScope.targets.filter((site) => site === target ? checked : current.selectedScope.targets.includes(site)),
+        lpUpdate: target === "lp" ? checked : current.selectedScope.lpUpdate,
+      } };
     });
   };
 
@@ -362,6 +388,7 @@ export default function EcPriceSyncControls({
       toast.warning("再実行する商品・価格・対象が変わったため、確認し直してください");
       return;
     }
+    if (confirmed.selectedScope.targets.length === 0 && !confirmed.selectedScope.lpUpdate) return;
     retrySubmitting.current = true;
     setRetryConfirmation(null);
     setSubmitting(true);
@@ -375,6 +402,7 @@ export default function EcPriceSyncControls({
           expectedPriceInclTax: confirmed.priceInclTax,
           expectedRecipeSnapshot: JSON.parse(confirmed.recipeSnapshotJson),
           expectedRetryScope: JSON.parse(confirmed.retryScopeJson),
+          selectedRetryScope: confirmed.selectedScope,
         }),
       });
       const payload = await response.json();
@@ -525,26 +553,68 @@ export default function EcPriceSyncControls({
 
   return (
     <section className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm print:hidden">
+      {enqueueConfirmation && <AlertDialog open onOpenChange={(open) => { if (!open) setEnqueueConfirmation(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{enqueueConfirmation.dispatchMode === "reserved" ? "一括実行予約の確認" : "価格変更の実行確認"}</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-left">
+                <div>
+                  <p>対象: {getEcPriceTargetLabel(enqueueConfirmation.targets)}</p>
+                  <p>商品: {enqueueConfirmation.productName}</p>
+                  <p>{enqueueConfirmation.dispatchMode === "reserved" ? "予約価格" : "新価格"}（税込）: ¥{enqueueConfirmation.priceInclTax.toLocaleString("ja-JP")}</p>
+                </div>
+                {enqueueConfirmation.productLpUrl && <p className="break-all">商品LPも必須更新: {enqueueConfirmation.productLpUrl}</p>}
+                <p>{enqueueConfirmation.dispatchMode === "reserved"
+                  ? "「予約分をまとめて実行」を押すまでECサイトは変更しません。予約しますか？"
+                  : "事務所PCのCodexがログイン済みEC管理画面を操作します。実行しますか？"}</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction disabled={disabled} onClick={() => void confirmEnqueue()}>
+              {enqueueConfirmation.dispatchMode === "reserved" ? "予約する" : "実行する"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>}
       <AlertDialog open={Boolean(retryConfirmation)} onOpenChange={(open) => { if (!open) setRetryConfirmation(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>未完了工程の再実行を確認</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3 text-left">
-                <p>未完了の工程だけを再実行します。</p>
+                <p>選択した未完了の工程だけを再実行します。選ばなかった工程は未完了のまま残ります。</p>
+                <fieldset className="space-y-2">
+                  <legend className="mb-2 font-medium">今回実行する工程</legend>
+                  {retryChoiceScope.targets.map((target) => (
+                    <label key={target} className="flex items-center gap-2">
+                      <input type="checkbox" aria-label={`${getEcPriceTargetLabel([target])}を再実行`}
+                        checked={retryConfirmation?.selectedScope.targets.includes(target) || false}
+                        onChange={(event) => changeRetrySelection(target, event.target.checked)} />
+                      {getEcPriceTargetLabel([target])}{retryChoiceScope.verificationOnlyTargets.includes(target) ? "（反映確認のみ）" : ""}
+                    </label>
+                  ))}
+                  {retryChoiceScope.lpUpdate && <label className="flex items-center gap-2">
+                    <input type="checkbox" aria-label="商品LPを再実行" checked={retryConfirmation?.selectedScope.lpUpdate || false}
+                      onChange={(event) => changeRetrySelection("lp", event.target.checked)} />
+                    商品LP
+                  </label>}
+                </fieldset>
                 <div>
-                  <p>対象: {retryConfirmation?.targetLabel}</p>
+                  <p>対象: {selectedRetryTargetLabel || "選択してください"}</p>
                   <p>商品: {retryConfirmation?.productName}</p>
                   <p>価格（税込）: ¥{retryConfirmation?.priceInclTax.toLocaleString("ja-JP")}</p>
                 </div>
                 <p>反映済み・対象商品なしの工程は再実行しません。実行しますか？</p>
-                {retryConfirmation?.targetLabel.includes("反映確認のみ") && <p>反映待ちは現在価格の確認だけを行い、価格を再送信しません。</p>}
+                {selectedRetryTargetLabel.includes("反映確認のみ") && <p>反映待ちは現在価格の確認だけを行い、価格を再送信しません。</p>}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>キャンセル</AlertDialogCancel>
-            <AlertDialogAction disabled={disabled || !jobCanRetry} onClick={() => void retryUnfinished()}>
+            <AlertDialogAction disabled={disabled || !jobCanRetry || retrySelectionEmpty} onClick={() => void retryUnfinished()}>
               実行する
             </AlertDialogAction>
           </AlertDialogFooter>
