@@ -7021,6 +7021,11 @@ function buildIsolatedCodexArgs(outputFile, writableDirectories, options = {}) {
   }
   if (options.ephemeral) args.push("--ephemeral");
   if (options.sandbox) args.push("--sandbox", options.sandbox);
+  if (options.sandbox === "workspace-write" && process.platform === "win32") {
+    // --ignore-user-config omits the existing Windows sandbox implementation.
+    // Pin it per run while retaining the explicit scope and automatic review.
+    args.push("-c", 'windows.sandbox="elevated"');
+  }
   if (options.sandbox === "workspace-write" && options.sandboxNetworkAccess === true) {
     args.push("-c", "sandbox_workspace_write.network_access=true");
   }

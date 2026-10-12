@@ -17,13 +17,18 @@ const publicReader = path.join(config.codexHome, 'skills/update-aizu-ec-prices/s
 fs.mkdirSync(path.dirname(resolver), {recursive:true});
 fs.writeFileSync(resolver, '# fixture only');
 fs.writeFileSync(publicReader, 'module.exports={readLpPublicPage:async url=>({final_url:url.endsWith("/redirect")?"https://example.invalid/other":url})};');
-const builder = new Function('config', 'RESULT_SCHEMA', 'uniquePaths', 'appendUnifiedCuaMcpArgs', 'appendChromeDevtoolsMcpArgs', 'BROWSER_ROUTE_POLICY',
-  `${section('buildIsolatedCodexArgs', 'emptyCodexUsage')} return buildIsolatedCodexArgs;`)(config, 'schema.json', values=>[...new Set(values.filter(Boolean))], ()=>{}, ()=>{}, 'route policy');
-const explicit = builder('output.json', ['job-artifacts', 'lp-workspace'], {
+const builderForPlatform = platform => new Function('config', 'RESULT_SCHEMA', 'uniquePaths', 'appendUnifiedCuaMcpArgs', 'appendChromeDevtoolsMcpArgs', 'BROWSER_ROUTE_POLICY', 'process',
+  `${section('buildIsolatedCodexArgs', 'emptyCodexUsage')} return buildIsolatedCodexArgs;`)(config, 'schema.json', values=>[...new Set(values.filter(Boolean))], ()=>{}, ()=>{}, 'route policy', {platform});
+const builder = builderForPlatform('win32');
+const explicitOptions = {
   cwd: 'lp-workspace', schema: 'schema.json', focusedContext:true, ephemeral:true,
   sandbox:'workspace-write', autoReview:true, sandboxNetworkAccess:true,
-});
+};
+const explicit = builder('output.json', ['job-artifacts', 'lp-workspace'], explicitOptions);
 assert.equal(explicit[explicit.indexOf('--sandbox')+1], 'workspace-write');
+assert.equal(explicit[explicit.indexOf('--cd')+1], 'lp-workspace');
+assert.deepEqual(explicit.flatMap((value,index)=>value==='--add-dir'?[explicit[index+1]]:[]), ['job-artifacts','lp-workspace']);
+assert.equal(explicit.filter(value=>value==='windows.sandbox="elevated"').length, 1);
 assert.ok(!explicit.includes('--approve-for-me'), 'CLI rejects combining the shortcut with --sandbox');
 assert.ok(explicit.includes('approval_policy="on-request"'));
 assert.ok(explicit.includes('approvals_reviewer="auto_review"'));
@@ -32,9 +37,13 @@ assert.ok(explicit.includes('--ignore-user-config') && explicit.includes('--igno
 assert.equal(explicit[explicit.indexOf('--model')+1], 'gpt-6-luna');
 const ec = builder('output.json', ['job-artifacts'], {});
 assert.ok(ec.includes('--approve-for-me'));
-assert.ok(!ec.includes('--sandbox') && !ec.some(v=>v.includes('network_access')));
+assert.ok(!ec.includes('--sandbox') && !ec.some(v=>v.includes('network_access')||v.includes('windows.sandbox')));
 const readOnly = builder('output.json', ['job-artifacts'], {sandbox:'read-only'});
-assert.ok(!readOnly.includes('--approve-for-me') && !readOnly.some(v=>v.includes('auto_review')||v.includes('network_access')));
+assert.ok(!readOnly.includes('--approve-for-me') && !readOnly.some(v=>v.includes('auto_review')||v.includes('network_access')||v.includes('windows.sandbox')));
+for (const platform of ['linux','darwin']) {
+  const nonWindows = builderForPlatform(platform)('output.json', ['job-artifacts','lp-workspace'], explicitOptions);
+  assert.deepEqual(nonWindows, explicit.filter((value,index)=>value!=='windows.sandbox="elevated"'&&explicit[index+1]!=='windows.sandbox="elevated"'), `${platform} retains the same contract without the Windows implementation override`);
+}
 const summarize = new Function(`${section('summarizeSequentialEcPriceResult', 'ecPriceTargetLabel')} return summarizeSequentialEcPriceResult;`)();
 assert.doesNotMatch(summarize({sites:[],lp:{status:'blocked'}},{targets:[],lpUpdate:true}), /EC反映済み0件/);
 assert.match(summarize({sites:[{status:'updated'}],lp:{status:'updated'}},{targets:['rakuten'],lpUpdate:true}), /EC反映済み1件/);
