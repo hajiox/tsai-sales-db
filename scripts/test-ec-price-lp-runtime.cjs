@@ -223,6 +223,18 @@ const lpFunction = new Function(...Object.keys(bindings), `async ${section('exec
   const writePromptBuilder=new Function(`${section('buildEcPriceWritePrompt','validateEcPricePlan')} return buildEcPriceWritePrompt;`)();
   assert.match(writePromptBuilder({targets:[],lpUpdate:true,lpNpmCachePath:cachePath},{}),/LP JOB-OWNED NPM CACHE/);
   assert.doesNotMatch(writePromptBuilder({targets:['amazon'],lpUpdate:false},{}),/LP JOB-OWNED NPM CACHE/);
+  const approvedLpPrompt=writePromptBuilder({targets:[],lpUpdate:true},{lp:{required:true}});
+  assert.match(approvedLpPrompt,/LP GIT APPROVAL:[\s\S]*separate single exec_command[\s\S]*sandbox_permissions=require_escalated/);
+  assert.match(approvedLpPrompt,/existing on-request\/auto_review gate must decide/);
+  assert.match(approvedLpPrompt,/exact planned source files[\s\S]*fixed production branch/);
+  assert.match(approvedLpPrompt,/each required Git execution[\s\S]*at most one formal approval request[\s\S]*approval is denied, unavailable, or prohibited[\s\S]*stop the LP/);
+  assert.match(approvedLpPrompt,/fetch before editing[\s\S]*fetch immediately before push[\s\S]*at most two fetch checks total[\s\S]*never re-request the same denied or unavailable execution/);
+  assert.match(approvedLpPrompt,/ordinary sandbox permissions/);
+  assert.match(approvedLpPrompt,/Never change sandbox\/approval settings[\s\S]*force-push or bypass a gate/);
+  assert.match(approvedLpPrompt,/Do not use this Git-only approval route for npm-cache EPERM, authentication\/MFA/);
+  for(const [parameters,plan] of [[{targets:['amazon'],lpUpdate:false},{}],[{targets:[],lpUpdate:true},{lp:{required:false}}]]) {
+    assert.doesNotMatch(writePromptBuilder(parameters,plan),/LP GIT APPROVAL/,'EC-only and non-required LP phases must not receive the Git approval route');
+  }
   assert.equal(result.planLp.project_root,task.lpResolvedSource.project_root);
   assert.equal(JSON.parse(fs.readFileSync(path.join(workDir,'ec-price-lp-plan.json'),'utf8')).lp.project_root,task.lpResolvedSource.project_root,'Persist the bound plan used by the writer');
   for(const call of calls){assert.equal(call.sandbox,'workspace-write');assert.equal(call.autoReview,true);assert.equal(call.sandboxNetworkAccess,true);}

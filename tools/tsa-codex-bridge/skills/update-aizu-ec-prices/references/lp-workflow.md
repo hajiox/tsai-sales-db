@@ -121,6 +121,8 @@ push・本番デプロイの直前に再度fetchし、本番ブランチが編�
 
 ## Git安全策
 
+- `workspace-write` 内でも `.git` は保護される。LP書込時の `git fetch origin`、計画済みソースファイルだけの `git add -- ...`、`git commit`、固定済み本番ブランチだけへの通常の `git push origin ...` は、それぞれ固定cloneを作業ディレクトリとする単独の `exec_command` に分け、正式な `sandbox_permissions=require_escalated` と当該Git操作の理由を指定して既存 `on-request` / `auto_review` 審査へ渡す。読取・編集・npm・スクリプトや別Git操作を同じコマンドへ混ぜない。各必須Git実行の正式承認要求は、`.git` の拒否後の要求を含め当該実行につき1回まで。編集前とpush直前の必須fetchは別の検証工程（合計最大2回）として維持し、同じ実行の拒否・利用不能後に再要求しない。拒否・利用不能・実ツール契約で禁止なら実理由で停止し、別経路へ切り替えない。読取Gitチェック、ソース編集、npm、公開確認は通常のsandbox内で行う。
+- この経路は保護された `.git` の当該操作だけに限定する。sandbox/承認設定、ACL、Gitディレクトリ・config・remote・ブランチ対応を変更せず、永続許可ルール・全ファイルstage・force push・承認回避を使わない。npm cacheのEPERM、認証・MFA、他の権限エラーをこのGit用経路で自動昇格しない。
 - 無関係なユーザー変更をステージしない。
 - 汚れた作業ツリーで対象ファイルに重複変更がある場合は、勝手に上書きせずユーザーへ確認する。
 - `git reset --hard` や `git checkout --` を使わない。
