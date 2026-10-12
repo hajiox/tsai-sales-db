@@ -143,6 +143,8 @@ const lpFunction = new Function(...Object.keys(bindings), `async ${section('exec
   assert.match(resolvedPrompt,/lp\.project_root=null/);
   assert.match(resolvedPrompt,/Do not run find-lp-source\.ps1/);
   assert.doesNotMatch(resolvedPrompt,/run find-lp-source\.ps1 with -FreshClone/,'Resolved jobs must not ask AI to resolve again');
+  assert.match(resolvedPrompt,/occurrence_evidence must contain exactly one supplied product block_id: the target block/);
+  assert.match(resolvedPrompt,/Never include excluded or other product block IDs in occurrence_evidence; put any excluded-product explanation and IDs in lp\.product_evidence instead/);
   const launches=[];
   let resolverOutput=JSON.stringify(resolvedInput),resolverExit=0,resolverHang=false,terminations=0;
   const prepareSource=new Function('join','spawn','heartbeat','terminateChildProcessTree','redactSensitiveEventText','validateEcPriceLpResolvedSource','verifyEcPriceLpResolvedGit','setTimeout',
@@ -225,6 +227,21 @@ const lpFunction = new Function(...Object.keys(bindings), `async ${section('exec
   const shippingBound=bindPublicPlan({lp:{updates:[shippingUpdate]}},{product_blocks:[shippingBlock]});
   assert.equal(shippingBound.issue,null,'明示された別建て送料を商品単価と混同しない');
   assert.deepEqual(shippingBound.bindings[0].shipping_prices,[300]);
+  // bc6cec17: listing excluded blocks in occurrence_evidence correctly blocked writing.
+  const onePackBlock={block_id:'LPB_78acad24490191b4',item_prices:[790],shipping_prices:[300]};
+  const excludedBlocks=[
+    {block_id:'LPB_ec090694a5f5f32f',item_prices:[1404]},
+    {block_id:'LPB_709406881394c748',item_prices:[3450]},
+    {block_id:'LPB_18e77c30489da867',item_prices:[1944]},
+  ];
+  const onePackEvidence={product_blocks:[...excludedBlocks,onePackBlock]};
+  const excludedEvidence='LPB_ec090694a5f5f32fは2食セット、LPB_709406881394c748は6食セット、LPB_18e77c30489da867はスープ5食セットで対象外。';
+  const targetEvidence='対象のLPB_78acad24490191b4はチャーシュー付き1食の商品カード、商品単価790円、別建て送料300円。';
+  const onePackUpdate={observed_price:790,target_price:885,occurrence_evidence:excludedEvidence+targetEvidence};
+  assert.match(bindPublicPlan({lp:{updates:[onePackUpdate]}},onePackEvidence).issue,/公開商品ブロック/,'Four IDs remain ambiguous even when three are described as excluded');
+  const onePackBound=bindPublicPlan({lp:{product_evidence:excludedEvidence,updates:[{...onePackUpdate,occurrence_evidence:targetEvidence}]}},onePackEvidence);
+  assert.equal(onePackBound.issue,null,'Excluded IDs belong in product evidence, leaving exactly one target ID per occurrence');
+  assert.deepEqual(onePackBound.bindings,[{block_id:onePackBlock.block_id,observed_price:790,target_price:885,shipping_prices:[300]}]);
   const bound=[{block_id:publicBlock.block_id,observed_price:1750,target_price:1944}];
   let deployed={product_blocks:[{...publicBlock,prices:[1944]}]};
   const verifyPublic = new Function('readRegisteredEcPriceLp',`async ${section('verifyRegisteredEcPriceLp', 'summarizeSequentialEcPriceResult')} return verifyRegisteredEcPriceLp;`)(async()=>deployed);
