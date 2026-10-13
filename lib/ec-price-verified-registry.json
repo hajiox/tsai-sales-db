@@ -55,6 +55,33 @@
           { "kind": "product_id", "value": "1732857167447033086" }
         ]
       }
+    },
+    {
+      "janCode": "4571318633816",
+      "identifiers": {
+        "amazon": [
+          { "kind": "asin", "value": "B0D5GYZ1QW" },
+          { "kind": "sku", "value": "3L-7D20-KWM0" }
+        ]
+      }
+    },
+    {
+      "janCode": "4571318633892",
+      "identifiers": {
+        "amazon": [
+          { "kind": "asin", "value": "B0F2FM8RN3" },
+          { "kind": "sku", "value": "HP-LI7Y-9KRA" }
+        ]
+      }
+    },
+    {
+      "janCode": "4571318634240",
+      "identifiers": {
+        "amazon": [
+          { "kind": "asin", "value": "B0D1NXL39Q" },
+          { "kind": "sku", "value": "Q3-M8OJ-YZTW" }
+        ]
+      }
     }
   ],
   "lpSources": [

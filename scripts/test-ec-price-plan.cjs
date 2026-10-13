@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const ts = require("typescript");
 
 const bridgeSource = fs.readFileSync(
   path.join(__dirname, "..", "tools", "tsa-codex-bridge", "bridge.mjs"),
@@ -80,6 +81,41 @@ assert.deepEqual(verifiedFiftyPack.identifiers.tiktok, [
   { kind: "base_product_id", value: "121847320" },
   { kind: "product_id", value: "1732857167447033086" },
 ]);
+const confirmedIeKProducts = [
+  { jan: "4571318633816", asin: "B0D5GYZ1QW", sku: "3L-7D20-KWM0", ean: "4571318634530", target: 885 },
+  { jan: "4571318633892", asin: "B0F2FM8RN3", sku: "HP-LI7Y-9KRA", ean: "4571318634837", target: 1404 },
+  { jan: "4571318634240", asin: "B0D1NXL39Q", sku: "Q3-M8OJ-YZTW", ean: "4571318634356", target: 3564 },
+];
+const registryModule = { exports: {} };
+const registryCompiled = ts.transpileModule(fs.readFileSync(
+  path.join(__dirname, "..", "lib", "ec-price-verified-registry.ts"), "utf8",
+), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
+new Function("require", "exports", "module", registryCompiled)((name) => {
+  if (name === "server-only") return {};
+  if (name === "@/lib/ec-price-verified-registry.json") return verifiedRegistry;
+  throw new Error(`Unexpected registry dependency: ${name}`);
+}, registryModule.exports, registryModule);
+const { getEcPriceVerifiedIdentifiers, ecPriceVerifiedIdentifiersMatch } = registryModule.exports;
+for (const product of confirmedIeKProducts) {
+  const identifiers = [
+    { kind: "asin", value: product.asin },
+    { kind: "sku", value: product.sku },
+  ];
+  assert.deepEqual(
+    verifiedRegistry.products.filter((entry) => entry.janCode === product.jan),
+    [{ janCode: product.jan, identifiers: { amazon: identifiers } }],
+    "人間が確定した主JANにAmazonだけを一意登録する",
+  );
+  assert.deepEqual(getEcPriceVerifiedIdentifiers(product.jan, ["amazon"]).amazon, identifiers);
+  assert.deepEqual(getEcPriceVerifiedIdentifiers(product.jan, ["yahoo"]).amazon, [], "EC scopeを拡大しない");
+  assert.deepEqual(getEcPriceVerifiedIdentifiers(product.ean, ["amazon"]).amazon, [], "EANを別主JANへ自動登録しない");
+  const other = confirmedIeKProducts.find((entry) => entry.jan !== product.jan);
+  assert.equal(ecPriceVerifiedIdentifiersMatch(
+    { amazon: [{ kind: "asin", value: other.asin }, { kind: "sku", value: other.sku }] },
+    getEcPriceVerifiedIdentifiers(product.jan, ["amazon"]),
+  ), false, "異なる販売個数の確定識別子は一致しない");
+}
+assert.deepEqual(getEcPriceVerifiedIdentifiers("4571318630000", ["amazon"]).amazon, []);
 assert.deepEqual(
   verifiedRegistry.lpSources.find((source) => source.host === "buta.aizubrandhall-lp2.com"),
   { host: "buta.aizubrandhall-lp2.com", githubRepository: "hajiox/BUTA", productionBranch: "main" },
@@ -744,6 +780,18 @@ const amazonPlan = {
   lp: noLpPlan,
 };
 assert.equal(validatePlan(amazonPlan, amazonParameters), null);
+for (const product of confirmedIeKProducts) {
+  const parameters = {
+    ...amazonParameters,
+    newPriceInclTax: product.target,
+    verifiedProductIdentifiers: getEcPriceVerifiedIdentifiers(product.jan, ["amazon"]),
+  };
+  const site = { ...amazonPlan.sites[0], target_price: product.target, product_identifier: `${product.asin} / ${product.sku}` };
+  assert.equal(validatePlan({ ...amazonPlan, sites: [site] }, parameters), null);
+  const other = confirmedIeKProducts.find((entry) => entry.jan !== product.jan);
+  assert.match(validatePlan({ ...amazonPlan, sites: [{ ...site, product_identifier: `${other.asin} / ${other.sku}` }] }, parameters), /確定登録と一致/);
+  assert.match(validatePlan({ ...amazonPlan, sites: [{ ...site, status: "not_found" }] }, parameters), /確定識別子があるため対象商品なしにできません/);
+}
 assert.match(
   validatePlan({ ...amazonPlan, sites: [{ ...amazonPlan.sites[0], product_identifier: "OTHER" }] }, amazonParameters),
   /確定登録と一致/,

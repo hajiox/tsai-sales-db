@@ -107,7 +107,8 @@ $files = @(
     @{ Relative = 'Skill-SKILL.md'; Source = (Join-Path $sourceRoot 'skills\update-aizu-ec-prices\SKILL.md'); Target = (Join-Path $skillDir 'SKILL.md') },
     @{ Relative = 'Skill-lp-workflow.md'; Source = (Join-Path $sourceRoot 'skills\update-aizu-ec-prices\references\lp-workflow.md'); Target = (Join-Path $skillDir 'references\lp-workflow.md') },
     @{ Relative = 'Skill-find-lp-source.ps1'; Source = (Join-Path $sourceRoot 'skills\update-aizu-ec-prices\scripts\find-lp-source.ps1'); Target = (Join-Path $skillDir 'scripts\find-lp-source.ps1') },
-    @{ Relative = 'Skill-read-lp-public-page.cjs'; Source = (Join-Path $sourceRoot 'skills\update-aizu-ec-prices\scripts\read-lp-public-page.cjs'); Target = (Join-Path $skillDir 'scripts\read-lp-public-page.cjs'); AllowCreate = $true }
+    @{ Relative = 'Skill-read-lp-public-page.cjs'; Source = (Join-Path $sourceRoot 'skills\update-aizu-ec-prices\scripts\read-lp-public-page.cjs'); Target = (Join-Path $skillDir 'scripts\read-lp-public-page.cjs'); AllowCreate = $true },
+    @{ Relative = 'Skill-verified-products.md'; Source = (Join-Path $sourceRoot 'skills\update-aizu-ec-prices\references\verified-products.md'); Target = (Join-Path $skillDir 'references\verified-products.md'); AllowCreate = $true }
 )
 foreach ($file in $files) {
     Assert-PlainPath $file.Source $sourceRoot | Out-Null

@@ -27,7 +27,7 @@ Chrome連係 → Chrome DevTools MCP → 最後にPC操作。同じ未完了の�
 
 - ECを変更するときは [references/site-playbooks.md](references/site-playbooks.md) を読む。
 - LPも変更するときは [references/lp-workflow.md](references/lp-workflow.md) を読む。
-- 既知のチャーシュー商品なら [references/verified-products.md](references/verified-products.md) も読み、識別子を手掛かりにする。識別子だけで決めず、現行の商品名・容量・保存方法も照合する。
+- 確定識別子が渡された商品、または既知の登録済み商品なら [references/verified-products.md](references/verified-products.md) の当該商品も読み、識別子を手掛かりにする。識別子だけで決めず、現行の商品名・容量・保存方法も照合する。
 
 ## 1. 改定条件を固定する
 
