@@ -311,6 +311,111 @@ const lpFunction = new Function(...Object.keys(bindings), `async ${section('exec
   assert.match(await verifyPublic('https://example.invalid/',[1944],[]),/根拠/);
   const readPublic = new Function('config','join','pathToFileURL',`async ${section('readRegisteredEcPriceLp', 'bindEcPriceLpPublicPlan')} return readRegisteredEcPriceLp;`)(config,path.join,require('node:url').pathToFileURL);
   await assert.rejects(readPublic('https://example.invalid/redirect'),/最終URL/);
+  const scopeStart=source.indexOf('const APPROVED_LP_PUBLICATION =');
+  const publicationScope=new Function(`${source.slice(scopeStart,source.indexOf('const CODEX_RUNTIME_CHECK_MS',scopeStart))} return APPROVED_LP_PUBLICATION;`)();
+  const parsePublication=new Function('APPROVED_LP_PUBLICATION',`${section('parseApprovedLpPublicationArgs','assertApprovedLpPublicationMaintenance')} return parseApprovedLpPublicationArgs;`)(publicationScope);
+  const approvalArgs=['--publish-approved-lp',publicationScope.jobId,publicationScope.commit,'--human-approved-at',new Date().toISOString(),'--maintenance-token','a'.repeat(32)];
+  const approval=parsePublication(approvalArgs);
+  assert.ok(Object.isFrozen(approval)); assert.equal(parsePublication([]),null);
+  for(const [index,value] of [[1,'another-job'],[2,'a'.repeat(40)],[3,'--skip-review'],[4,'not-a-date'],[4,publicationScope.declinedAt],[5,'--force'],[6,'../other']]) {
+    const args=[...approvalArgs];args[index]=value;assert.throws(()=>parsePublication(args),/固定対象/);
+  }
+  assert.throws(()=>parsePublication([...approvalArgs,'git push']),/固定対象/,'No arbitrary command or additional scope is accepted');
+  const appDir=path.join(fixture,'publication-app');fs.mkdirSync(appDir);
+  const maintenancePath=path.join(appDir,'bridge-maintenance.lock');fs.writeFileSync(maintenancePath,approval.maintenanceToken);
+  const checkMaintenance=new Function('APP_DIR','DEFAULT_APP_DIR','MAINTENANCE_PATH','resolve','join','existsSync','lstatSync','readFileSync',
+    `${section('assertApprovedLpPublicationMaintenance','readApprovedLpPublicationGit')} return assertApprovedLpPublicationMaintenance;`)(appDir,appDir,maintenancePath,path.resolve,path.join,fs.existsSync,fs.lstatSync,fs.readFileSync);
+  checkMaintenance(approval);assert.throws(()=>checkMaintenance({...approval,maintenanceToken:'b'.repeat(32)}),/maintenance/);
+  const pubRoot=path.join(config.workspace,'.lp-price-jobs',publicationScope.jobId,'.lp-price-jobs','publication-clone');fs.mkdirSync(path.join(pubRoot,'components'),{recursive:true});
+  const pubGit=(...args)=>require('node:child_process').execFileSync('git',['-C',pubRoot,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+  pubGit('init','-b','main');pubGit('config','user.name','Fixture');pubGit('config','user.email','fixture@example.invalid');
+  pubGit('remote','add','origin',`https://github.com/${publicationScope.repository}.git`);
+  const pubFile=path.join(pubRoot,publicationScope.file);
+  fs.writeFileSync(pubFile,'      price: "3,450円（税・送料込）",\n');pubGit('add','--',publicationScope.file);pubGit('commit','-m','Fixture base');
+  const pubParent=pubGit('rev-parse','HEAD');
+  fs.writeFileSync(pubFile,'      price: "3,564円（税・送料込）",\n');pubGit('add','--',publicationScope.file);pubGit('commit','-m','Fixture approved');
+  const pubCommit=pubGit('rev-parse','HEAD');
+  const fixtureScope={...publicationScope,parent:pubParent,commit:pubCommit};
+  const checkPublicationGit=new Function('APPROVED_LP_PUBLICATION','lstatSync','statSync','join','resolve','realpathSync','readApprovedLpPublicationGit',
+    `${section('verifyApprovedLpPublicationGit','verifyApprovedLpPublicationCards')} return verifyApprovedLpPublicationGit;`)(fixtureScope,fs.lstatSync,fs.statSync,path.join,path.resolve,fs.realpathSync,()=>{throw Error('Tests never contact GitHub');});
+  const readPublicationGit=(_root,args)=>args[0]==='ls-remote'?`${pubParent}\trefs/heads/main`:pubGit(...args);
+  assert.equal(checkPublicationGit({project_root:pubRoot},readPublicationGit),pubParent);
+  for(const pushUrl of ['https://github.com/other/repo.git',`https://github.com/${publicationScope.repository}.git\nhttps://github.com/other/repo.git`]) {
+    assert.throws(()=>checkPublicationGit({project_root:pubRoot},(root,args)=>args.includes('--push')?pushUrl:readPublicationGit(root,args)),/origin/,'All effective push destinations must match the one approved repository');
+  }
+  for(const [operation,replacement] of [['remote','https://github.com/other/repo.git'],['branch','other'],['rev-parse',pubParent],['rev-list',`${pubCommit} ${pubParent} ${pubParent}`],['status',' M unexpected'],['diff','unexpected-file'],['ls-remote',`${'f'.repeat(40)}\trefs/heads/main`]]) {
+    assert.throws(()=>checkPublicationGit({project_root:pubRoot},(root,args)=>args[0]===operation?replacement:readPublicationGit(root,args)),/一致|進んで/);
+  }
+  const linkedPubRoot=path.join(fixture,'publication-link');fs.symlinkSync(pubRoot,linkedPubRoot,process.platform==='win32'?'junction':'dir');
+  assert.throws(()=>checkPublicationGit({project_root:linkedPubRoot},readPublicationGit),/実clone/);
+  const verifyCards=new Function('APPROVED_LP_PUBLICATION',`${section('verifyApprovedLpPublicationCards','loadApprovedLpPublicationArtifacts')} return verifyApprovedLpPublicationCards;`)(publicationScope);
+  const publicationEvidence={http_status:200,final_url:publicationScope.url,product_blocks:[
+    {block_id:publicationScope.blockId,item_prices:[3564],shipping_prices:[]},
+    {block_id:'LPB_78acad24490191b4',item_prices:[885],shipping_prices:[300]},
+    {block_id:'LPB_ec090694a5f5f32f',item_prices:[1404],shipping_prices:[]},
+    {block_id:'LPB_18e77c30489da867',item_prices:[1944],shipping_prices:[]},
+  ]};
+  verifyCards(publicationEvidence,3564);
+  const changedShipping=structuredClone(publicationEvidence);changedShipping.product_blocks[1].shipping_prices=[301];
+  assert.throws(()=>verifyCards(changedShipping,3564),/送料/);
+  const missingCard=structuredClone(publicationEvidence);missingCard.product_blocks.pop();assert.throws(()=>verifyCards(missingCard,3564),/他商品/);
+  const publicationPrompt=new Function('APPROVED_LP_PUBLICATION','join','config',`${section('buildApprovedLpPublicationPrompt','runApprovedLpPublicationOnly')} return buildApprovedLpPublicationPrompt;`)(publicationScope,path.join,config)(approval,{source:{project_root:pubRoot}},publicationScope.parent);
+  assert.ok(publicationPrompt.indexOf('INITIATING HUMAN REQUEST')<publicationPrompt.indexOf('FIXED_SOURCE_DATA'));
+  assert.match(publicationPrompt,new RegExp(`git push origin ${publicationScope.commit}:refs/heads/main`));
+  assert.match(publicationPrompt,/formal exec_command sandbox_permissions=require_escalated/);
+  assert.match(publicationPrompt,/existing on-request\/auto_review gate must decide/);
+  assert.match(publicationPrompt,/Never retry the request, use an alternate push route/);
+  assert.match(publicationPrompt,/No browser tools, tabs, EC actions/);
+  const publicationWork=path.join(appDir,'jobs',publicationScope.jobId);fs.mkdirSync(publicationWork,{recursive:true});
+  const publicationSource={url:publicationScope.url,host:new URL(publicationScope.url).host,project_root:pubRoot,github_repository:publicationScope.repository,production_branch:'main',source_commit:pubParent,source_resolution:'vercel'};
+  const publicationPlan={status:'ready',sites:[],reference_standard_price:null,lp:{required:true,status:'planned',url:publicationScope.url,project_root:pubRoot,github_repository:publicationScope.repository,production_branch:'main',source_commit:pubParent,product_evidence:'Exact six-pack fixture',updates:[{source_file:publicationScope.file,occurrence_evidence:publicationScope.blockId,observed_price:3450,target_price:3564,pricing_basis:'standard_price'}]}};
+  const publicationPrior={status:'needs_review',lp:{status:'blocked',deployed_commit:null,changed_files:[publicationScope.file]}};
+  const artifactInputs={'ec-price-lp-source.json':publicationSource,'ec-price-lp-plan.json':publicationPlan,'ec-price-lp-result.json':publicationPrior};
+  for(const [file,value] of Object.entries(artifactInputs))fs.writeFileSync(path.join(publicationWork,file),JSON.stringify(value));
+  const lpPlanValidator=new Function('resolve','pathIsInside','config','statSync','realpathSync','isAbsolute',`${section('validateEcPriceLpPlan','pathIsInside')} return validateEcPriceLpPlan;`)(path.resolve,inside,config,fs.statSync,fs.realpathSync,path.isAbsolute);
+  const actualPlanValidator=new Function('validateEcPriceLpPlan',`${section('validateEcPricePlan','validateEcPriceLpPlan')} return validateEcPricePlan;`)(lpPlanValidator);
+  const loadPublication=new Function('APPROVED_LP_PUBLICATION','APP_DIR','join','lstatSync','resolve','realpathSync','statSync','readFileSync','config','validateEcPriceLpResolvedSource','validateEcPricePlan',
+    `${section('loadApprovedLpPublicationArtifacts','buildApprovedLpPublicationPrompt')} return loadApprovedLpPublicationArtifacts;`)(fixtureScope,appDir,path.join,fs.lstatSync,path.resolve,fs.realpathSync,fs.statSync,fs.readFileSync,config,validateSource,actualPlanValidator);
+  assert.equal(loadPublication().source.project_root,pubRoot,'Validate the real resolver boundary and existing plan validator together');
+  for(const [file,key,value] of [['ec-price-lp-source.json','source_commit','f'.repeat(40)],['ec-price-lp-source.json','github_repository','other/repo'],['ec-price-lp-plan.json','status','blocked'],['ec-price-lp-result.json','status','completed']]) {
+    const original=fs.readFileSync(path.join(publicationWork,file),'utf8');const bad=JSON.parse(original);bad[key]=value;fs.writeFileSync(path.join(publicationWork,file),JSON.stringify(bad));
+    assert.throws(()=>loadPublication(),/一致/);fs.writeFileSync(path.join(publicationWork,file),original);
+  }
+  const mixedPlan=structuredClone(publicationPlan);mixedPlan.lp.updates[0].occurrence_evidence+=' LPB_78acad24490191b4';fs.writeFileSync(path.join(publicationWork,'ec-price-lp-plan.json'),JSON.stringify(mixedPlan));assert.throws(()=>loadPublication(),/計画対象/);fs.writeFileSync(path.join(publicationWork,'ec-price-lp-plan.json'),JSON.stringify(publicationPlan));
+  const lockFunction=new Function('mkdirSync','APP_DIR','existsSync','LOCK_PATH','readFileSync','isProcessRunning','process','rmSync','openSync','writeFileSync',
+    `${section('acquireLock','isProcessRunning')} return acquireLock;`)(()=>{},appDir,()=>true,'fixture-lock',()=>String(process.pid),()=>true,{exit:()=>{}},()=>{throw Error('Do not remove live lock');},()=>{throw Error('Do not replace live lock');},()=>{});
+  assert.throws(()=>lockFunction(true),/既存Bridgeが生存中/);
+  fs.writeFileSync(path.join(publicationWork,'ec-price-lp-result.json'),'original blocked history');
+  let publicationCalls=0;
+  const runtimeBindings={
+    APPROVED_LP_PUBLICATION:publicationScope,config:{...config,workerRole:'interactive',executionMode:'interactive'},
+    assertApprovedLpPublicationMaintenance:()=>{},emptyCodexUsage:()=>({}),startDesktopMonitor:()=>{},writeBridgeState:()=>{},
+    loadApprovedLpPublicationArtifacts:()=>({workDir:publicationWork,source:{project_root:pubRoot},plan:{sites:[],lp:{updates:[{target_price:3564}]}},parameters:{targets:[],lpUpdate:true,lpUrl:publicationScope.url,newPriceInclTax:3564}}),
+    verifyApprovedLpPublicationGit:()=>publicationScope.parent,
+    readRegisteredEcPriceLp:async()=>({...publicationEvidence,product_blocks:publicationEvidence.product_blocks.map(b=>b.block_id===publicationScope.blockId?{...b,item_prices:[3450]}:b)}),
+    verifyApprovedLpPublicationCards:verifyCards,createHash:require('node:crypto').createHash,join:path.join,existsSync:fs.existsSync,
+    openSync:fs.openSync,writeFileSync:fs.writeFileSync,closeSync:fs.closeSync,
+    runEcPriceCodexPhase:async()=>{publicationCalls++;return {exitCode:0,result:{status:'needs_review',summary:'automatic review declined',lp:{status:'blocked'}}};},
+    EC_PRICE_RESULT_SCHEMA:'schema',buildApprovedLpPublicationPrompt:()=>publicationPrompt,validateEcPriceResultV2:()=>null,
+    verifyRegisteredEcPriceLp:async()=>null,updateJob:async()=>{},redactSensitiveEventText:String,process:{exitCode:0},
+  };
+  const publicationRunner=overrides=>{const b={...runtimeBindings,...overrides};return new Function(...Object.keys(b),
+    `let currentJobId,currentJobIsLocal,currentJobCodexUsage; async ${section('runApprovedLpPublicationOnly','scopeEcPriceSiteParameters')} return runApprovedLpPublicationOnly;`)(...Object.values(b));};
+  const publicationRuntime=publicationRunner({});
+  await publicationRuntime(approval);assert.equal(publicationCalls,1);
+  await assert.rejects(publicationRuntime(approval),/すでに実行/);assert.equal(publicationCalls,1,'A declined publication cannot be retried with the same human authorization');
+  const completedPublication={status:'completed',summary:'Verified',new_standard_price:3564,sites:[],lp:{required:true,url:publicationScope.url,status:'updated',final_prices:[3564],changed_files:[publicationScope.file],deployment_url:publicationScope.url,deployed_commit:publicationScope.commit}};
+  let published=false;const publicationStates=[];
+  const successfulPublication=publicationRunner({
+    verifyApprovedLpPublicationGit:()=>published?publicationScope.commit:publicationScope.parent,
+    readRegisteredEcPriceLp:async()=>published?publicationEvidence:await runtimeBindings.readRegisteredEcPriceLp(),
+    runEcPriceCodexPhase:async options=>{assert.equal(options.autoReview,true);assert.equal(options.sandbox,'workspace-write');assert.equal(options.workspaceDir,pubRoot);assert.equal(options.maxTemporaryTabs,0);published=true;return {exitCode:0,result:completedPublication};},
+    updateJob:async(_id,state)=>publicationStates.push(state.status),
+  });
+  await successfulPublication({...approval,humanApprovedAt:new Date(Date.parse(approval.humanApprovedAt)+1).toISOString()});
+  assert.deepEqual(publicationStates,['completed']);
+  await publicationRunner({verifyApprovedLpPublicationGit:()=>publicationScope.commit,readRegisteredEcPriceLp:async()=>publicationEvidence,runEcPriceCodexPhase:async()=>{throw Error('Already-published must not start another CLI or push');}})({...approval,humanApprovedAt:new Date(Date.parse(approval.humanApprovedAt)+2).toISOString()});
+  assert.equal(fs.readFileSync(path.join(publicationWork,'ec-price-lp-result.json'),'utf8'),'original blocked history');
   console.log('LP phase sandbox, scoped workspace, resolver, browser guards and failure-message tests passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>{
   // Remove only the unique temporary fixture created by this test.

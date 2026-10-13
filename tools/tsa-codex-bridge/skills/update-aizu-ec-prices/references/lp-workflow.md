@@ -121,6 +121,24 @@ push・本番デプロイの直前に再度fetchし、本番ブランチが編�
 
 ## Git安全策
 
+### 今回だけの承認済みcommit公開継続（2026-10-13）
+
+`--publish-approved-lp` は、job `b533dc8e-b7f7-4a49-a6fc-16ddcf0508e0` で作成済みの `hajiox/ie-k` / `main` のcommit `6d7f5f1cd9ce7f1ccc85db0388b3a712580e0a8d` だけを扱う復旧入口である。人間がこのexact commitのpushと登録LP公開を新たに明示承認した時だけ使用する。通常ジョブ、任意SHA/branch、別商品の公開、拒否後の無承認再要求へ拡張しない。編集・commit・依存導入・再buildはしない。元のblocked結果を保持し、別名のrequest/result/eventsと統合monitorに継続結果を残す。同じ人間承認日時の要求は1回だけで、正式審査が再び拒否されたら停止する。
+
+運用者は既存 `update-ec-lp-runtime.ps1` と同じPID・作成時刻・role・lock・親supervisor・子Codexなし・config hash検証を使い、次の順で既存interactive Bridgeを排他的に引き継ぐ。workerが稼働中なら停止せず待つ。headlessや他システムは停止・設定変更しない。
+
+1. `bridge-maintenance.lock` がないことを確認し、32桁hexのnonceだけをUTF-8・CreateNewで保存する。既存maintenanceを上書きしない。
+2. 既存workerがidleで同じnonceを `maintenanceObserved` に返したことと生存PID/lock/parent/子なしを再検証する。既存supervisorはこのmaintenance中に通常workerを再起動しない。
+3. 確認済みidle interactive workerだけを停止し、PID消滅を確認する。生存lockを削除・強奪しない。
+4. 同じAPP_DIR/configで次の固定入口を1回実行する。`--human-approved-at` は今回の実在する明示人間承認を記録したISO日時、tokenは自分が作ったnonceを渡す。通常claim loopには入らない。
+
+```powershell
+node '<installed Bridgeの絶対パス>/bridge.mjs' --publish-approved-lp b533dc8e-b7f7-4a49-a6fc-16ddcf0508e0 6d7f5f1cd9ce7f1ccc85db0388b3a712580e0a8d --human-approved-at '<承認記録ISO日時>' --maintenance-token '<所有nonce>'
+```
+
+5. 成否にかかわらずone-shot終了/lock解放を確認し、finallyで内容が自分のnonceと一致するmaintenanceだけを除去する。既存supervisorによる通常interactive workerの復帰、新PID/heartbeat/role/config hashとheadless PID不変を確認する。子処理が生きていればlock/maintenanceを解放しない。
+6. 成功時も元jobを書き換えない。登録LPで6食3,564円、1食885円＋送料300円、2食1,404円、スープ1,944円を確認した後、既存UIのLP-only未完了再実行でfresh cloneと公開URLがalready-currentであることを確認し、DBの正式完了を残す。追加pushや別commitは不要。
+
 - `workspace-write` 内でも `.git` は保護される。LP書込時の `git fetch origin`、計画済みソースファイルだけの `git add -- ...`、`git commit`、固定済み本番ブランチだけへの通常の `git push origin ...` は、それぞれ固定cloneを作業ディレクトリとする単独の `exec_command` に分け、正式な `sandbox_permissions=require_escalated` と当該Git操作の理由を指定して既存 `on-request` / `auto_review` 審査へ渡す。読取・編集・npm・スクリプトや別Git操作を同じコマンドへ混ぜない。各必須Git実行の正式承認要求は、`.git` の拒否後の要求を含め当該実行につき1回まで。編集前とpush直前の必須fetchは別の検証工程（合計最大2回）として維持し、同じ実行の拒否・利用不能後に再要求しない。拒否・利用不能・実ツール契約で禁止なら実理由で停止し、別経路へ切り替えない。読取Gitチェック、ソース編集、npm、公開確認は通常のsandbox内で行う。
 - この経路は保護された `.git` の当該操作だけに限定する。sandbox/承認設定、ACL、Gitディレクトリ・config・remote・ブランチ対応を変更せず、永続許可ルール・全ファイルstage・force push・承認回避を使わない。npm cacheのEPERM、認証・MFA、他の権限エラーをこのGit用経路で自動昇格しない。
 - 無関係なユーザー変更をステージしない。

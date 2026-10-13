@@ -1,7 +1,7 @@
 import { taskModelPolicy, acceptsTaskModelParameters, applyTaskModelPolicy, TASK_MODEL_POLICIES, TASK_MODEL_POLICY_VERSION, BROWSER_COMPLETION_POLICY } from "./task-model-policy.mjs";
 import { ecJobLifecycleStop, isRetiredEcArchiveJob } from "./ec-channel-lifecycle.mjs";
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { basename, dirname, extname, isAbsolute, join, resolve, sep } from "node:path";
 import { homedir } from "node:os";
@@ -43,6 +43,15 @@ import {
 const { writeMonitorStateJson } = monitorStateFile;
 
 const VERSION = "1.9.101";
+// This recovery entry is intentionally limited to the one reviewed, unpushed LP commit.
+const APPROVED_LP_PUBLICATION = Object.freeze({
+  jobId: "b533dc8e-b7f7-4a49-a6fc-16ddcf0508e0",
+  commit: "6d7f5f1cd9ce7f1ccc85db0388b3a712580e0a8d",
+  parent: "053a1b9b86485db6646cb3a7df8aff69ea2df2c4",
+  declinedAt: "2026-10-12T10:53:07.761Z",
+  repository: "hajiox/ie-k", branch: "main", url: "https://ie-k.aizubrandhall-lp2.com/",
+  file: "components/iekei-ramen-lp.tsx", blockId: "LPB_709406881394c748", observedPrice: 3450, targetPrice: 3564,
+});
 const CODEX_RUNTIME_CHECK_MS = 60_000;
 const FINAL_DESKTOP_MONITOR_STATUSES = new Set(["completed", "waiting_for_user", "needs_review", "failed", "cancelled"]);
 const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
@@ -149,8 +158,10 @@ const HEADLESS_SAFE_TASK_KEYS = new Set([
   "recipe_reviews_analyze",
 ]);
 
+const publicationOnlyRequest = parseApprovedLpPublicationArgs(process.argv.slice(2));
+if (publicationOnlyRequest) assertApprovedLpPublicationMaintenance(publicationOnlyRequest);
 mkdirSync(LOG_DIR, { recursive: true });
-acquireLock();
+acquireLock(Boolean(publicationOnlyRequest));
 
 const config = loadConfig();
 mkdirSync(UNIFIED_MONITOR_STATE_DIR, { recursive: true });
@@ -208,7 +219,12 @@ publishDesktopMonitorIdle();
 ensureUnifiedDesktopMonitor(false);
 log(`Codex: ${codexPath} (${codexRuntime.version || "version unknown"})`);
 log(`Skill contract: ${SKILL_CONTRACT.version} (${Object.values(TASK_CONTRACTS).filter((entry) => entry.skill).length} dedicated Skills)`);
-void main();
+if (publicationOnlyRequest) {
+  void runApprovedLpPublicationOnly(publicationOnlyRequest).catch((error) => {
+    log(`LP publication-only stopped: ${redactSensitiveEventText(error.message).slice(0, 500)}`);
+    process.exitCode = 1;
+  }).finally(() => { stopping = true; writeBridgeState(); releaseLock(); });
+} else void main();
 
 async function main() {
   while (!stopping) {
@@ -2988,6 +3004,162 @@ async function executeSingleEcPriceLp({ job, workDir, parameters, index, totalSt
     referencePrice: positiveEcPriceInteger(plan.reference_standard_price),
     operatorWait: result.status === "waiting_for_user" || browserPermissionRequired(result),
   };
+}
+
+function parseApprovedLpPublicationArgs(args) {
+  if (!args.length) return null;
+  const fixed = APPROVED_LP_PUBLICATION;
+  if (args.length !== 7 || args[0] !== "--publish-approved-lp" || args[1] !== fixed.jobId || args[2] !== fixed.commit
+    || args[3] !== "--human-approved-at" || args[5] !== "--maintenance-token"
+    || !/^[a-f0-9]{32}$/.test(args[6]) || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(args[4])
+    || !Number.isFinite(Date.parse(args[4])) || new Date(args[4]).toISOString() !== args[4]
+    || Date.parse(args[4]) <= Date.parse(fixed.declinedAt)
+    || Date.parse(args[4]) > Date.now() + 60_000) throw new Error("LP公開継続の固定対象・人間承認引数が不正です");
+  return Object.freeze({ jobId: fixed.jobId, commit: fixed.commit, humanApprovedAt: args[4], maintenanceToken: args[6] });
+}
+
+function assertApprovedLpPublicationMaintenance(request) {
+  if (resolve(APP_DIR).toLowerCase() !== resolve(DEFAULT_APP_DIR).toLowerCase()
+    || resolve(MAINTENANCE_PATH).toLowerCase() !== resolve(join(APP_DIR, "bridge-maintenance.lock")).toLowerCase()
+    || !existsSync(MAINTENANCE_PATH) || lstatSync(MAINTENANCE_PATH).isSymbolicLink()
+    || readFileSync(MAINTENANCE_PATH, "utf8") !== request.maintenanceToken) throw new Error("LP公開継続の排他的maintenance引継ぎを確認できません");
+}
+
+function readApprovedLpPublicationGit(projectRoot, args) {
+  const result = spawnSync("git", ["-C", projectRoot, ...args], {
+    cwd: projectRoot, encoding: "utf8", windowsHide: true, timeout: 30_000, maxBuffer: 64 * 1024,
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1" },
+  });
+  if (result.error || result.status !== 0) throw new Error("LP公開継続の読取Git検証に失敗しました");
+  return String(result.stdout || "").trim();
+}
+
+function verifyApprovedLpPublicationGit(source, git = readApprovedLpPublicationGit) {
+  const fixed = APPROVED_LP_PUBLICATION;
+  if (lstatSync(source.project_root).isSymbolicLink() || lstatSync(join(source.project_root, ".git")).isSymbolicLink()
+    || !statSync(join(source.project_root, ".git")).isDirectory()
+    || resolve(realpathSync(source.project_root)).toLowerCase() !== resolve(source.project_root).toLowerCase()) throw new Error("LP公開継続の実cloneが変わっています");
+  const read = (...args) => git(source.project_root, args);
+  if (read("remote", "get-url", "origin") !== `https://github.com/${fixed.repository}.git`
+    || read("remote", "get-url", "--push", "--all", "origin") !== `https://github.com/${fixed.repository}.git`
+    || read("branch", "--show-current") !== fixed.branch || read("rev-parse", "HEAD") !== fixed.commit
+    || read("rev-list", "--parents", "-n", "1", "HEAD") !== `${fixed.commit} ${fixed.parent}`
+    || read("status", "--porcelain") || read("diff", "--name-only", fixed.parent, fixed.commit) !== fixed.file) throw new Error("LP公開継続のHEAD・親・origin・本番ブランチ・変更ファイル・clean状態が一致しません");
+  const diff = read("diff", "--unified=0", fixed.parent, fixed.commit, "--", fixed.file);
+  const changed = diff.split(/\r?\n/).filter((line) => /^[+-]/.test(line) && !/^(---|\+\+\+)/.test(line));
+  if (changed.length !== 2 || changed[0].trim() !== '-      price: "3,450円（税・送料込）",'
+    || changed[1].trim() !== '+      price: "3,564円（税・送料込）",') throw new Error("LP公開継続の承認済み差分と一致しません");
+  const remote = read("ls-remote", "--exit-code", "origin", `refs/heads/${fixed.branch}`).split(/\s+/);
+  if (remote.length !== 2 || remote[1] !== `refs/heads/${fixed.branch}` || ![fixed.parent, fixed.commit].includes(remote[0])) throw new Error("LP公開継続の本番ブランチが承認時から進んでいます");
+  return remote[0];
+}
+
+function verifyApprovedLpPublicationCards(evidence, sixPackPrice) {
+  if (evidence?.http_status !== 200 || evidence.final_url !== APPROVED_LP_PUBLICATION.url) throw new Error("LP公開継続の登録URLを確認できません");
+  for (const [blockId, price, shipping] of [
+    [APPROVED_LP_PUBLICATION.blockId, sixPackPrice, []], ["LPB_78acad24490191b4", 885, [300]],
+    ["LPB_ec090694a5f5f32f", 1404, []], ["LPB_18e77c30489da867", 1944, []],
+  ]) {
+    const matches = (evidence.product_blocks || []).filter((block) => block.block_id === blockId);
+    if (!matches.length || matches.some((block) => JSON.stringify(block.item_prices) !== JSON.stringify([price])
+      || JSON.stringify(block.shipping_prices) !== JSON.stringify(shipping))) throw new Error("LP公開継続の対象価格・他商品・送料条件が一致しません");
+  }
+}
+
+function loadApprovedLpPublicationArtifacts() {
+  const fixed = APPROVED_LP_PUBLICATION;
+  const workDir = join(APP_DIR, "jobs", fixed.jobId);
+  const read = (name) => {
+    const file = join(workDir, name);
+    if (lstatSync(workDir).isSymbolicLink() || lstatSync(file).isSymbolicLink()
+      || resolve(realpathSync(file)).toLowerCase() !== resolve(file).toLowerCase() || statSync(file).size > 64 * 1024) throw new Error("LP公開継続の保存証跡が不正です");
+    return JSON.parse(readFileSync(file, "utf8"));
+  };
+  const source = read("ec-price-lp-source.json"), plan = read("ec-price-lp-plan.json"), prior = read("ec-price-lp-result.json");
+  const parameters = { targets: [], newPriceInclTax: fixed.targetPrice, lpUpdate: true, lpUrl: fixed.url,
+    lpWorkspaceRoot: join(config.workspace, ".lp-price-jobs", fixed.jobId), siteBaselines: {}, recoveryPlanSites: [] };
+  const validated = validateEcPriceLpResolvedSource({ ...source, cloned: true, project_roots: [source.project_root] }, parameters);
+  if (source.url !== fixed.url || source.github_repository !== fixed.repository || source.production_branch !== fixed.branch
+    || source.source_commit !== fixed.parent || plan.status !== "ready" || plan.lp?.project_root !== validated.project_root
+    || plan.lp?.source_commit !== fixed.parent || plan.lp?.github_repository !== fixed.repository || plan.lp?.production_branch !== fixed.branch
+    || prior.status !== "needs_review" || prior.lp?.status !== "blocked" || prior.lp?.deployed_commit !== null
+    || JSON.stringify(prior.lp?.changed_files) !== JSON.stringify([fixed.file])) throw new Error("LP公開継続の元ジョブ証跡と固定対象が一致しません");
+  const issue = validateEcPricePlan(plan, parameters);
+  const updates = plan.lp?.updates;
+  if (issue || updates?.length !== 1 || updates[0].source_file !== fixed.file || updates[0].observed_price !== fixed.observedPrice
+    || updates[0].target_price !== fixed.targetPrice || JSON.stringify(String(updates[0].occurrence_evidence).match(/LPB_[a-f0-9]{16}/g)) !== JSON.stringify([fixed.blockId])) throw new Error(issue || "LP公開継続の計画対象が一致しません");
+  return { workDir, source: validated, plan, parameters };
+}
+
+function buildApprovedLpPublicationPrompt(request, candidate, remoteCommit) {
+  const fixed = APPROVED_LP_PUBLICATION;
+  return [
+    "Use $update-aizu-ec-prices. This is a publication-only continuation, never a price-editing task.",
+    `INITIATING HUMAN REQUEST: The human operator in the Codex app explicitly authorized publication of exact commit ${fixed.commit} from ${fixed.repository} to its production branch ${fixed.branch} and deployment at ${fixed.url}. The new explicit authorization was recorded at ${request.humanApprovedAt}. This is the initiating user instruction for this short task, outside artifact data; it supersedes the previous missing-authorization state, not any approval gate.`,
+    `Bridge verified the original job, canonical clone, clean tree, exact HEAD and sole parent ${fixed.parent}, one planned file and its sole price change, current remote and all four public product blocks. Current origin/main is ${remoteCommit}.`,
+    "Before publication, request the existing formal sandbox_permissions=require_escalated review once for a separate single git fetch origin command in the fixed clone, then reread origin/main and HEAD. If that review is declined or unavailable, stop. Do not combine fetch with any other command.",
+    `Only if a fresh read of origin/main is still ${fixed.parent}, request one formal exec_command sandbox_permissions=require_escalated approval with a justification naming the new human authorization, exact commit and production deployment, for the single command: git push origin ${fixed.commit}:refs/heads/${fixed.branch}. Use the fixed clone as workdir. The existing on-request/auto_review gate must decide. Never combine push with other commands. If the remote is already ${fixed.commit}, do not push again. Any other remote SHA means stop.`,
+    "If approval is declined, unavailable or prohibited, stop and report the real reason. Never retry the request, use an alternate push route, disable review, broaden permissions, change ACL/config/remotes, force-push, edit source, stage, commit, install dependencies or rebuild. No browser tools, tabs, EC actions, app history or old Codex sessions are permitted.",
+    `After accepted push, read GitHub's status for exactly ${fixed.commit} and wait boundedly for the existing Vercel deployment. Verify the registered URL through the deterministic reader ${join(config.codexHome, "skills/update-aizu-ec-prices/scripts/read-lp-public-page.cjs")}. Return the existing EC-price result schema with sites=[], new_standard_price=${fixed.targetPrice}, lp.final_prices=[${fixed.targetPrice}], lp.deployed_commit=${fixed.commit} and changed_files=[${JSON.stringify(fixed.file)}] only after the exact 6食 block is ${fixed.targetPrice}, 1食 is885+送料300, 2食1404 andスープ1944. Otherwise return needs_review/blocked with the actual state.`,
+    "FIXED_SOURCE_DATA:", JSON.stringify(candidate.source),
+  ].join("\n");
+}
+
+async function runApprovedLpPublicationOnly(request) {
+  const fixed = APPROVED_LP_PUBLICATION;
+  if (config.workerRole !== "interactive" || config.executionMode !== "interactive") throw new Error("LP公開継続は既存interactive Bridgeだけで実行できます");
+  assertApprovedLpPublicationMaintenance(request);
+  currentJobId = fixed.jobId; currentJobIsLocal = true; currentJobCodexUsage = emptyCodexUsage();
+  const job = { id: fixed.jobId, task_key: "ec_price_update", parameters: { recipeName: "IE-K6食 承認済みcommitのLP公開継続", targets: [] } };
+  startDesktopMonitor(job); writeBridgeState();
+  let outputFile;
+  try {
+    const candidate = loadApprovedLpPublicationArtifacts();
+    const remoteCommit = verifyApprovedLpPublicationGit(candidate.source);
+    const evidence = await readRegisteredEcPriceLp(fixed.url);
+    const publicPrice = evidence.product_blocks?.find((block) => block.block_id === fixed.blockId)?.item_prices?.[0];
+    if (![fixed.observedPrice, fixed.targetPrice].includes(publicPrice)) throw new Error("LP公開継続の現行価格が承認範囲外です");
+    verifyApprovedLpPublicationCards(evidence, publicPrice);
+    const key = createHash("sha256").update(`${fixed.jobId}:${fixed.commit}:${request.humanApprovedAt}`).digest("hex").slice(0, 20);
+    outputFile = join(candidate.workDir, `ec-price-lp-publication-${key}.json`);
+    const requestFile = join(candidate.workDir, `ec-price-lp-publication-${key}.request.json`);
+    if (existsSync(requestFile) || existsSync(outputFile)) throw new Error("同じ人間承認の公開継続はすでに実行されています。再要求しません");
+    const fd = openSync(requestFile, "wx");
+    try { writeFileSync(fd, JSON.stringify({ jobId: fixed.jobId, commit: fixed.commit, humanApprovedAt: request.humanApprovedAt, source: "codex_app_explicit_human_approval" }), "utf8"); }
+    finally { closeSync(fd); }
+    let result;
+    if (remoteCommit === fixed.commit && publicPrice === fixed.targetPrice) {
+      result = { status: "completed", summary: "承認済みcommitはすでに公開済みです。追加pushせず確認しました", new_standard_price: fixed.targetPrice, sites: [],
+        lp: { required: true, url: fixed.url, status: "updated", final_prices: [fixed.targetPrice], changed_files: [fixed.file], deployment_url: fixed.url, deployed_commit: fixed.commit, message: "公開価格と他商品・送料を確認済み" } };
+    } else {
+      if (remoteCommit === fixed.parent && publicPrice !== fixed.observedPrice) throw new Error("公開価格と本番commitの対応が一致しません");
+      const phase = await runEcPriceCodexPhase({ job, workDir: candidate.workDir, workspaceDir: candidate.source.project_root,
+        sandbox: "workspace-write", autoReview: true, sandboxNetworkAccess: true, outputFile,
+        jsonlLog: join(candidate.workDir, `ec-price-lp-publication-${key}.events.jsonl`), schema: EC_PRICE_RESULT_SCHEMA,
+        prompt: buildApprovedLpPublicationPrompt(request, candidate, remoteCommit), progressStart: 10, progressMax: 95,
+        eventType: "ec_price_lp_publication_only", activityLabel: "人間が承認したexact commitだけを審査・公開確認しています", abortOnTabPolicyViolation: true, maxTemporaryTabs: 0 });
+      if (phase.exitCode !== 0 || phase.tabPolicyViolation || !phase.result) throw new Error(phase.tabPolicyViolation || "LP公開継続セッションが正常な結果を返しませんでした");
+      result = phase.result;
+    }
+    const issue = validateEcPriceResultV2(result, candidate.parameters, candidate.plan);
+    if (issue) throw new Error(issue);
+    if (!["completed", "needs_review", "waiting_for_user", "failed"].includes(result.status)) throw new Error("LP公開継続の結果状態が不正です");
+    const finalRemote = verifyApprovedLpPublicationGit(candidate.source);
+    if (result.status === "completed") {
+      if (result.lp.deployed_commit !== fixed.commit || JSON.stringify(result.lp.changed_files) !== JSON.stringify([fixed.file])
+        || finalRemote !== fixed.commit) throw new Error("LP公開継続の完了commitが一致しません");
+      const verification = await verifyRegisteredEcPriceLp(fixed.url, [fixed.targetPrice], [{ block_id: fixed.blockId, target_price: fixed.targetPrice, shipping_prices: [] }]);
+      if (verification) throw new Error(verification);
+      verifyApprovedLpPublicationCards(await readRegisteredEcPriceLp(fixed.url), fixed.targetPrice);
+    } else process.exitCode = 1;
+    writeFileSync(outputFile, JSON.stringify(result), "utf8");
+    await updateJob(fixed.jobId, { status: result.status, progress: result.status === "completed" ? 100 : 95, currentStep: result.summary, result });
+  } catch (error) {
+    const message = redactSensitiveEventText(error.message).slice(0, 800);
+    if (outputFile) writeFileSync(`${outputFile}.stop.json`, JSON.stringify({ status: "needs_review", message }), "utf8");
+    await updateJob(fixed.jobId, { status: "needs_review", progress: 95, currentStep: message });
+    throw error;
+  }
 }
 
 function scopeEcPriceSiteParameters(parameters, site, referenceStandardPrice = null) {
@@ -8593,12 +8765,15 @@ function mimeType(path) {
   }[extname(path).toLowerCase()] || "application/octet-stream";
 }
 
-function acquireLock() {
+function acquireLock(failIfRunning = false) {
   mkdirSync(APP_DIR, { recursive: true });
   if (existsSync(LOCK_PATH)) {
     const pid = Number(readFileSync(LOCK_PATH, "utf8"));
     if (pid) {
-      if (isProcessRunning(pid)) process.exit(0);
+      if (isProcessRunning(pid)) {
+        if (failIfRunning) throw new Error("既存Bridgeが生存中です。idle maintenance引継ぎ前の公開継続は実行しません");
+        process.exit(0);
+      }
       rmSync(LOCK_PATH, { force: true });
     }
   }
