@@ -16,7 +16,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { calculateCharSiuProduction, normalizeCharSiuDate } from "@/lib/char-siu-production";
+import { calculateCharSiuProduction, charSiuStageLaborFromSnapshot, normalizeCharSiuDate } from "@/lib/char-siu-production";
 
 type Settings = {
   hourly_wage: number;
@@ -64,6 +64,10 @@ type ProductionRun = {
   packaging_date: string | null;
   worker_count: number;
   work_hours: number;
+  cooking_worker_count: number | null;
+  cooking_work_hours: number | null;
+  packaging_worker_count: number | null;
+  packaging_work_hours: number | null;
   hourly_wage: number;
   total_person_hours: number;
   material_cost: number;
@@ -85,8 +89,10 @@ type ProductionRun = {
 type RunDraft = {
   productionDate: string;
   packagingDate: string;
-  workerCount: string;
-  workHours: string;
+  cookingWorkerCount: string;
+  cookingWorkHours: string;
+  packagingWorkerCount: string;
+  packagingWorkHours: string;
   hourlyWage: string;
   notes: string;
   materials: Array<{
@@ -176,9 +182,14 @@ export default function CharSiuProductionCostPage() {
   const selectedRun = runs.find((run) => run.id === selectedId) || null;
   const preview = useMemo(() => {
     if (!draft) return null;
+    const stageLabor = stageLaborFromDraft(draft);
+    // Preview-only aggregate: saved hours can differ from rounded legacy worker/time
+    // columns. This internal 1 × aggregate is never displayed as staffing or saved.
+    const savedPersonHours = Number(selectedRun?.total_person_hours || 0);
     return calculateCharSiuProduction({
-      workerCount: Number(draft.workerCount),
-      workHours: Number(draft.workHours),
+      workerCount: stageLabor?.cookingWorkerCount ?? 1,
+      workHours: stageLabor?.cookingWorkHours ?? savedPersonHours,
+      ...(stageLabor || {}),
       hourlyWage: Number(draft.hourlyWage),
       materials: draft.materials.map((material) => ({
         materialKey: material.key as any,
@@ -192,7 +203,7 @@ export default function CharSiuProductionCostPage() {
         unitWeightG: Number(output.unitWeightG),
       })),
     });
-  }, [draft]);
+  }, [draft, selectedRun]);
 
   const authenticate = async (event: FormEvent) => {
     event.preventDefault();
@@ -268,6 +279,7 @@ export default function CharSiuProductionCostPage() {
     if (!productionDate) return toast.error("煮込み日を入力してください");
     if (!packagingDate) return toast.error("包装日を入力してください");
     if (packagingDate < productionDate) return toast.error("包装日は煮込み日以降にしてください");
+    if (!stageLaborFromDraft(draft)) return toast.error("各工程の人数は正の整数、1人あたり時間は0より大きい数で入力してください");
     setSaving(true);
     try {
       const response = await fetch("/api/finance/char-siu-production", {
@@ -278,8 +290,12 @@ export default function CharSiuProductionCostPage() {
           id: selectedRun.id,
           productionDate,
           packagingDate,
-          workerCount: draft.workerCount,
-          workHours: draft.workHours,
+          workerCount: Number(draft.cookingWorkerCount),
+          workHours: Number(draft.cookingWorkHours),
+          cookingWorkerCount: Number(draft.cookingWorkerCount),
+          cookingWorkHours: Number(draft.cookingWorkHours),
+          packagingWorkerCount: Number(draft.packagingWorkerCount),
+          packagingWorkHours: Number(draft.packagingWorkHours),
           notes: draft.notes,
           materials: draft.materials.map((material) => ({
             key: material.key,
@@ -467,7 +483,9 @@ export default function CharSiuProductionCostPage() {
                     <div className="font-bold text-slate-900">煮込み {formatDate(run.production_date)}</div>
                     <div className="mt-0.5 text-xs text-slate-600">包装 {run.packaging_date ? formatDate(run.packaging_date) : "未登録"}</div>
                     <div className="mt-1 flex justify-between text-xs text-slate-500">
-                      <span>{run.worker_count}人 / {formatNumber(run.total_person_hours, 2)}人時</span>
+                      <span>{charSiuStageLaborFromSnapshot(run)
+                        ? `煮込み ${run.cooking_worker_count}人・包装 ${run.packaging_worker_count}人 / 合計 ${formatNumber(run.total_person_hours, 2)}人時`
+                        : `工程別内訳未登録 / 旧合計 ${formatNumber(run.total_person_hours, 2)}人時`}</span>
                       <span>{formatNumber(run.total_output_quantity)}個</span>
                     </div>
                     <div className="mt-1 text-sm font-bold text-emerald-700">{formatYen(run.total_cost)}</div>
@@ -491,11 +509,33 @@ export default function CharSiuProductionCostPage() {
                 </section>
 
                 <section className="border border-slate-200 bg-white">
-                  <div className="grid gap-3 border-b border-slate-200 p-4 sm:grid-cols-2 xl:grid-cols-5 sm:p-5">
-                    <AdminNumberField label="煮込み日" value={draft.productionDate} inputType="date" suffix="" onChange={(value) => setDraft((current) => current && ({ ...current, productionDate: value }))} />
-                    <AdminNumberField label="包装日" value={draft.packagingDate} inputType="date" minDate={draft.productionDate} suffix="" onChange={(value) => setDraft((current) => current && ({ ...current, packagingDate: value }))} />
-                    <AdminNumberField label="人数" value={draft.workerCount} suffix="人" onChange={(value) => setDraft((current) => current && ({ ...current, workerCount: value }))} />
-                    <AdminNumberField label="1人あたり時間" value={draft.workHours} suffix="時間" onChange={(value) => setDraft((current) => current && ({ ...current, workHours: value }))} />
+                  <div className="border-b border-slate-200 p-4 sm:p-5">
+                    {([
+                      { key: "cooking", label: "煮込み", dateKey: "productionDate", workerKey: "cookingWorkerCount", hoursKey: "cookingWorkHours" },
+                      { key: "packaging", label: "包装", dateKey: "packagingDate", workerKey: "packagingWorkerCount", hoursKey: "packagingWorkHours" },
+                    ] as const).map((stage) => (
+                      <fieldset key={stage.key} aria-label={`${stage.label}工程`} className="grid grid-cols-2 gap-3 border-b border-slate-100 py-4 first:pt-0 lg:grid-cols-4">
+                        <div className="col-span-2 lg:col-span-1">
+                          <AdminNumberField id={`finance-${stage.key}-date`} label={`${stage.label}日`} value={draft[stage.dateKey]} inputType="date" minDate={stage.key === "packaging" ? draft.productionDate : undefined} suffix="" onChange={(value) => setDraft((current) => current && ({ ...current, [stage.dateKey]: value }))} />
+                        </div>
+                        <AdminNumberField id={`finance-${stage.key}-worker-count`} label={`${stage.label}の人数`} value={draft[stage.workerKey]} minNumber="1" stepNumber="1" required suffix="人" onChange={(value) => setDraft((current) => current && ({ ...current, [stage.workerKey]: value }))} />
+                        <AdminNumberField id={`finance-${stage.key}-work-hours`} label={`${stage.label}の1人あたり時間`} value={draft[stage.hoursKey]} required suffix="時間" onChange={(value) => setDraft((current) => current && ({ ...current, [stage.hoursKey]: value }))} />
+                        <div className="col-span-2 flex items-center justify-between gap-2 rounded-md bg-slate-50 px-3 py-3 text-sm lg:col-span-1 lg:block">
+                          <span className="text-slate-500">{stage.label}人時</span>
+                          <strong className="block text-base text-slate-900 lg:mt-2">{stagePersonHours(draft[stage.workerKey], draft[stage.hoursKey]) === null ? "未入力" : `${formatNumber(stagePersonHours(draft[stage.workerKey], draft[stage.hoursKey]), 2)} 人時`}</strong>
+                        </div>
+                      </fieldset>
+                    ))}
+                    {!stageLaborFromDraft(draft) && (
+                      <p role="status" className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                        {!charSiuStageLaborFromSnapshot(selectedRun) ? `工程別内訳未登録。旧合計 ${formatNumber(selectedRun.total_person_hours, 2)} 人時。` : "工程別の人数・時間を正しく入力してください。"}
+                        4項目が揃うまで保存済みの人時で原価を表示します。
+                      </p>
+                    )}
+                    <div className="my-3 flex items-center justify-between text-sm">
+                      <span className="text-slate-500">合計人時（煮込み＋包装）{!stageLaborFromDraft(draft) ? " / 保存済み" : ""}</span>
+                      <strong className="text-base text-slate-900">{formatNumber(preview.totalPersonHours, 2)} 人時</strong>
+                    </div>
                     <div className="min-w-0">
                       <span className="mb-2 block text-xs font-bold text-slate-600">TSG保存時間単価</span>
                       <div className="flex h-10 items-center justify-between border border-slate-200 bg-slate-50 px-3">
@@ -623,12 +663,12 @@ function Metric({ label, value, sub, strong = false }: { label: string; value: s
   );
 }
 
-function AdminNumberField({ label, value, suffix, onChange, inputType = "number", minDate }: { label: string; value: string; suffix: string; onChange: (value: string) => void; inputType?: "number" | "date"; minDate?: string }) {
+function AdminNumberField({ label, value, suffix, onChange, inputType = "number", minDate, id, minNumber = "0", stepNumber = "0.01", required = false }: { label: string; value: string; suffix: string; onChange: (value: string) => void; inputType?: "number" | "date"; minDate?: string; id?: string; minNumber?: string; stepNumber?: string; required?: boolean }) {
   return (
     <label className="block min-w-0">
       <span className="mb-2 block text-xs font-bold text-slate-600">{label}</span>
       <div className="flex h-10 overflow-hidden rounded-md border border-slate-300 bg-white focus-within:border-slate-700">
-        <input type={inputType} inputMode={inputType === "number" ? "decimal" : undefined} min={inputType === "number" ? "0" : minDate || undefined} step={inputType === "number" ? "0.01" : undefined} required={inputType === "date"} value={value} onChange={(event) => onChange(event.target.value)} className="min-w-0 flex-1 px-3 text-right font-semibold outline-none" />
+        <input id={id} type={inputType} inputMode={inputType === "number" ? "decimal" : undefined} min={inputType === "number" ? minNumber : minDate || undefined} step={inputType === "number" ? stepNumber : undefined} required={required || inputType === "date"} value={value} onChange={(event) => onChange(event.target.value)} className="min-w-0 flex-1 px-3 text-right font-semibold outline-none" />
         {suffix && <span className="flex items-center border-l border-slate-200 bg-slate-50 px-2 text-xs font-semibold text-slate-500">{suffix}</span>}
       </div>
     </label>
@@ -656,8 +696,10 @@ function toDraft(run: ProductionRun): RunDraft {
   return {
     productionDate: run.production_date,
     packagingDate: run.packaging_date || "",
-    workerCount: numberText(run.worker_count),
-    workHours: numberText(run.work_hours),
+    cookingWorkerCount: stageNumberText(run.cooking_worker_count),
+    cookingWorkHours: stageNumberText(run.cooking_work_hours),
+    packagingWorkerCount: stageNumberText(run.packaging_worker_count),
+    packagingWorkHours: stageNumberText(run.packaging_work_hours),
     hourlyWage: numberText(run.hourly_wage),
     notes: run.notes || "",
     materials: [...run.materials].sort((a, b) => a.sort_order - b.sort_order).map((material) => ({
@@ -682,6 +724,25 @@ function updateMaterial(setter: React.Dispatch<React.SetStateAction<RunDraft | n
     ...current,
     materials: current.materials.map((material, materialIndex) => materialIndex === index ? { ...material, [key]: value } : material),
   }));
+}
+
+function stagePersonHours(workers: string, hours: string): number | null {
+  const count = Number(workers);
+  const time = Number(hours);
+  const total = count * time;
+  return Number.isInteger(count) && count > 0 && Number.isFinite(time) && time > 0 && Number.isFinite(total) ? total : null;
+}
+
+function stageLaborFromDraft(draft: RunDraft) {
+  if (stagePersonHours(draft.cookingWorkerCount, draft.cookingWorkHours) === null || stagePersonHours(draft.packagingWorkerCount, draft.packagingWorkHours) === null) return null;
+  return {
+    cookingWorkerCount: Number(draft.cookingWorkerCount), cookingWorkHours: Number(draft.cookingWorkHours),
+    packagingWorkerCount: Number(draft.packagingWorkerCount), packagingWorkHours: Number(draft.packagingWorkHours),
+  };
+}
+
+function stageNumberText(value: unknown): string {
+  return value === null || value === undefined ? "" : String(value);
 }
 
 function updateOutput(setter: React.Dispatch<React.SetStateAction<RunDraft | null>>, index: number, key: "quantity" | "unitWeightG", value: string) {

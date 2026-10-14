@@ -54,6 +54,14 @@ function labelledImages(name: string, description: string, pathname: string, sav
   });
 }
 
+function withCharSiuStageLabor(legacy: JsonSchema): JsonSchema {
+  const stages: Record<string, JsonSchema> = {
+    cookingWorkerCount: int(1, 10000), cookingWorkHours: num(Number.MIN_VALUE, 10000),
+    packagingWorkerCount: int(1, 10000), packagingWorkHours: num(Number.MIN_VALUE, 10000),
+  };
+  return { anyOf: [legacy, { ...legacy, properties: { ...legacy.properties, ...stages }, required: [...(legacy.required || []), ...Object.keys(stages)] }] };
+}
+
 export const otherOperations: BusinessOperation[] = [
   route("finance_overview", "通常画面と同じ財務概況を保存済み月から集計。", false, "GET", "/api/finance/overview", dateQuery, () => import("@/app/api/finance/overview/route")),
   route("finance_trial_latest", "最終版試算表の最新状態を取得。", false, "GET", "/api/finance/trial", obj({ query: obj({ scope: en("latest", "all") }, []) }, []), () => import("@/app/api/finance/trial/route")),
@@ -86,10 +94,10 @@ export const otherOperations: BusinessOperation[] = [
     obj({ action: en("settings"), blockUnitWeightG: num(0.001), lardUnitWeightG: num(0.001), mincedChashuUnitWeightG: num(0.001) }),
     obj({ action: en("sync_labor"), effectiveDate: date }, ["action"]),
     obj({ action: en("sync_run_labor"), id: uuid }),
-    obj({ action: en("run"), id: uuid, workerCount: int(1, 10000), workHours: num(0, 10000), productionDate: date, packagingDate: nullable(date), notes: { type: "string", maxLength: 2000 },
+    withCharSiuStageLabor(obj({ action: en("run"), id: uuid, workerCount: int(1, 10000), workHours: num(0, 10000), productionDate: date, packagingDate: nullable(date), notes: { type: "string", maxLength: 2000 },
       materials: arr(obj({ key: str(100), usageAmount: num(0), purchaseUnitQuantity: num(0.001), purchasePriceTaxIncluded: num(0) }, ["key"]), 30),
       outputs: arr(obj({ key: str(100), quantity: int(0, 100000000), unitWeightG: num(0.001) }, ["key"]), 30),
-    }, ["action", "id"]),
+    }, ["action", "id"])),
   ] } }), () => import("@/app/api/finance/char-siu-production/route")),
   route("finance_char_siu_delete", "指定した製造原価実績を通常画面の関連明細削除処理で削除。", true, "DELETE", "/api/finance/char-siu-production", query({ id: uuid }), () => import("@/app/api/finance/char-siu-production/route")),
   route("food_store_csv_import", "確認済み店舗POS CSVをJAN・文字コード検証後、指定月へ既存取込。", true, "POST", "/api/food-store/import-sjis", upload(obj({ report_month: monthStart })), () => import("@/app/api/food-store/import-sjis/route")),

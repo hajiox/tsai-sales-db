@@ -66,6 +66,35 @@ assert.equal(production.taxIncludedIngredientPrice(1000, false), 1080);
 const emptyOutput = production.calculateCharSiuProduction({ workerCount: 1, workHours: 0, hourlyWage: 1200, materials: [], outputs: [{ outputKey: 'block', quantity: 0, unitWeightG: 1000 }] });
 assert.equal(emptyOutput.outputs[0].unitCost, null); assert.equal(emptyOutput.averageCostPerKg, null);
 
+const stages = { cookingWorkerCount: 2, cookingWorkHours: 3, packagingWorkerCount: 3, packagingWorkHours: 1.5 };
+const stagedCalculation = production.calculateCharSiuProduction({
+  workerCount: 99, workHours: 99, hourlyWage: 1200, ...stages,
+  materials: [{ materialKey: 'pork_belly', usageAmount: 2000, purchaseUnitQuantity: 1000, purchasePriceTaxIncluded: 1200 },
+    { materialKey: 'soy_sauce', usageAmount: 100, purchaseUnitQuantity: 1000, purchasePriceTaxIncluded: 500 }],
+  outputs: [{ outputKey: 'block', quantity: 2, unitWeightG: 1000 }, { outputKey: 'lard', quantity: 20, unitWeightG: 50 }],
+});
+assert.equal(stagedCalculation.workerCount, 2); assert.equal(stagedCalculation.workHours, 3);
+assert.equal(stagedCalculation.totalPersonHours, 10.5); assert.equal(stagedCalculation.laborCost, 12600); assert.equal(stagedCalculation.totalCost, 15050);
+assert.equal(stagedCalculation.outputs[0].allocatedCost, 10033.3333); assert.equal(stagedCalculation.outputs[1].allocatedCost, 5016.6667);
+assert.equal(stagedCalculation.outputs[0].unitCost, 5016.6667); assert.equal(stagedCalculation.outputs[1].unitCost, 250.8333);
+const fractionalStages = production.calculateCharSiuProduction({ workerCount: 1, workHours: 1, hourlyWage: 1000,
+  cookingWorkerCount: 1, cookingWorkHours: 1.234, packagingWorkerCount: 1, packagingWorkHours: 1.234, materials: [], outputs: [] });
+assert.equal(fractionalStages.totalPersonHours, 2.47, 'sum both exact stage products before the existing final rounding');
+assert.equal(fractionalStages.cookingWorkHours, 1.234);
+const stageSnapshot = { worker_count: 2, work_hours: 3, cooking_worker_count: 2, cooking_work_hours: '3', packaging_worker_count: 3, packaging_work_hours: '1.5' };
+assert.deepEqual(production.charSiuStageLaborFromSnapshot(stageSnapshot), stages);
+assert.deepEqual(production.resolveCharSiuStageLabor({}, stageSnapshot).stages, stages);
+assert.deepEqual(production.resolveCharSiuStageLabor({ workerCount: 2, workHours: 3 }, stageSnapshot).stages, stages);
+assert.ok(production.resolveCharSiuStageLabor({ workerCount: 3 }, stageSnapshot).error);
+assert.equal(production.resolveCharSiuStageLabor({}, { worker_count: 2, work_hours: 3 }).stages, null);
+for (const invalid of [{ cookingWorkerCount: 2 }, { ...stages, cookingWorkerCount: 1.5 }, { ...stages, packagingWorkerCount: 0 },
+  { ...stages, cookingWorkHours: 0 }, { ...stages, packagingWorkHours: -1 }, { ...stages, packagingWorkHours: Infinity },
+  { ...stages, cookingWorkHours: '3' }, { cookingWorkerCount: null, cookingWorkHours: null, packagingWorkerCount: null, packagingWorkHours: null }]) {
+  assert.ok(production.resolveCharSiuStageLabor(invalid).error);
+}
+assert.throws(() => production.calculateCharSiuProduction({ workerCount: 1, workHours: 1, hourlyWage: 1000, cookingWorkerCount: 2, materials: [], outputs: [] }));
+assert.equal(calculated.cookingWorkerCount, null); assert.equal(calculated.packagingWorkHours, null);
+
 function fixtureDatabase() {
   let serial = 1;
   const rows = {
@@ -229,6 +258,52 @@ async function main() {
   assert.equal((await upload.POST(new Request('https://fixture.invalid/upload', { method: 'POST', body: form }))).status, 400);
   const financialRuns = await (await finance.GET(request('/finance?month=2026-10', undefined, 'GET'))).json();
   assert.equal(financialRuns.runs.length, 2); assert.equal(financialRuns.runs.find(row => row.id === created.id).packaging_date, null);
+  laborFailure = false; wage = 1200;
+  const stageScan = scan(); Object.assign(stageScan, { status: 'ready', extracted_items: normalized });
+  const stageBody = { ...body, ...stages, workerCount: 99, workHours: 99, deliveryNoteScanId: stageScan.id };
+  const stageResponse = await api.POST(request('/production', stageBody)); assert.equal(stageResponse.status, 200);
+  const stageId = (await stageResponse.json()).id;
+  const stageRun = state.rows.char_siu_production_runs.find(row => row.id === stageId);
+  assert.equal(stageRun.worker_count, 2); assert.equal(stageRun.work_hours, 3);
+  assert.equal(stageRun.cooking_worker_count, 2); assert.equal(stageRun.packaging_worker_count, 3); assert.equal(stageRun.packaging_work_hours, 1.5);
+  assert.equal(stageRun.total_person_hours, 10.5); assert.equal(stageRun.labor_cost, 12600); assert.equal(stageRun.total_cost, 14760);
+  const stageRead = (await (await api.GET(request('/production', undefined, 'GET'))).json()).runs.find(row => row.id === stageId);
+  assert.equal(stageRead.total_person_hours, 10.5); assert.equal(stageRead.packaging_work_hours, 1.5); assert.equal(Object.hasOwn(stageRead, 'hourly_wage'), false);
+  assert.equal((await api.POST(request('/production', stageBody))).status, 400);
+  const oldStageEdit = { ...body, id: stageId, workerCount: 2, workHours: 3 };
+  assert.equal((await api.POST(request('/production', oldStageEdit))).status, 200);
+  const omittedPairEdit = { ...oldStageEdit }; delete omittedPairEdit.workerCount; delete omittedPairEdit.workHours;
+  assert.equal((await api.POST(request('/production', omittedPairEdit))).status, 200);
+  assert.equal(stageRun.total_person_hours, 10.5); assert.equal(stageRun.packaging_work_hours, 1.5);
+  for (const changes of [{ workerCount: 4 }, { workHours: 4 }, { cookingWorkerCount: 2 }, { ...stages, cookingWorkHours: 0 },
+    { ...stages, packagingWorkerCount: 1.5 }, { ...stages, packagingWorkHours: '1.5' },
+    { cookingWorkerCount: null, cookingWorkHours: null, packagingWorkerCount: null, packagingWorkHours: null }]) {
+    const before = state.writes.length;
+    assert.equal((await api.POST(request('/production', { ...oldStageEdit, ...changes }))).status, 400);
+    assert.equal(state.writes.length, before, 'invalid or legacy-only stage edits must not mutate any snapshot');
+  }
+  assert.equal((await api.POST(request('/production', { ...oldStageEdit, ...stages, packagingWorkerCount: 4, packagingWorkHours: 2 }))).status, 200);
+  assert.equal(stageRun.total_person_hours, 14); assert.equal(stageRun.labor_cost, 16800);
+  assert.equal((await finance.PATCH(request('/finance', { action: 'run', id: stageId, outputs: [{ key: 'block', quantity: 4 }] }, 'PATCH'))).status, 200);
+  assert.equal(stageRun.total_person_hours, 14); assert.equal(stageRun.packaging_worker_count, 4); assert.equal(stageRun.packaging_work_hours, 2);
+  assert.equal((await finance.PATCH(request('/finance', { action: 'run', id: stageId, workerCount: 2, workHours: 3 }, 'PATCH'))).status, 200);
+  for (const changes of [{ workerCount: 3 }, { workHours: 4 }, { cookingWorkerCount: 2 }]) {
+    const before = state.writes.length;
+    assert.equal((await finance.PATCH(request('/finance', { action: 'run', id: stageId, ...changes }, 'PATCH'))).status, 400);
+    assert.equal(state.writes.length, before);
+  }
+  const revisedStages = { cookingWorkerCount: 3, cookingWorkHours: 4, packagingWorkerCount: 2, packagingWorkHours: 0.5 };
+  assert.equal((await finance.PATCH(request('/finance', { action: 'run', id: stageId, ...revisedStages }, 'PATCH'))).status, 200);
+  assert.equal(stageRun.worker_count, 3); assert.equal(stageRun.work_hours, 4); assert.equal(stageRun.total_person_hours, 13);
+  wage = 1500;
+  assert.equal((await finance.PATCH(request('/finance', { action: 'sync_run_labor', id: stageId }, 'PATCH'))).status, 200);
+  assert.equal(stageRun.total_person_hours, 13); assert.equal(stageRun.labor_cost, 19500); assert.equal(stageRun.packaging_work_hours, 0.5);
+  assert.equal(stageRun.total_cost, 21660); assert.equal(laborDates.at(-1), '2026-10-14');
+  assert.equal(state.rows.char_siu_production_outputs.find(row => row.run_id === stageId && row.output_key === 'block').unit_cost, 4332);
+  assert.equal((await api.POST(request('/production', { ...oldStageEdit, workerCount: 3, workHours: 4 }))).status, 200);
+  assert.equal(stageRun.total_person_hours, 13); assert.equal(stageRun.packaging_worker_count, 2);
+  assert.equal((await api.POST(request('/production', { ...legacyEdit, workerCount: 3, workHours: 2 }))).status, 200);
+  assert.equal(run.cooking_worker_count, null); assert.equal(run.total_person_hours, 6, 'legacy aggregate records remain editable without inferring a stage split');
   authorized = false; context = false;
   const beforeDenied = state.writes.length;
   assert.equal((await api.GET(request('/production', undefined, 'GET'))).status, 401);
@@ -250,13 +325,26 @@ async function main() {
   }
   assert.throws(() => contracts.validateOperationSchema(recipeSchema, { body: { ...body, packagingDate: '2026-02-31' } }));
   assert.throws(() => contracts.validateOperationSchema(financeSchema, { body: { action: 'run', id: created.id, packagingDate: '2026-02-31' } }));
+  contracts.validateOperationSchema(recipeSchema, { body: { ...body, ...stages } });
+  contracts.validateOperationSchema(financeSchema, { body: { action: 'run', id: stageId, ...stages } });
+  for (let mask = 1; mask < 15; mask++) {
+    const partial = Object.fromEntries(Object.entries(stages).filter((_, index) => mask & (1 << index)));
+    assert.throws(() => contracts.validateOperationSchema(recipeSchema, { body: { ...body, ...partial } }));
+    assert.throws(() => contracts.validateOperationSchema(financeSchema, { body: { action: 'run', id: stageId, ...partial } }));
+  }
+  for (const invalid of [{ ...stages, cookingWorkerCount: 1.5 }, { ...stages, cookingWorkHours: 0 }, { ...stages, packagingWorkHours: null }, { ...stages, packagingWorkerCount: '3' }]) {
+    assert.throws(() => contracts.validateOperationSchema(recipeSchema, { body: { ...body, ...invalid } }));
+    assert.throws(() => contracts.validateOperationSchema(financeSchema, { body: { action: 'run', id: stageId, ...invalid } }));
+  }
+  const withoutLegacyPair = { ...body, ...stages }; delete withoutLegacyPair.workerCount;
+  assert.throws(() => contracts.validateOperationSchema(recipeSchema, { body: withoutLegacyPair }), 'MCP keeps the existing required legacy pair');
 }
 
 const savedEnvironment = Object.fromEntries(['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'].map(key => [key, process.env[key]]));
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://fixture.invalid'; process.env.SUPABASE_SERVICE_ROLE_KEY = 'fixture-only';
 const savedConsole = { error: console.error, warn: console.warn };
 console.error = () => {}; console.warn = () => {};
-main().then(() => process.stdout.write('char siu dates, delivery-note persistence, production/finance API and cost allocation: PASS\n')).catch(error => {
+main().then(() => process.stdout.write('char siu stage labor, legacy compatibility, dates, delivery notes and cost allocation: PASS\n')).catch(error => {
   savedConsole.error(error); process.exitCode = 1;
 }).finally(() => {
   Object.assign(console, savedConsole);

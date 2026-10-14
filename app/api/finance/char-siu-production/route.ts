@@ -15,6 +15,7 @@ import {
   positive,
   positiveInteger,
   resolveCharSiuProductionDates,
+  resolveCharSiuStageLabor,
 } from "@/lib/char-siu-production";
 import { fetchManufacturingAverageHourlyRate } from "@/lib/tsg-manufacturing-labor";
 
@@ -152,6 +153,8 @@ export async function PATCH(request: Request) {
     if (!dates) {
       return NextResponse.json({ success: false, error: "煮込み日・包装日は正しい日付で、包装日は煮込み日以降にしてください" }, { status: 400 });
     }
+    const laborInput = resolveCharSiuStageLabor(body, snapshot.run);
+    if (laborInput.error) return NextResponse.json({ success: false, error: laborInput.error }, { status: 400 });
     const materialOverrides = new Map(
       (Array.isArray(body.materials) ? body.materials : []).map((row: any) => [String(row.key || ""), row]),
     );
@@ -161,6 +164,7 @@ export async function PATCH(request: Request) {
     const calculation = calculateCharSiuProduction({
       workerCount: positiveInteger(body.workerCount ?? snapshot.run.worker_count, snapshot.run.worker_count),
       workHours: nonNegative(body.workHours ?? snapshot.run.work_hours),
+      ...(laborInput.stages || {}),
       hourlyWage: nonNegative(snapshot.run.hourly_wage),
       materials: CHAR_SIU_MATERIALS.filter((definition) => snapshot.materials.some((row: any) => row.material_key === definition.key)).map((definition) => {
         const existing = snapshot.materials.find((row: any) => row.material_key === definition.key);
@@ -208,9 +212,12 @@ export async function DELETE(request: Request) {
 }
 
 function calculationFromSnapshot(snapshot: any, options: { hourlyWage: number }) {
+  const laborInput = resolveCharSiuStageLabor({}, snapshot.run);
+  if (laborInput.error) throw new Error(laborInput.error);
   return calculateCharSiuProduction({
     workerCount: snapshot.run.worker_count,
     workHours: snapshot.run.work_hours,
+    ...(laborInput.stages || {}),
     hourlyWage: options.hourlyWage,
     materials: CHAR_SIU_MATERIALS.filter((definition) => snapshot.materials.some((item: any) => item.material_key === definition.key)).map((definition) => {
       const row = snapshot.materials.find((item: any) => item.material_key === definition.key);
@@ -245,6 +252,10 @@ async function persistRunCalculation(options: {
       packaging_date: options.packagingDate,
       worker_count: calculation.workerCount,
       work_hours: calculation.workHours,
+      cooking_worker_count: calculation.cookingWorkerCount,
+      cooking_work_hours: calculation.cookingWorkHours,
+      packaging_worker_count: calculation.packagingWorkerCount,
+      packaging_work_hours: calculation.packagingWorkHours,
       hourly_wage: calculation.hourlyWage,
       total_person_hours: calculation.totalPersonHours,
       material_cost: calculation.materialCost,

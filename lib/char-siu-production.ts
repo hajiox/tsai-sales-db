@@ -63,17 +63,71 @@ export type ProductionOutputCalculation = {
   unitWeightG: number;
 };
 
+export type CharSiuStageLabor = {
+  cookingWorkerCount: number;
+  cookingWorkHours: number;
+  packagingWorkerCount: number;
+  packagingWorkHours: number;
+};
+const stageLaborKeys = ["cookingWorkerCount", "cookingWorkHours", "packagingWorkerCount", "packagingWorkHours"] as const;
+type StageLaborInput = Partial<Record<typeof stageLaborKeys[number], unknown>>;
+type StageLaborSnapshot = {
+  cooking_worker_count?: unknown; cooking_work_hours?: unknown;
+  packaging_worker_count?: unknown; packaging_work_hours?: unknown;
+};
+
+function validStageLabor(input: StageLaborInput): CharSiuStageLabor | null {
+  if (!stageLaborKeys.every(key => typeof input[key] === "number" && Number.isFinite(input[key]) && Number(input[key]) > 0)) return null;
+  if (!Number.isInteger(input.cookingWorkerCount) || !Number.isInteger(input.packagingWorkerCount)) return null;
+  return {
+    cookingWorkerCount: Number(input.cookingWorkerCount), cookingWorkHours: Number(input.cookingWorkHours),
+    packagingWorkerCount: Number(input.packagingWorkerCount), packagingWorkHours: Number(input.packagingWorkHours),
+  };
+}
+
+export function charSiuStageLaborFromSnapshot(snapshot: StageLaborSnapshot): CharSiuStageLabor | null {
+  return validStageLabor({
+    cookingWorkerCount: snapshot.cooking_worker_count == null ? undefined : Number(snapshot.cooking_worker_count),
+    cookingWorkHours: snapshot.cooking_work_hours == null ? undefined : Number(snapshot.cooking_work_hours),
+    packagingWorkerCount: snapshot.packaging_worker_count == null ? undefined : Number(snapshot.packaging_worker_count),
+    packagingWorkHours: snapshot.packaging_work_hours == null ? undefined : Number(snapshot.packaging_work_hours),
+  });
+}
+
+export function resolveCharSiuStageLabor(
+  input: StageLaborInput & { workerCount?: unknown; workHours?: unknown },
+  existing?: StageLaborSnapshot & { worker_count?: unknown; work_hours?: unknown },
+): { stages: CharSiuStageLabor | null; error: string | null } {
+  if (stageLaborKeys.some(key => input[key] !== undefined)) {
+    const stages = validStageLabor(input);
+    return stages ? { stages, error: null } : { stages: null, error: "煮込み・包装それぞれの人数は正の整数、時間は正の数で4項目すべて入力してください" };
+  }
+  const stages = existing ? charSiuStageLaborFromSnapshot(existing) : null;
+  if (existing && !stages && [existing.cooking_worker_count, existing.cooking_work_hours, existing.packaging_worker_count, existing.packaging_work_hours].some(value => value != null)) {
+    return { stages: null, error: "保存済みの工程別工数を確認してください" };
+  }
+  if (stages && ((input.workerCount !== undefined && Number(input.workerCount) !== Number(existing!.worker_count))
+    || (input.workHours !== undefined && Number(input.workHours) !== Number(existing!.work_hours)))) {
+    return { stages: null, error: "工程別実績の人数・時間を変更する場合は煮込み・包装の4項目を入力してください" };
+  }
+  return { stages, error: null };
+}
+
 export function calculateCharSiuProduction(params: {
   workerCount: number;
   workHours: number;
   hourlyWage: number;
   materials: ProductionMaterialCalculation[];
   outputs: ProductionOutputCalculation[];
-}) {
-  const workerCount = positiveInteger(params.workerCount, 1);
-  const workHours = nonNegative(params.workHours);
+} & { [Key in keyof CharSiuStageLabor]?: number | null }) {
+  const stages = validStageLabor(params);
+  if (!stages && stageLaborKeys.some(key => params[key] != null)) throw new Error("工程別工数は4項目すべて正しい値を入力してください");
+  const workerCount = stages?.cookingWorkerCount ?? positiveInteger(params.workerCount, 1);
+  const workHours = stages?.cookingWorkHours ?? nonNegative(params.workHours);
   const hourlyWage = nonNegative(params.hourlyWage);
-  const totalPersonHours = round(workerCount * workHours, 2);
+  const totalPersonHours = round(stages
+    ? stages.cookingWorkerCount * stages.cookingWorkHours + stages.packagingWorkerCount * stages.packagingWorkHours
+    : workerCount * workHours, 2);
 
   const materials = params.materials.map((material) => {
     const usageAmount = nonNegative(material.usageAmount);
@@ -121,6 +175,10 @@ export function calculateCharSiuProduction(params: {
   return {
     workerCount,
     workHours,
+    cookingWorkerCount: stages?.cookingWorkerCount ?? null,
+    cookingWorkHours: stages?.cookingWorkHours ?? null,
+    packagingWorkerCount: stages?.packagingWorkerCount ?? null,
+    packagingWorkHours: stages?.packagingWorkHours ?? null,
     hourlyWage,
     totalPersonHours,
     materialCost,

@@ -25,7 +25,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { nextCharSiuDate, normalizeCharSiuDate } from "@/lib/char-siu-production";
+import { charSiuStageLaborFromSnapshot, nextCharSiuDate, normalizeCharSiuDate } from "@/lib/char-siu-production";
 
 type MaterialConfig = {
   key: string;
@@ -46,6 +46,11 @@ type ProductionRun = {
   packaging_date: string | null;
   worker_count: number;
   work_hours: number;
+  cooking_worker_count: number | null;
+  cooking_work_hours: number | null;
+  packaging_worker_count: number | null;
+  packaging_work_hours: number | null;
+  total_person_hours: number;
   notes: string;
   materials: Array<{ material_key: string; usage_amount: number }>;
   outputs: Array<{ output_key: string; quantity: number }>;
@@ -56,8 +61,11 @@ type FormState = {
   productionDate: string;
   packagingDate: string;
   packagingDateEdited: boolean;
-  workerCount: string;
-  workHours: string;
+  cookingWorkerCount: string;
+  cookingWorkHours: string;
+  packagingWorkerCount: string;
+  packagingWorkHours: string;
+  legacyTotalPersonHours: number | null;
   notes: string;
   materials: Record<string, string>;
   outputs: Record<string, string>;
@@ -225,11 +233,11 @@ export default function CharSiuProductionInputPage() {
       .catch(() => setQrDataUrl(""));
   }, [form.productionDate]);
 
-  const totalPersonHours = useMemo(() => {
-    const workers = Number(form.workerCount) || 0;
-    const hours = Number(form.workHours) || 0;
-    return workers * hours;
-  }, [form.workerCount, form.workHours]);
+  const cookingPersonHours = stagePersonHours(form.cookingWorkerCount, form.cookingWorkHours);
+  const packagingPersonHours = stagePersonHours(form.packagingWorkerCount, form.packagingWorkHours);
+  const totalPersonHours = cookingPersonHours !== null && packagingPersonHours !== null
+    ? cookingPersonHours + packagingPersonHours
+    : null;
 
   const totalOutputCount = useMemo(
     () =>
@@ -248,6 +256,8 @@ export default function CharSiuProductionInputPage() {
     if (!packagingDate) return toast.error("包装日を入力してください");
     if (packagingDate < productionDate)
       return toast.error("包装日は煮込み日以降にしてください");
+    if (cookingPersonHours === null || packagingPersonHours === null)
+      return toast.error("各工程の人数は正の整数、1人あたり時間は0より大きい数で入力してください");
     if (!form.id && !readyScanMatchesForm(scan, form))
       return toast.error("煮込み日に対応する納品書の単価を確認してください");
     setSaving(true);
@@ -259,8 +269,12 @@ export default function CharSiuProductionInputPage() {
           id: form.id || undefined,
           productionDate,
           packagingDate,
-          workerCount: form.workerCount,
-          workHours: form.workHours,
+          workerCount: Number(form.cookingWorkerCount),
+          workHours: Number(form.cookingWorkHours),
+          cookingWorkerCount: Number(form.cookingWorkerCount),
+          cookingWorkHours: Number(form.cookingWorkHours),
+          packagingWorkerCount: Number(form.packagingWorkerCount),
+          packagingWorkHours: Number(form.packagingWorkHours),
           notes: form.notes,
           deliveryNoteScanId: form.deliveryNoteScanId || undefined,
           materials: materials.map((material) => ({
@@ -374,8 +388,11 @@ export default function CharSiuProductionInputPage() {
       productionDate: run.production_date,
       packagingDate: run.packaging_date || "",
       packagingDateEdited: true,
-      workerCount: String(run.worker_count ?? 1),
-      workHours: String(run.work_hours ?? ""),
+      cookingWorkerCount: stageNumberText(run.cooking_worker_count),
+      cookingWorkHours: stageNumberText(run.cooking_work_hours),
+      packagingWorkerCount: stageNumberText(run.packaging_worker_count),
+      packagingWorkHours: stageNumberText(run.packaging_work_hours),
+      legacyTotalPersonHours: charSiuStageLaborFromSnapshot(run) ? null : run.total_person_hours,
       notes: run.notes || "",
       materials: Object.fromEntries(
         materials.map((material) => [
@@ -455,67 +472,51 @@ export default function CharSiuProductionInputPage() {
         </header>
 
         <section className="rounded-md border border-slate-200 bg-white p-4 sm:p-5 lg:rounded-none">
-          <div className="grid gap-5 md:grid-cols-2 md:gap-4 xl:grid-cols-4">
-            <Field label="煮込み日" htmlFor="production-date" icon={<CalendarDays className="h-4 w-4" />}>
-              <input
-                id="production-date"
-                type="date"
-                required
-                value={form.productionDate}
-                onChange={(event) => changeProductionDate(event.target.value)}
-                className="h-11 w-full rounded-md border border-slate-300 px-3 text-base outline-none focus:border-slate-700"
-              />
-            </Field>
-            <Field label="包装日" htmlFor="packaging-date" icon={<CalendarDays className="h-4 w-4" />}>
-              <input
-                id="packaging-date"
-                type="date"
-                required
-                min={form.productionDate || undefined}
-                value={form.packagingDate}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, packagingDate: event.target.value, packagingDateEdited: true }))
-                }
-                className="h-11 w-full rounded-md border border-slate-300 px-3 text-base outline-none focus:border-slate-700"
-              />
-            </Field>
-            <Field label="関わった人数" htmlFor="production-worker-count" icon={<Users className="h-4 w-4" />}>
-              <NumberInput
-                id="production-worker-count"
-                value={form.workerCount}
-                min="1"
-                step="1"
-                suffix="人"
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, workerCount: value }))
-                }
-              />
-            </Field>
-            <Field
-              label="作業時間（1人あたり）"
-              htmlFor="production-work-hours"
-              icon={<Clock3 className="h-4 w-4" />}
-            >
-              <NumberInput
-                id="production-work-hours"
-                value={form.workHours}
-                min="0"
-                step="0.25"
-                suffix="時間"
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, workHours: value }))
-                }
-              />
-            </Field>
-          </div>
+          {([
+            { key: "cooking", label: "煮込み", dateId: "production-date", dateValue: form.productionDate, workerKey: "cookingWorkerCount", hoursKey: "cookingWorkHours", personHours: cookingPersonHours },
+            { key: "packaging", label: "包装", dateId: "packaging-date", dateValue: form.packagingDate, workerKey: "packagingWorkerCount", hoursKey: "packagingWorkHours", personHours: packagingPersonHours },
+          ] as const).map((stage) => (
+            <fieldset key={stage.key} aria-label={`${stage.label}工程`} className="grid grid-cols-2 gap-4 border-b border-slate-100 py-4 first:pt-0 lg:grid-cols-4">
+              <div className="col-span-2 lg:col-span-1">
+                <Field label={`${stage.label}日`} htmlFor={stage.dateId} icon={<CalendarDays className="h-4 w-4" />}>
+                  <input
+                    id={stage.dateId}
+                    type="date"
+                    required
+                    min={stage.key === "packaging" ? form.productionDate || undefined : undefined}
+                    value={stage.dateValue}
+                    onChange={(event) => stage.key === "cooking"
+                      ? changeProductionDate(event.target.value)
+                      : setForm((current) => ({ ...current, packagingDate: event.target.value, packagingDateEdited: true }))}
+                    className="h-11 w-full rounded-md border border-slate-300 px-3 text-base outline-none focus:border-slate-700"
+                  />
+                </Field>
+              </div>
+              <Field label={`${stage.label}の人数`} htmlFor={`${stage.key}-worker-count`} icon={<Users className="h-4 w-4" />}>
+                <NumberInput id={`${stage.key}-worker-count`} value={form[stage.workerKey]} min="1" step="1" required suffix="人"
+                  onChange={(value) => setForm((current) => ({ ...current, [stage.workerKey]: value }))} />
+              </Field>
+              <Field label={`${stage.label}の1人あたり時間`} htmlFor={`${stage.key}-work-hours`} icon={<Clock3 className="h-4 w-4" />}>
+                <NumberInput id={`${stage.key}-work-hours`} value={form[stage.hoursKey]} min="0" step="0.01" required suffix="時間"
+                  onChange={(value) => setForm((current) => ({ ...current, [stage.hoursKey]: value }))} />
+              </Field>
+              <div className="col-span-2 flex items-center justify-between gap-2 rounded-md bg-slate-50 px-3 py-3 text-sm lg:col-span-1 lg:block">
+                <span className="text-slate-500">{stage.label}人時</span>
+                <strong className="block text-base text-slate-900 lg:mt-2">{stage.personHours === null ? "未入力" : `${formatNumber(stage.personHours, 2)} 人時`}</strong>
+              </div>
+            </fieldset>
+          ))}
           <p className="mt-3 text-xs text-slate-500">基本は煮込み日と翌日の包装日の2日工程です。同日や3日以上の工程も入力できます。</p>
           {form.productionDate && form.packagingDate && form.packagingDate < form.productionDate && (
             <p role="alert" className="mt-2 text-sm text-red-700">包装日は煮込み日以降にしてください。</p>
           )}
+          {form.legacyTotalPersonHours !== null && totalPersonHours === null && (
+            <p role="status" className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">工程別内訳未登録。旧合計 {formatNumber(form.legacyTotalPersonHours, 2)} 人時。各工程の人数・時間を入力してください。</p>
+          )}
           <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-3 text-sm md:mt-4">
-            <span className="text-slate-500">総作業時間</span>
+            <span className="text-slate-500">合計人時（煮込み＋包装）</span>
             <strong className="text-base text-slate-900">
-              {formatNumber(totalPersonHours, 2)} 人時
+              {totalPersonHours === null ? "工程別入力待ち" : `${formatNumber(totalPersonHours, 2)} 人時`}
             </strong>
           </div>
         </section>
@@ -795,8 +796,9 @@ export default function CharSiuProductionInputPage() {
                       </div>
                       <div className="text-xs text-slate-600">包装 {run.packaging_date ? formatDate(run.packaging_date) : "未登録"}</div>
                       <div className="text-xs text-slate-500">
-                        {run.worker_count}人 × {formatNumber(run.work_hours, 2)}
-                        時間
+                        {charSiuStageLaborFromSnapshot(run)
+                          ? `煮込み ${run.cooking_worker_count}人 × ${formatNumber(run.cooking_work_hours || 0, 2)}時間 / 包装 ${run.packaging_worker_count}人 × ${formatNumber(run.packaging_work_hours || 0, 2)}時間 / 合計 ${formatNumber(run.total_person_hours, 2)}人時`
+                          : `工程別内訳未登録 / 旧合計 ${formatNumber(run.total_person_hours, 2)}人時`}
                       </div>
                     </div>
                     <div className="flex-1 text-sm text-slate-600">
@@ -1188,6 +1190,7 @@ function NumberInput({
   suffix,
   min,
   step,
+  required = false,
 }: {
   id?: string;
   value: string;
@@ -1195,6 +1198,7 @@ function NumberInput({
   suffix: string;
   min: string;
   step: string;
+  required?: boolean;
 }) {
   return (
     <div className="flex h-11 overflow-hidden rounded-md border border-slate-300 bg-white focus-within:border-slate-700">
@@ -1206,6 +1210,7 @@ function NumberInput({
         onChange={(event) => onChange(event.target.value)}
         min={min}
         step={step}
+        required={required}
         className="min-w-0 flex-1 px-3 text-right text-base font-semibold text-slate-950 outline-none"
       />
       <span className="flex min-w-12 items-center justify-center border-l border-slate-200 bg-slate-50 px-2 text-xs font-semibold text-slate-500">
@@ -1234,8 +1239,11 @@ function emptyForm(
     productionDate,
     packagingDate: nextCharSiuDate(productionDate),
     packagingDateEdited: false,
-    workerCount: "1",
-    workHours: "",
+    cookingWorkerCount: "1",
+    cookingWorkHours: "",
+    packagingWorkerCount: "1",
+    packagingWorkHours: "",
+    legacyTotalPersonHours: null,
     notes: "",
     materials: Object.fromEntries(
       materials.map((material) => [material.key, ""]),
@@ -1256,6 +1264,17 @@ function withProductionDate(current: FormState, productionDate: string): FormSta
 
 function readyScanMatchesForm(scan: DeliveryNoteScan | null, form: FormState): scan is DeliveryNoteScan {
   return scan?.status === "ready" && scan.id === form.deliveryNoteScanId && scan.targetProductionDate === form.productionDate;
+}
+
+function stagePersonHours(workers: string, hours: string): number | null {
+  const count = Number(workers);
+  const time = Number(hours);
+  const total = count * time;
+  return Number.isInteger(count) && count > 0 && Number.isFinite(time) && time > 0 && Number.isFinite(total) ? total : null;
+}
+
+function stageNumberText(value: unknown): string {
+  return value === null || value === undefined ? "" : String(value);
 }
 
 function numberText(value: unknown) {

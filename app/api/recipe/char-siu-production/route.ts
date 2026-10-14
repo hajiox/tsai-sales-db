@@ -13,6 +13,7 @@ import {
   positive,
   positiveInteger,
   resolveCharSiuProductionDates,
+  resolveCharSiuStageLabor,
   taxIncludedIngredientPrice,
 } from "@/lib/char-siu-production";
 import {
@@ -53,7 +54,7 @@ export async function GET(request: Request) {
       supabase.from("char_siu_production_settings").select("block_unit_weight_g,lard_unit_weight_g,minced_chashu_unit_weight_g").eq("id", 1).single(),
       supabase
         .from("char_siu_production_runs")
-        .select("id,production_date,packaging_date,worker_count,work_hours,notes,labor_rate_source,labor_rate_staff_count,created_at,updated_at")
+        .select("id,production_date,packaging_date,worker_count,work_hours,cooking_worker_count,cooking_work_hours,packaging_worker_count,packaging_work_hours,total_person_hours,notes,labor_rate_source,labor_rate_staff_count,created_at,updated_at")
         .order("production_date", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(40),
@@ -116,17 +117,12 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}));
     const productionDate = normalizeCharSiuDate(body.productionDate);
-    const workerCount = positiveInteger(body.workerCount, 1);
-    const workHours = positive(body.workHours, 0);
     const notes = String(body.notes || "").trim().slice(0, 2000);
     const usageByKey = normalizeValueMap(body.materials, "key", "usageAmount");
     const quantityByKey = normalizeValueMap(body.outputs, "key", "quantity");
 
     if (!productionDate) {
       return NextResponse.json({ success: false, error: "正しい煮込み日を入力してください" }, { status: 400 });
-    }
-    if (workHours <= 0) {
-      return NextResponse.json({ success: false, error: "作業時間を入力してください" }, { status: 400 });
     }
     if (!CHAR_SIU_MATERIALS.some((material) => nonNegative(usageByKey[material.key]) > 0)) {
       return NextResponse.json({ success: false, error: "材料の使用量を入力してください" }, { status: 400 });
@@ -147,12 +143,18 @@ export async function POST(request: Request) {
       }
       const dates = resolveCharSiuProductionDates(productionDate, body.packagingDate, existing.run.packaging_date ?? null);
       if (!dates) return invalidProductionDates();
+      const laborInput = resolveCharSiuStageLabor(body, existing.run);
+      if (laborInput.error) return NextResponse.json({ success: false, error: laborInput.error }, { status: 400 });
+      const workerCount = laborInput.stages?.cookingWorkerCount ?? positiveInteger(body.workerCount ?? existing.run.worker_count, 1);
+      const workHours = laborInput.stages?.cookingWorkHours ?? positive(body.workHours ?? existing.run.work_hours, 0);
+      if (workHours <= 0) return NextResponse.json({ success: false, error: "作業時間を入力してください" }, { status: 400 });
 
       const existingMaterialKeys = new Set(existing.materials.map((row: any) => row.material_key));
       const existingOutputKeys = new Set(existing.outputs.map((row: any) => row.output_key));
       const calculation = calculateCharSiuProduction({
         workerCount,
         workHours,
+        ...(laborInput.stages || {}),
         hourlyWage: existing.run.hourly_wage,
         materials: CHAR_SIU_MATERIALS.filter((definition) => existingMaterialKeys.has(definition.key)).map((definition) => {
           const snapshot = existing.materials.find((row: any) => row.material_key === definition.key);
@@ -179,6 +181,11 @@ export async function POST(request: Request) {
 
     const dates = resolveCharSiuProductionDates(productionDate, body.packagingDate);
     if (!dates) return invalidProductionDates();
+    const laborInput = resolveCharSiuStageLabor(body);
+    if (laborInput.error) return NextResponse.json({ success: false, error: laborInput.error }, { status: 400 });
+    const workerCount = laborInput.stages?.cookingWorkerCount ?? positiveInteger(body.workerCount, 1);
+    const workHours = laborInput.stages?.cookingWorkHours ?? positive(body.workHours, 0);
+    if (workHours <= 0) return NextResponse.json({ success: false, error: "作業時間を入力してください" }, { status: 400 });
     const deliveryNoteScanId = String(body.deliveryNoteScanId || "").trim();
     if (!deliveryNoteScanId) {
       return NextResponse.json({ success: false, error: "納品書をAIスキャンしてください" }, { status: 400 });
@@ -245,6 +252,7 @@ export async function POST(request: Request) {
     const calculation = calculateCharSiuProduction({
       workerCount,
       workHours,
+      ...(laborInput.stages || {}),
       hourlyWage: labor.hourlyRate,
       materials,
       outputs,
@@ -400,6 +408,10 @@ function runRecord(
     packaging_date: dates.packagingDate,
     worker_count: calculation.workerCount,
     work_hours: calculation.workHours,
+    cooking_worker_count: calculation.cookingWorkerCount,
+    cooking_work_hours: calculation.cookingWorkHours,
+    packaging_worker_count: calculation.packagingWorkerCount,
+    packaging_work_hours: calculation.packagingWorkHours,
     hourly_wage: calculation.hourlyWage,
     total_person_hours: calculation.totalPersonHours,
     material_cost: calculation.materialCost,
