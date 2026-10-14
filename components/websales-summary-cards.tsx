@@ -318,8 +318,12 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
   }, [month, refreshTrigger, viewMode, periodMonths]);
 
   const formatNumber = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
-  const money = (n: number | null) => n === null ? '実売額未取得' : `¥${formatNumber(n)}`;
-  const expenseMoney = (n: number | null) => n === null ? '未確認' : `¥${formatNumber(n)}`;
+  const formatYen = (n: number) => {
+    const amount = Math.trunc(n);
+    return `¥${formatNumber(amount === 0 ? 0 : amount)}`;
+  };
+  const money = (n: number | null) => n === null ? '実売額未取得' : formatYen(n);
+  const expenseMoney = (n: number | null) => n === null ? '未確認' : formatYen(n);
   const totalAmount = (values: Array<number | null>) => values.some(value => value === null) ? null : values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
 
   const handleMouseEnter = (item: HoveredItem, event: React.MouseEvent<HTMLDivElement>) => {
@@ -394,10 +398,10 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
               <div className="text-xs text-gray-600">{formatNumber(grandTotalCount)}個</div>
               {viewMode === 'month' && (
                 <>
-                  <div className="text-xs text-amber-700">EC手数料: ¥{formatNumber(grandTotalEcFees)}</div>
-                  <div className="text-xs text-orange-700">EC控除計: ¥{formatNumber(grandTotalEcDeductions)}</div>
+                  <div className="text-xs text-amber-700">EC手数料: {formatYen(grandTotalEcFees)}</div>
+                  <div className="text-xs text-orange-700">EC控除計: {formatYen(grandTotalEcDeductions)}</div>
                   <div className="text-[10px] font-semibold text-orange-700">売上比 {formatPercent(grandTotalEcDeductions, grandTotalSales)}</div>
-                  <div className="text-xs text-red-600">広告費: ¥{formatNumber(grandTotalAdCost)}</div>
+                  <div className="text-xs text-red-600">広告費: {formatYen(grandTotalAdCost)}</div>
                   <div className="text-xs font-bold text-green-600">利益: {grandTotalFinalProfit === null ? '利益未確定' : money(grandTotalFinalProfit)}</div>
                 </>
               )}
@@ -406,7 +410,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
           {grandTotalSales !== null && grandTotalSalesLastYear !== null && grandTotalSalesLastYear > 0 && (
             <div className="px-3 pb-2">
               <div className="pt-1 mt-1 border-t border-gray-300">
-                <div className="text-[10px] text-gray-500">前年度売上: ¥{formatNumber(grandTotalSalesLastYear)}</div>
+                <div className="text-[10px] text-gray-500">前年度売上: {formatYen(grandTotalSalesLastYear)}</div>
                 <div className={`text-xs font-bold ${grandTotalSales >= grandTotalSalesLastYear ? 'text-blue-600' : 'text-red-600'}`}>
                   前年比: {Math.round((grandTotalSales / grandTotalSalesLastYear) * 100)}%
                 </div>
@@ -433,14 +437,14 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
                 <div className="text-[11px] text-gray-500">{totals ? formatNumber(totals[s.key]?.count ?? 0) : "-"}個</div>
                 {viewMode === 'month' && (
                   <>
-                    <div className="text-[11px] text-amber-700">手数料: ¥{totals ? formatNumber(totals[s.key]?.ecFees ?? 0) : "-"}</div>
+                    <div className="text-[11px] text-amber-700">手数料: {totals ? formatYen(totals[s.key]?.ecFees ?? 0) : "¥-"}</div>
                     <div className="text-[11px] font-semibold text-orange-700">
-                      EC控除: ¥{totals ? formatNumber(totals[s.key]?.ecDeductions ?? 0) : "-"}
+                      EC控除: {totals ? formatYen(totals[s.key]?.ecDeductions ?? 0) : "¥-"}
                     </div>
                     <div className="text-[10px] font-semibold text-orange-700">
                       売上比 {totals ? formatPercent(totals[s.key]?.ecDeductions ?? 0, currentSales) : "-"}
                     </div>
-                    <div className="text-[11px] text-red-600">広告: ¥{totals ? formatNumber(totals[s.key]?.adCost ?? 0) : "-"}</div>
+                    <div className="text-[11px] text-red-600">広告: {totals ? formatYen(totals[s.key]?.adCost ?? 0) : "¥-"}</div>
                     <div className="text-[11px] font-bold text-green-600">利益: {totals?.[s.key]?.finalProfit == null ? '利益未確定' : money(totals[s.key].finalProfit)}</div>
                   </>
                 )}
@@ -449,7 +453,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
             {currentSales !== null && lySales !== null && lySales > 0 && (
               <div className="px-3 pb-2">
                 <div className={`pt-1 mt-1 border-t ${s.borderColor} opacity-60`}>
-                  <div className="text-[10px] text-gray-500">前年売上: ¥{formatNumber(lySales)}</div>
+                  <div className="text-[10px] text-gray-500">前年売上: {formatYen(lySales)}</div>
                   <div className={`text-xs font-bold ${currentSales >= lySales ? 'text-blue-600' : 'text-red-500'}`}>
                     前年比: {Math.round((currentSales / lySales) * 100)}%
                   </div>
@@ -529,7 +533,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
                       </div>
                     </div>
                     <div className="text-xs pl-[100px] space-y-0.5">
-                      <div className="text-gray-600">広告費: ¥{formatNumber(trend.ad_cost)}</div>
+                      <div className="text-gray-600">広告費: {formatYen(trend.ad_cost)}</div>
                       <div className="text-green-600 font-semibold">利益: {trend.final_profit === null ? '利益未確定' : money(trend.final_profit)}</div>
                     </div>
                   </div>
