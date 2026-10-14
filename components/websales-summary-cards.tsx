@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
 import { getVisibleEcChannels, isEcChannelOperational } from "@/lib/ec-channel-lifecycle"
 import { EcOpeningPlaceholder } from "@/components/EcOpeningPlaceholder"
+import { WebSalesSeriesProductsHover } from "@/components/websales-series-products-hover"
+import type { WebSalesProductSummary } from "@/lib/web-sales-product-summary"
 import { Target } from "lucide-react"
 
 const SITES = [
@@ -42,6 +44,7 @@ type SeriesSummary = {
   ecDeductions: number | null;
   adCost: number | null;
   finalProfit: number | null;
+  products: WebSalesProductSummary[];
 }
 type TrendData = {
   month_label: string;
@@ -80,6 +83,7 @@ type EcProfitSummary = {
     ecDeductions: number | null;
     adCost: number | null;
     finalProfit: number | null;
+    products: WebSalesProductSummary[];
   }>;
   totals: {
     sales: number | null;
@@ -106,7 +110,7 @@ type ComparisonSummary = {
   channels: EcProfitSummary["channels"];
   totals: EcProfitSummary["totals"];
 }
-type HoveredItem = { type: 'total' | 'site' | 'series'; key: string; name: string; }
+type HoveredItem = { type: 'total' | 'site'; key: string; name: string; }
 
 type WebSalesSummaryCardsProps = {
   month: string; // "YYYY-MM"
@@ -154,10 +158,6 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
           rpcName = 'get_site_trend_data';
           rpcParams = { target_month: monthParam, target_site: item.key };
           break;
-        case 'series':
-          rpcName = 'get_series_trend_data';
-          rpcParams = { target_month: monthParam, target_series: item.key };
-          break;
       }
 
       if (!rpcName) return;
@@ -184,6 +184,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
   };
 
   useEffect(() => {
+    let active = true;
     const fetchData = async () => {
       setLoading(true);
       try {
@@ -195,6 +196,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
             body: JSON.stringify({ base_month: month, period_months: periodMonths })
           });
           const periodData = await res.json();
+          if (!active) return;
           if (!res.ok || !periodData.totals) throw new Error(periodData.error || '期間実績を取得できませんでした');
           
           if (periodData.totals) {
@@ -234,7 +236,8 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
               ecFees: 0,
               ecDeductions: 0,
               adCost: 0,
-              finalProfit: 0
+              finalProfit: 0,
+              products: s.products ?? [],
             })));
           } else {
             setSeriesSummary([]);
@@ -258,6 +261,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
             fetch(`/api/kpi/web-target?month=${month}`).then(r => r.json()).catch(() => ({ target: 0 })),
           ]);
 
+          if (!active) return;
           setWebTarget(targetRes.target ?? 0);
           setProfitSummary(profitPayload);
 
@@ -296,9 +300,11 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
             ecDeductions: series.ecDeductions,
             adCost: series.adCost,
             finalProfit: series.finalProfit,
+            products: series.products ?? [],
           })));
         }
       } catch (error) {
+        if (!active) return;
         console.error('サマリーデータの読み込みに失敗しました:', error);
         const siteTotals: Totals = {};
         SITES.forEach(s => {
@@ -310,11 +316,12 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
         setProfitSummary(null);
         setRpcTotalFinalProfit(null);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     fetchData();
+    return () => { active = false; };
   }, [month, refreshTrigger, viewMode, periodMonths]);
 
   const formatNumber = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
@@ -472,11 +479,16 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
         </CardHeader>
         <CardContent className="relative grid grid-cols-2 gap-2 px-4 py-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
           {seriesSummary.map((series) => (
+            <WebSalesSeriesProductsHover
+              key={`${viewMode}-${month}-${periodMonths}-${series.seriesCode}-${series.seriesName}`}
+              seriesName={series.seriesName}
+              periodLabel={viewMode === 'month' ? `${month}の実績` : `${displayPeriod}〜${month}（${periodMonths}か月）`}
+              products={series.products}
+              formatMoney={money}
+              onOpen={handleMouseLeave}
+            >
             <div
-              key={series.seriesName}
-              className="text-center p-2 border rounded-md cursor-pointer hover:bg-gray-50 transition-colors relative"
-              onMouseEnter={(e) => handleMouseEnter({ type: 'series', key: series.seriesName, name: series.seriesName }, e)}
-              onMouseLeave={handleMouseLeave}
+              className="h-full text-center p-2 border rounded-md cursor-pointer hover:bg-gray-50 transition-colors relative"
             >
               <h4 className="text-xs font-semibold truncate" title={series.seriesName}>{series.seriesName}</h4>
               <p className="text-sm font-bold">{formatNumber(series.count)}個</p>
@@ -491,6 +503,7 @@ export default function WebSalesSummaryCards({ month, refreshTrigger, viewMode =
                 </>
               )}
             </div>
+            </WebSalesSeriesProductsHover>
           ))}
         </CardContent>
       </Card>

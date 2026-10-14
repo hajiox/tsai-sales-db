@@ -2,6 +2,7 @@ import { requireRecipeAdminRequest } from "@/lib/recipe-request-auth";
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { WEB_SALES_CHANNELS, resolveWebSalesAmount, sumWebSalesAmounts } from '@/lib/web-sales-amounts';
+import { buildWebSalesProductSummary } from '@/lib/web-sales-product-summary';
 
 export const dynamic = 'force-dynamic';
 const supabase = createClient(
@@ -20,7 +21,7 @@ export async function POST(req: Request) {
     const [year, month] = base_month.split('-').map(Number);
     const start = new Date(Date.UTC(year, month - period_months, 1));
     const startMonth = start.toISOString().slice(0, 10);
-    const productsResult = await supabase.from('products').select('id,series');
+    const productsResult = await supabase.from('products').select('id,name,series,series_code');
     if (productsResult.error) throw productsResult.error;
     const products = new Map((productsResult.data || []).map(row => [row.id, row]));
     const sales: Record<string, any>[] = [];
@@ -52,7 +53,12 @@ export async function POST(req: Request) {
       if (amount === null) entry.missingAmountRows++;
       series.set(name, entry);
     }
-    const seriesSummary = Array.from(series.entries()).map(([seriesName, row]) => ({ seriesName, ...row }))
+    const productSummary = buildWebSalesProductSummary(sales, products, "period");
+    const seriesSummary = Array.from(series.entries()).map(([seriesName, row]) => ({
+      seriesName,
+      ...row,
+      products: productSummary.filter(product => product.seriesName === seriesName),
+    }))
       .sort((a, b) => (b.sales ?? -1) - (a.sales ?? -1));
     return NextResponse.json({ totals, seriesSummary });
   } catch (error) {

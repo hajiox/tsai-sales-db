@@ -4,6 +4,7 @@ import { getWebSalesAutomationServiceClient } from "@/lib/web-sales-automation/s
 import { isQoo10SettledDetailUnavailable } from "@/lib/web-sales-codex/ec-profit-retry";
 import { selectEffectiveFinanceJob } from "@/lib/web-sales-codex/finance-job-state";
 import { resolveWebSalesAmount, getWebSalesSavedUnitCost, summarizeWebSalesChannel, adjustWebSalesEcDeductions } from "@/lib/web-sales-amounts";
+import { buildWebSalesProductSummary } from "@/lib/web-sales-product-summary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,7 +85,7 @@ export async function GET(request: Request) {
         .from("web_sales_summary")
         .select("report_month,product_id,amazon_count,rakuten_count,yahoo_count,mercari_count,base_count,qoo10_count,tiktok_count,amazon_amount,rakuten_amount,yahoo_amount,mercari_amount,base_amount,qoo10_amount,tiktok_amount,unit_price,unit_profit_rate,unit_cost_ex_ec")
         .in("report_month", reportMonths),
-      supabase.from("products").select("id,price,profit_rate,series_code,series"),
+      supabase.from("products").select("id,name,price,profit_rate,series_code,series"),
       supabase.from("ec_profit_monthly").select("*").in("report_month", reportMonths),
       supabase
         .from("advertising_costs")
@@ -246,11 +247,15 @@ export async function GET(request: Request) {
     const incompleteSettlements = channels.filter((row) => !row.settlementComplete);
     const estimatedSettlements = channels.filter((row) => row.isEstimate);
     const missingChannels = incompleteSettlements.map((row) => row.channel);
+    const productSummary = buildWebSalesProductSummary(currentSales, products, "month");
 
     return NextResponse.json({
       month,
       channels,
-      series,
+      series: series.map(row => ({
+        ...row,
+        products: productSummary.filter(product => product.seriesCode === row.seriesCode),
+      })),
       totals: {
         ...mapRounded(totals),
         adCost: round(totalAdCost),
