@@ -38,7 +38,7 @@ export default function CharSiuDeliveryNoteMobilePage() {
   };
 
   const send = async () => {
-    if (!productionDate) return toast.error("製造日を入力してください");
+    if (!productionDate) return toast.error("煮込み日を入力してください");
     if (!files.length) return toast.error("納品書を撮影してください");
     setSending(true);
     try {
@@ -87,7 +87,7 @@ export default function CharSiuDeliveryNoteMobilePage() {
         <section className="border border-slate-200 bg-white p-4">
           <label htmlFor="target-production-date" className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-800">
             <CalendarDays className="h-4 w-4" />
-            使用する製造日
+            使用する煮込み日
           </label>
           <input
             id="target-production-date"

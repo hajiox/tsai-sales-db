@@ -86,7 +86,7 @@ export const otherOperations: BusinessOperation[] = [
     obj({ action: en("settings"), blockUnitWeightG: num(0.001), lardUnitWeightG: num(0.001), mincedChashuUnitWeightG: num(0.001) }),
     obj({ action: en("sync_labor"), effectiveDate: date }, ["action"]),
     obj({ action: en("sync_run_labor"), id: uuid }),
-    obj({ action: en("run"), id: uuid, workerCount: int(1, 10000), workHours: num(0, 10000), productionDate: date, notes: { type: "string", maxLength: 2000 },
+    obj({ action: en("run"), id: uuid, workerCount: int(1, 10000), workHours: num(0, 10000), productionDate: date, packagingDate: nullable(date), notes: { type: "string", maxLength: 2000 },
       materials: arr(obj({ key: str(100), usageAmount: num(0), purchaseUnitQuantity: num(0.001), purchasePriceTaxIncluded: num(0) }, ["key"]), 30),
       outputs: arr(obj({ key: str(100), quantity: int(0, 100000000), unitWeightG: num(0.001) }, ["key"]), 30),
     }, ["action", "id"]),

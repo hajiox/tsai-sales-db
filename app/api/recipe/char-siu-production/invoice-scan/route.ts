@@ -4,6 +4,7 @@ export const maxDuration = 60;
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from "@supabase/supabase-js";
 import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
+import { normalizeCharSiuDate } from "@/lib/char-siu-production";
 import { NextResponse } from "next/server";
 import {
   DELIVERY_NOTE_MATERIALS,
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
     }
 
     const formData = await request.formData();
-    const targetProductionDate = normalizeDate(formData.get("targetProductionDate"));
+    const targetProductionDate = normalizeCharSiuDate(formData.get("targetProductionDate"));
     if (!targetProductionDate) {
       return NextResponse.json({ success: false, error: "使用する製造日を入力してください" }, { status: 400 });
     }
@@ -88,9 +89,7 @@ export async function POST(request: Request) {
     const parsed = JSON.parse(responseText) as Record<string, unknown>;
     const items = normalizeDeliveryNoteItems(parsed.items);
     const complete = isCompleteDeliveryNoteScan(items);
-    const documentDate = /^\d{4}-\d{2}-\d{2}$/.test(String(parsed.document_date || ""))
-      ? String(parsed.document_date)
-      : null;
+    const documentDate = normalizeCharSiuDate(parsed.document_date) || null;
 
     const { data: updated, error: updateError } = await supabase
       .from("char_siu_delivery_note_scans")
@@ -122,11 +121,6 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ success: false, error: error.message || "納品書のAI読取に失敗しました" }, { status: 500 });
   }
-}
-
-function normalizeDate(value: FormDataEntryValue | null) {
-  const text = String(value || "").trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
 }
 
 function buildPrompt() {

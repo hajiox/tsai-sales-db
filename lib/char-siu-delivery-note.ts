@@ -43,11 +43,12 @@ export function normalizeDeliveryNoteItems(value: unknown): DeliveryNoteExtracte
   for (const row of value) {
     if (!row || typeof row !== "object") continue;
     const raw = row as Record<string, unknown>;
-    const definition = DELIVERY_NOTE_MATERIALS.find((item) => item.key === raw.material_key);
-    const quantity = Number(raw.purchase_unit_quantity_g);
-    const taxRate = normalizeTaxRate(raw.tax_rate);
-    const includedPrice = Number(raw.purchase_price_tax_included);
-    const excludedPrice = Number(raw.purchase_price_tax_excluded);
+    // AI input uses snake_case; existing stored/confirmed snapshots use camelCase.
+    const definition = DELIVERY_NOTE_MATERIALS.find((item) => item.key === (raw.material_key ?? raw.materialKey));
+    const quantity = Number(raw.purchase_unit_quantity_g ?? raw.purchaseUnitQuantityG);
+    const taxRate = normalizeTaxRate(raw.tax_rate ?? raw.taxRate);
+    const includedPrice = Number(raw.purchase_price_tax_included ?? raw.purchasePriceTaxIncluded);
+    const excludedPrice = Number(raw.purchase_price_tax_excluded ?? raw.purchasePriceTaxExcluded);
     const price = Number.isFinite(includedPrice) && includedPrice > 0
       ? includedPrice
       : excludedPrice * (1 + taxRate);
@@ -55,7 +56,7 @@ export function normalizeDeliveryNoteItems(value: unknown): DeliveryNoteExtracte
     const candidate: DeliveryNoteExtractedItem = {
       materialKey: definition.key,
       materialName: definition.name,
-      sourceItemName: String(raw.source_item_name || definition.name).trim().slice(0, 120),
+      sourceItemName: String((raw.source_item_name ?? raw.sourceItemName) || definition.name).trim().slice(0, 120),
       purchaseUnitQuantityG: round(quantity, 4),
       purchasePriceTaxIncluded: round(price, 4),
       taxRate,

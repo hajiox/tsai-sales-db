@@ -16,7 +16,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { calculateCharSiuProduction } from "@/lib/char-siu-production";
+import { calculateCharSiuProduction, normalizeCharSiuDate } from "@/lib/char-siu-production";
 
 type Settings = {
   hourly_wage: number;
@@ -61,6 +61,7 @@ type OutputRow = {
 type ProductionRun = {
   id: string;
   production_date: string;
+  packaging_date: string | null;
   worker_count: number;
   work_hours: number;
   hourly_wage: number;
@@ -83,6 +84,7 @@ type ProductionRun = {
 
 type RunDraft = {
   productionDate: string;
+  packagingDate: string;
   workerCount: string;
   workHours: string;
   hourlyWage: string;
@@ -261,6 +263,11 @@ export default function CharSiuProductionCostPage() {
 
   const saveRun = async () => {
     if (!selectedRun || !draft) return;
+    const productionDate = normalizeCharSiuDate(draft.productionDate);
+    const packagingDate = normalizeCharSiuDate(draft.packagingDate);
+    if (!productionDate) return toast.error("煮込み日を入力してください");
+    if (!packagingDate) return toast.error("包装日を入力してください");
+    if (packagingDate < productionDate) return toast.error("包装日は煮込み日以降にしてください");
     setSaving(true);
     try {
       const response = await fetch("/api/finance/char-siu-production", {
@@ -269,7 +276,8 @@ export default function CharSiuProductionCostPage() {
         body: JSON.stringify({
           action: "run",
           id: selectedRun.id,
-          productionDate: draft.productionDate,
+          productionDate,
+          packagingDate,
           workerCount: draft.workerCount,
           workHours: draft.workHours,
           notes: draft.notes,
@@ -307,18 +315,18 @@ export default function CharSiuProductionCostPage() {
         body: JSON.stringify({ action: "sync_run_labor", id: selectedRun.id }),
       });
       const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || "この製造日の時間単価を取得できませんでした");
-      toast.success("製造日のTSG平均時間単価で再計算しました");
+      if (!response.ok || !data.success) throw new Error(data.error || "この煮込み日の時間単価を取得できませんでした");
+      toast.success("煮込み日のTSG平均時間単価で再計算しました");
       await loadData(month, selectedRun.id);
     } catch (error: any) {
-      toast.error(error.message || "この製造日の時間単価を取得できませんでした");
+      toast.error(error.message || "この煮込み日の時間単価を取得できませんでした");
     } finally {
       setSaving(false);
     }
   };
 
   const deleteRun = async () => {
-    if (!selectedRun || !window.confirm(`${formatDate(selectedRun.production_date)}の製造実績を削除しますか？`)) return;
+    if (!selectedRun || !window.confirm(`${formatDate(selectedRun.production_date)}煮込みの製造実績を削除しますか？`)) return;
     setSaving(true);
     try {
       const response = await fetch(`/api/finance/char-siu-production?id=${encodeURIComponent(selectedRun.id)}`, { method: "DELETE" });
@@ -398,6 +406,7 @@ export default function CharSiuProductionCostPage() {
           </div>
           <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
             <CalendarDays className="h-4 w-4" />
+            煮込み月
             <input
               type="month"
               value={month}
@@ -455,7 +464,8 @@ export default function CharSiuProductionCostPage() {
                     onClick={() => selectRun(run)}
                     className={`w-full px-4 py-3 text-left hover:bg-slate-50 ${selectedId === run.id ? "border-l-4 border-emerald-600 bg-emerald-50/70 pl-3" : ""}`}
                   >
-                    <div className="font-bold text-slate-900">{formatDate(run.production_date)}</div>
+                    <div className="font-bold text-slate-900">煮込み {formatDate(run.production_date)}</div>
+                    <div className="mt-0.5 text-xs text-slate-600">包装 {run.packaging_date ? formatDate(run.packaging_date) : "未登録"}</div>
                     <div className="mt-1 flex justify-between text-xs text-slate-500">
                       <span>{run.worker_count}人 / {formatNumber(run.total_person_hours, 2)}人時</span>
                       <span>{formatNumber(run.total_output_quantity)}個</span>
@@ -481,8 +491,9 @@ export default function CharSiuProductionCostPage() {
                 </section>
 
                 <section className="border border-slate-200 bg-white">
-                  <div className="grid gap-3 border-b border-slate-200 p-4 sm:grid-cols-4 sm:p-5">
-                    <AdminNumberField label="製造日" value={draft.productionDate} inputType="date" suffix="" onChange={(value) => setDraft((current) => current && ({ ...current, productionDate: value }))} />
+                  <div className="grid gap-3 border-b border-slate-200 p-4 sm:grid-cols-2 xl:grid-cols-5 sm:p-5">
+                    <AdminNumberField label="煮込み日" value={draft.productionDate} inputType="date" suffix="" onChange={(value) => setDraft((current) => current && ({ ...current, productionDate: value }))} />
+                    <AdminNumberField label="包装日" value={draft.packagingDate} inputType="date" minDate={draft.productionDate} suffix="" onChange={(value) => setDraft((current) => current && ({ ...current, packagingDate: value }))} />
                     <AdminNumberField label="人数" value={draft.workerCount} suffix="人" onChange={(value) => setDraft((current) => current && ({ ...current, workerCount: value }))} />
                     <AdminNumberField label="1人あたり時間" value={draft.workHours} suffix="時間" onChange={(value) => setDraft((current) => current && ({ ...current, workHours: value }))} />
                     <div className="min-w-0">
@@ -493,11 +504,14 @@ export default function CharSiuProductionCostPage() {
                       </div>
                     </div>
                   </div>
+                  {draft.productionDate && draft.packagingDate && draft.packagingDate < draft.productionDate && (
+                    <p role="alert" className="border-b border-slate-100 px-4 py-3 text-sm text-red-700">包装日は煮込み日以降にしてください。</p>
+                  )}
                   <div className="flex flex-col gap-2 border-b border-slate-100 px-4 py-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
                     <span>取得元: {laborSourceLabel(selectedRun.labor_rate_source)} / 同期 {selectedRun.labor_rate_synced_at ? formatDateTime(selectedRun.labor_rate_synced_at) : "記録なし"}</span>
                     <button type="button" onClick={syncRunLabor} disabled={saving} className="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
                       <RefreshCw className="h-3.5 w-3.5" />
-                      この製造日で再同期
+                      この煮込み日で再同期
                     </button>
                   </div>
                   <div className="overflow-x-auto">
@@ -609,12 +623,12 @@ function Metric({ label, value, sub, strong = false }: { label: string; value: s
   );
 }
 
-function AdminNumberField({ label, value, suffix, onChange, inputType = "number" }: { label: string; value: string; suffix: string; onChange: (value: string) => void; inputType?: "number" | "date" }) {
+function AdminNumberField({ label, value, suffix, onChange, inputType = "number", minDate }: { label: string; value: string; suffix: string; onChange: (value: string) => void; inputType?: "number" | "date"; minDate?: string }) {
   return (
     <label className="block min-w-0">
       <span className="mb-2 block text-xs font-bold text-slate-600">{label}</span>
       <div className="flex h-10 overflow-hidden rounded-md border border-slate-300 bg-white focus-within:border-slate-700">
-        <input type={inputType} inputMode={inputType === "number" ? "decimal" : undefined} min={inputType === "number" ? "0" : undefined} step={inputType === "number" ? "0.01" : undefined} value={value} onChange={(event) => onChange(event.target.value)} className="min-w-0 flex-1 px-3 text-right font-semibold outline-none" />
+        <input type={inputType} inputMode={inputType === "number" ? "decimal" : undefined} min={inputType === "number" ? "0" : minDate || undefined} step={inputType === "number" ? "0.01" : undefined} required={inputType === "date"} value={value} onChange={(event) => onChange(event.target.value)} className="min-w-0 flex-1 px-3 text-right font-semibold outline-none" />
         {suffix && <span className="flex items-center border-l border-slate-200 bg-slate-50 px-2 text-xs font-semibold text-slate-500">{suffix}</span>}
       </div>
     </label>
@@ -641,6 +655,7 @@ function FullPageLoading() {
 function toDraft(run: ProductionRun): RunDraft {
   return {
     productionDate: run.production_date,
+    packagingDate: run.packaging_date || "",
     workerCount: numberText(run.worker_count),
     workHours: numberText(run.work_hours),
     hourlyWage: numberText(run.hourly_wage),

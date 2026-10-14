@@ -4,6 +4,7 @@ export const maxDuration = 60;
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from "@supabase/supabase-js";
 import { getBusinessAdminSession, isBusinessAdminSession } from "@/lib/data-access/business-operation-context";
+import { normalizeCharSiuDate } from "@/lib/char-siu-production";
 import { NextResponse } from "next/server";
 import {
   adminDeliveryNoteScan,
@@ -36,7 +37,11 @@ export async function GET(request: Request) {
     const unauthorized = await requireAuthorized(request);
     if (unauthorized) return unauthorized;
 
-    const productionDate = normalizeDate(new URL(request.url).searchParams.get("productionDate"));
+    const requestedDate = new URL(request.url).searchParams.get("productionDate");
+    const productionDate = normalizeCharSiuDate(requestedDate);
+    if (requestedDate && !productionDate) {
+      return NextResponse.json({ success: false, error: "正しい煮込み日を指定してください" }, { status: 400 });
+    }
     let scanQuery = supabase
       .from("char_siu_delivery_note_scans")
       .select("id,status,document_date,target_production_date,source_kind,doc_scanner_doc_id,file_names,extracted_items,created_at")
@@ -46,7 +51,16 @@ export async function GET(request: Request) {
       .limit(30);
     if (productionDate) scanQuery = scanQuery.eq("target_production_date", productionDate);
 
-    const [scanResult, pendingResult] = await Promise.all([
+    let importedQuery = supabase
+      .from("char_siu_delivery_note_scans")
+      .select("doc_scanner_doc_id")
+      .not("doc_scanner_doc_id", "is", null)
+      .or("used_run_id.not.is.null,status.eq.used")
+      .order("created_at", { ascending: false })
+      .limit(1000);
+    if (productionDate) importedQuery = importedQuery.eq("target_production_date", productionDate);
+
+    const [scanResult, pendingResult, importedResult] = await Promise.all([
       scanQuery,
       supabase
         .from("pending_estimate_items")
@@ -54,12 +68,17 @@ export async function GET(request: Request) {
         .in("source_type", ["receipt", "delivery_slip"])
         .order("created_at", { ascending: false })
         .limit(1000),
+      importedQuery,
     ]);
     if (scanResult.error) throw scanResult.error;
     if (pendingResult.error) throw pendingResult.error;
+    if (importedResult.error) throw importedResult.error;
 
     const scans = scanResult.data || [];
-    const importedDocIds = new Set(scans.map((scan) => scan.doc_scanner_doc_id).filter(Boolean));
+    const importedDocIds = new Set([
+      ...scans.map((scan) => scan.doc_scanner_doc_id).filter(Boolean),
+      ...(importedResult.data || []).map((scan) => scan.doc_scanner_doc_id),
+    ]);
     const grouped = new Map<string, PendingRow[]>();
     for (const row of (pendingResult.data || []) as PendingRow[]) {
       if (!row.doc_scanner_doc_id || !matchesTargetMaterial(row.item_name)) continue;
@@ -105,19 +124,21 @@ export async function POST(request: Request) {
     const token = await getAuthorizedIdentity(request);
     const body = await request.json().catch(() => ({}));
     const docId = String(body.docScannerDocId || "").trim();
-    const targetProductionDate = normalizeDate(body.targetProductionDate);
+    const targetProductionDate = normalizeCharSiuDate(body.targetProductionDate);
     if (!docId || !targetProductionDate) {
       return NextResponse.json({ success: false, error: "DocScanner書類と製造日を指定してください" }, { status: 400 });
     }
 
     const { data: existing, error: existingError } = await supabase
       .from("char_siu_delivery_note_scans")
-      .select("id,status,document_date,target_production_date,source_kind,doc_scanner_doc_id,file_names,extracted_items,created_at")
+      .select("id,status,used_run_id,document_date,target_production_date,source_kind,doc_scanner_doc_id,file_names,extracted_items,created_at")
       .eq("doc_scanner_doc_id", docId)
       .eq("target_production_date", targetProductionDate)
-      .is("used_run_id", null)
       .maybeSingle();
     if (existingError) throw existingError;
+    if (existing?.used_run_id || existing?.status === "used") {
+      return NextResponse.json({ success: false, error: "この納品書は指定した煮込み日の製造実績で使用済みです" }, { status: 409 });
+    }
     if (existing) return NextResponse.json({ success: true, scan: adminDeliveryNoteScan(existing) });
 
     const { data: rows, error: rowError } = await supabase
@@ -162,7 +183,7 @@ export async function PATCH(request: Request) {
     const token = await getAuthorizedIdentity(request);
     const body = await request.json().catch(() => ({}));
     const scanId = String(body.scanId || "").trim();
-    const targetProductionDate = normalizeDate(body.targetProductionDate);
+    const targetProductionDate = normalizeCharSiuDate(body.targetProductionDate);
     const extractedItems = normalizeDeliveryNoteItems((Array.isArray(body.items) ? body.items : []).map((item: any) => ({
       material_key: item.key,
       source_item_name: item.sourceItemName,
@@ -299,11 +320,6 @@ function normalizeTaxRate(value: unknown) {
 function positiveNumber(value: unknown) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : 0;
-}
-
-function normalizeDate(value: unknown) {
-  const text = String(value || "").trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
 }
 
 async function requireAuthorized(request: Request) {

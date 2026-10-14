@@ -9,8 +9,10 @@ import {
   CHAR_SIU_OUTPUTS,
   nonNegative,
   nonNegativeInteger,
+  normalizeCharSiuDate,
   positive,
   positiveInteger,
+  resolveCharSiuProductionDates,
   taxIncludedIngredientPrice,
 } from "@/lib/char-siu-production";
 import {
@@ -51,7 +53,7 @@ export async function GET(request: Request) {
       supabase.from("char_siu_production_settings").select("block_unit_weight_g,lard_unit_weight_g,minced_chashu_unit_weight_g").eq("id", 1).single(),
       supabase
         .from("char_siu_production_runs")
-        .select("id,production_date,worker_count,work_hours,notes,labor_rate_source,labor_rate_staff_count,created_at,updated_at")
+        .select("id,production_date,packaging_date,worker_count,work_hours,notes,labor_rate_source,labor_rate_staff_count,created_at,updated_at")
         .order("production_date", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(40),
@@ -113,7 +115,7 @@ export async function POST(request: Request) {
     if (unauthorized) return unauthorized;
 
     const body = await request.json().catch(() => ({}));
-    const productionDate = normalizeDate(body.productionDate);
+    const productionDate = normalizeCharSiuDate(body.productionDate);
     const workerCount = positiveInteger(body.workerCount, 1);
     const workHours = positive(body.workHours, 0);
     const notes = String(body.notes || "").trim().slice(0, 2000);
@@ -121,7 +123,7 @@ export async function POST(request: Request) {
     const quantityByKey = normalizeValueMap(body.outputs, "key", "quantity");
 
     if (!productionDate) {
-      return NextResponse.json({ success: false, error: "製造日を入力してください" }, { status: 400 });
+      return NextResponse.json({ success: false, error: "正しい煮込み日を入力してください" }, { status: 400 });
     }
     if (workHours <= 0) {
       return NextResponse.json({ success: false, error: "作業時間を入力してください" }, { status: 400 });
@@ -143,6 +145,8 @@ export async function POST(request: Request) {
       if (!existing.run) {
         return NextResponse.json({ success: false, error: "製造実績が見つかりません" }, { status: 404 });
       }
+      const dates = resolveCharSiuProductionDates(productionDate, body.packagingDate, existing.run.packaging_date ?? null);
+      if (!dates) return invalidProductionDates();
 
       const existingMaterialKeys = new Set(existing.materials.map((row: any) => row.material_key));
       const existingOutputKeys = new Set(existing.outputs.map((row: any) => row.output_key));
@@ -169,10 +173,12 @@ export async function POST(request: Request) {
         }),
       });
 
-      await persistCalculation(existingId, productionDate, notes, calculation, existing.materials, existing.outputs);
+      await persistCalculation(existingId, dates, notes, calculation, existing.materials, existing.outputs);
       return NextResponse.json({ success: true, id: existingId });
     }
 
+    const dates = resolveCharSiuProductionDates(productionDate, body.packagingDate);
+    if (!dates) return invalidProductionDates();
     const deliveryNoteScanId = String(body.deliveryNoteScanId || "").trim();
     if (!deliveryNoteScanId) {
       return NextResponse.json({ success: false, error: "納品書をAIスキャンしてください" }, { status: 400 });
@@ -246,7 +252,7 @@ export async function POST(request: Request) {
 
     const { data: run, error: runError } = await supabase
       .from("char_siu_production_runs")
-      .insert(runRecord(productionDate, notes, calculation, String(token?.email || ""), labor))
+      .insert(runRecord(dates, notes, calculation, String(token?.email || ""), labor))
       .select("id")
       .single();
     if (runError) throw runError;
@@ -311,7 +317,7 @@ async function updateLaborSettings(rate: ManufacturingLaborRate, updatedBy: stri
 
 async function persistCalculation(
   runId: string,
-  productionDate: string,
+  dates: { productionDate: string; packagingDate: string | null },
   notes: string,
   calculation: ReturnType<typeof calculateCharSiuProduction>,
   existingMaterials: any[],
@@ -319,7 +325,7 @@ async function persistCalculation(
 ) {
   const { error } = await supabase
     .from("char_siu_production_runs")
-    .update(runRecord(productionDate, notes, calculation))
+    .update(runRecord(dates, notes, calculation))
     .eq("id", runId);
   if (error) throw error;
   await persistChildren(runId, calculation, existingMaterials, existingOutputs);
@@ -383,14 +389,15 @@ async function persistChildren(
 }
 
 function runRecord(
-  productionDate: string,
+  dates: { productionDate: string; packagingDate: string | null },
   notes: string,
   calculation: ReturnType<typeof calculateCharSiuProduction>,
   createdBy?: string,
   labor?: LaborSnapshot,
 ) {
   return {
-    production_date: productionDate,
+    production_date: dates.productionDate,
+    packaging_date: dates.packagingDate,
     worker_count: calculation.workerCount,
     work_hours: calculation.workHours,
     hourly_wage: calculation.hourlyWage,
@@ -458,9 +465,8 @@ function normalizeValueMap(value: unknown, keyName: string, valueName: string): 
   return {};
 }
 
-function normalizeDate(value: unknown) {
-  const text = String(value || "").trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
+function invalidProductionDates() {
+  return NextResponse.json({ success: false, error: "包装日は煮込み日以降の正しい日付を入力してください" }, { status: 400 });
 }
 
 async function requireAuthorized(request: Request) {

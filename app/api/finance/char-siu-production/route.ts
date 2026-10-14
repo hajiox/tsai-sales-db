@@ -11,8 +11,10 @@ import {
   CHAR_SIU_OUTPUTS,
   nonNegative,
   nonNegativeInteger,
+  normalizeCharSiuDate,
   positive,
   positiveInteger,
+  resolveCharSiuProductionDates,
 } from "@/lib/char-siu-production";
 import { fetchManufacturingAverageHourlyRate } from "@/lib/tsg-manufacturing-labor";
 
@@ -97,7 +99,7 @@ export async function PATCH(request: Request) {
     }
 
     if (body.action === "sync_labor") {
-      const effectiveDate = normalizeDate(body.effectiveDate) || todayInJapan();
+      const effectiveDate = normalizeCharSiuDate(body.effectiveDate) || todayInJapan();
       const rate = await fetchManufacturingAverageHourlyRate(effectiveDate);
       const { data, error } = await supabase
         .from("char_siu_production_settings")
@@ -125,6 +127,7 @@ export async function PATCH(request: Request) {
         snapshot,
         calculation: calculationFromSnapshot(snapshot, { hourlyWage: rate.hourlyRate }),
         productionDate: snapshot.run.production_date,
+        packagingDate: snapshot.run.packaging_date ?? null,
         notes: snapshot.run.notes,
         laborMeta: {
           labor_rate_staff_count: rate.staffCount,
@@ -141,6 +144,14 @@ export async function PATCH(request: Request) {
     }
     const runId = String(body.id || "").trim();
     const snapshot = await requiredSnapshot(runId);
+    const dates = resolveCharSiuProductionDates(
+      body.productionDate === undefined ? snapshot.run.production_date : body.productionDate,
+      body.packagingDate,
+      snapshot.run.packaging_date ?? null,
+    );
+    if (!dates) {
+      return NextResponse.json({ success: false, error: "煮込み日・包装日は正しい日付で、包装日は煮込み日以降にしてください" }, { status: 400 });
+    }
     const materialOverrides = new Map(
       (Array.isArray(body.materials) ? body.materials : []).map((row: any) => [String(row.key || ""), row]),
     );
@@ -171,9 +182,8 @@ export async function PATCH(request: Request) {
         };
       }),
     });
-    const productionDate = normalizeDate(body.productionDate) || snapshot.run.production_date;
     const notes = body.notes === undefined ? snapshot.run.notes : String(body.notes || "").trim().slice(0, 2000);
-    await persistRunCalculation({ snapshot, calculation, productionDate, notes, markMaterialOverrides: true });
+    await persistRunCalculation({ snapshot, calculation, ...dates, notes, markMaterialOverrides: true });
     return NextResponse.json({ success: true, id: runId });
   } catch (error: any) {
     console.error("finance char siu production PATCH error:", error);
@@ -222,6 +232,7 @@ async function persistRunCalculation(options: {
   snapshot: any;
   calculation: ReturnType<typeof calculateCharSiuProduction>;
   productionDate: string;
+  packagingDate: string | null;
   notes: string;
   laborMeta?: Record<string, unknown>;
   markMaterialOverrides?: boolean;
@@ -231,6 +242,7 @@ async function persistRunCalculation(options: {
     .from("char_siu_production_runs")
     .update({
       production_date: options.productionDate,
+      packaging_date: options.packagingDate,
       worker_count: calculation.workerCount,
       work_hours: calculation.workHours,
       hourly_wage: calculation.hourlyWage,
@@ -327,11 +339,6 @@ async function requireFinanceAuthorized(request: Request) {
     return NextResponse.json({ success: false, error: "Finance authentication required" }, { status: 403 });
   }
   return null;
-}
-
-function normalizeDate(value: unknown) {
-  const text = String(value || "").trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
 }
 
 function todayInJapan() {

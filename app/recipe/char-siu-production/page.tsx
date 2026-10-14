@@ -25,6 +25,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { nextCharSiuDate, normalizeCharSiuDate } from "@/lib/char-siu-production";
 
 type MaterialConfig = {
   key: string;
@@ -42,6 +43,7 @@ type OutputConfig = {
 type ProductionRun = {
   id: string;
   production_date: string;
+  packaging_date: string | null;
   worker_count: number;
   work_hours: number;
   notes: string;
@@ -52,6 +54,8 @@ type ProductionRun = {
 type FormState = {
   id: string;
   productionDate: string;
+  packagingDate: string;
+  packagingDateEdited: boolean;
   workerCount: string;
   workHours: string;
   notes: string;
@@ -145,7 +149,11 @@ export default function CharSiuProductionInputPage() {
       setMaterials(nextMaterials);
       setOutputs(nextOutputs);
       setRuns(data.runs || []);
-      if (!keepForm) setForm(emptyForm(nextMaterials, nextOutputs));
+      if (!keepForm) {
+        setForm(emptyForm(nextMaterials, nextOutputs));
+        setScan(null);
+        setReviewScan(null);
+      }
     } catch (error: any) {
       toast.error(error.message || "製造実績を取得できませんでした");
     } finally {
@@ -233,6 +241,15 @@ export default function CharSiuProductionInputPage() {
   );
 
   const save = async () => {
+    if (saving) return;
+    const productionDate = normalizeCharSiuDate(form.productionDate);
+    const packagingDate = normalizeCharSiuDate(form.packagingDate);
+    if (!productionDate) return toast.error("煮込み日を入力してください");
+    if (!packagingDate) return toast.error("包装日を入力してください");
+    if (packagingDate < productionDate)
+      return toast.error("包装日は煮込み日以降にしてください");
+    if (!form.id && !readyScanMatchesForm(scan, form))
+      return toast.error("煮込み日に対応する納品書の単価を確認してください");
     setSaving(true);
     try {
       const response = await fetch("/api/recipe/char-siu-production", {
@@ -240,7 +257,8 @@ export default function CharSiuProductionInputPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: form.id || undefined,
-          productionDate: form.productionDate,
+          productionDate,
+          packagingDate,
           workerCount: form.workerCount,
           workHours: form.workHours,
           notes: form.notes,
@@ -261,6 +279,9 @@ export default function CharSiuProductionInputPage() {
       toast.success(
         form.id ? "製造実績を更新しました" : "製造実績を登録しました",
       );
+      setForm(emptyForm(materials, outputs));
+      setScan(null);
+      setReviewScan(null);
       await loadData();
     } catch (error: any) {
       toast.error(error.message || "保存に失敗しました");
@@ -296,8 +317,12 @@ export default function CharSiuProductionInputPage() {
   };
 
   const confirmReviewScan = async () => {
-    if (!reviewScan?.targetProductionDate)
-      return toast.error("製造日を入力してください");
+    if (!reviewScan) return;
+    const targetProductionDate = normalizeCharSiuDate(
+      reviewScan.targetProductionDate || form.productionDate,
+    );
+    if (!targetProductionDate)
+      return toast.error("煮込み日を入力してください");
     setReviewSaving(true);
     try {
       const response = await fetch(
@@ -307,7 +332,7 @@ export default function CharSiuProductionInputPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             scanId: reviewScan.id,
-            targetProductionDate: reviewScan.targetProductionDate,
+            targetProductionDate,
             items: reviewScan.items,
           }),
         },
@@ -317,12 +342,11 @@ export default function CharSiuProductionInputPage() {
         throw new Error(data.error || "納品書を確定できませんでした");
       setScan(data.scan);
       setForm((current) => ({
-        ...current,
-        productionDate: data.scan.targetProductionDate,
+        ...withProductionDate(current, data.scan.targetProductionDate),
         deliveryNoteScanId: data.scan.id,
       }));
       setReviewScan(null);
-      toast.success("単価・仕入数量を製造日に紐づけました");
+      toast.success("単価・仕入数量を煮込み日に紐づけました");
       await refreshDeliveryNotes(data.scan.targetProductionDate, false);
     } catch (error: any) {
       toast.error(error.message || "納品書を確定できませんでした");
@@ -339,8 +363,7 @@ export default function CharSiuProductionInputPage() {
   const changeProductionDate = (productionDate: string) => {
     setScan(null);
     setForm((current) => ({
-      ...current,
-      productionDate,
+      ...withProductionDate(current, productionDate),
       deliveryNoteScanId: "",
     }));
   };
@@ -349,6 +372,8 @@ export default function CharSiuProductionInputPage() {
     setForm({
       id: run.id,
       productionDate: run.production_date,
+      packagingDate: run.packaging_date || "",
+      packagingDateEdited: true,
       workerCount: String(run.worker_count ?? 1),
       workHours: String(run.work_hours ?? ""),
       notes: run.notes || "",
@@ -415,7 +440,7 @@ export default function CharSiuProductionInputPage() {
               type="button"
               onClick={save}
               disabled={
-                saving || loading || (!form.id && scan?.status !== "ready")
+                saving || loading || (!form.id && !readyScanMatchesForm(scan, form))
               }
               className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 lg:h-10"
             >
@@ -430,17 +455,33 @@ export default function CharSiuProductionInputPage() {
         </header>
 
         <section className="rounded-md border border-slate-200 bg-white p-4 sm:p-5 lg:rounded-none">
-          <div className="grid gap-5 md:grid-cols-3 md:gap-4">
-            <Field label="製造日" icon={<CalendarDays className="h-4 w-4" />}>
+          <div className="grid gap-5 md:grid-cols-2 md:gap-4 xl:grid-cols-4">
+            <Field label="煮込み日" htmlFor="production-date" icon={<CalendarDays className="h-4 w-4" />}>
               <input
+                id="production-date"
                 type="date"
+                required
                 value={form.productionDate}
                 onChange={(event) => changeProductionDate(event.target.value)}
                 className="h-11 w-full rounded-md border border-slate-300 px-3 text-base outline-none focus:border-slate-700"
               />
             </Field>
-            <Field label="関わった人数" icon={<Users className="h-4 w-4" />}>
+            <Field label="包装日" htmlFor="packaging-date" icon={<CalendarDays className="h-4 w-4" />}>
+              <input
+                id="packaging-date"
+                type="date"
+                required
+                min={form.productionDate || undefined}
+                value={form.packagingDate}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, packagingDate: event.target.value, packagingDateEdited: true }))
+                }
+                className="h-11 w-full rounded-md border border-slate-300 px-3 text-base outline-none focus:border-slate-700"
+              />
+            </Field>
+            <Field label="関わった人数" htmlFor="production-worker-count" icon={<Users className="h-4 w-4" />}>
               <NumberInput
+                id="production-worker-count"
                 value={form.workerCount}
                 min="1"
                 step="1"
@@ -452,9 +493,11 @@ export default function CharSiuProductionInputPage() {
             </Field>
             <Field
               label="作業時間（1人あたり）"
+              htmlFor="production-work-hours"
               icon={<Clock3 className="h-4 w-4" />}
             >
               <NumberInput
+                id="production-work-hours"
                 value={form.workHours}
                 min="0"
                 step="0.25"
@@ -465,6 +508,10 @@ export default function CharSiuProductionInputPage() {
               />
             </Field>
           </div>
+          <p className="mt-3 text-xs text-slate-500">基本は煮込み日と翌日の包装日の2日工程です。同日や3日以上の工程も入力できます。</p>
+          {form.productionDate && form.packagingDate && form.packagingDate < form.productionDate && (
+            <p role="alert" className="mt-2 text-sm text-red-700">包装日は煮込み日以降にしてください。</p>
+          )}
           <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-3 text-sm md:mt-4">
             <span className="text-slate-500">総作業時間</span>
             <strong className="text-base text-slate-900">
@@ -530,7 +577,7 @@ export default function CharSiuProductionInputPage() {
                     )}
                   </div>
                   <p className="mt-2 text-left text-xs leading-5 text-slate-500 md:text-center">
-                    QRは製造日 {formatDate(form.productionDate)} を設定済みです
+                    QRは煮込み日 {formatDate(form.productionDate)} を設定済みです
                   </p>
                 </div>
 
@@ -559,7 +606,7 @@ export default function CharSiuProductionInputPage() {
                   </div>
 
                   <div className="mt-4 border-t border-slate-100 pt-4">
-                    {scan?.status === "ready" ? (
+                    {readyScanMatchesForm(scan, form) ? (
                       <div className="flex flex-col gap-3 bg-emerald-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex min-w-0 items-center gap-3">
                           <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
@@ -568,7 +615,7 @@ export default function CharSiuProductionInputPage() {
                               単価・仕入数量を確認済み
                             </div>
                             <div className="truncate text-xs text-emerald-800">
-                              {sourceLabel(scan.sourceKind)} / 製造日{" "}
+                              {sourceLabel(scan.sourceKind)} / 煮込み日{" "}
                               {formatDate(
                                 scan.targetProductionDate ||
                                   form.productionDate,
@@ -744,8 +791,9 @@ export default function CharSiuProductionInputPage() {
                   >
                     <div className="min-w-40">
                       <div className="font-bold text-slate-900">
-                        {formatDate(run.production_date)}
+                        煮込み {formatDate(run.production_date)}
                       </div>
+                      <div className="text-xs text-slate-600">包装 {run.packaging_date ? formatDate(run.packaging_date) : "未登録"}</div>
                       <div className="text-xs text-slate-500">
                         {run.worker_count}人 × {formatNumber(run.work_hours, 2)}
                         時間
@@ -825,7 +873,7 @@ function DocScannerPickerModal({
           <div>
             <h3 className="font-bold text-slate-950">DocScanner受信一覧</h3>
             <p className="mt-0.5 text-xs text-slate-500">
-              選択した書類を製造日 {formatDate(productionDate)}{" "}
+              選択した書類を煮込み日 {formatDate(productionDate)}{" "}
               の確認モーダルへ送ります
             </p>
           </div>
@@ -978,7 +1026,7 @@ function DeliveryNoteReviewModal({
                 htmlFor="review-production-date"
                 className="mb-2 block text-sm font-bold text-slate-800"
               >
-                この単価を使用する製造日
+                この単価を使用する煮込み日
               </label>
               <input
                 id="review-production-date"
@@ -997,8 +1045,8 @@ function DeliveryNoteReviewModal({
               className={`px-3 py-2 text-xs font-semibold ${dateMatches ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}
             >
               {dateMatches
-                ? `入力画面の製造日 ${formatDate(currentProductionDate)} と一致しています`
-                : `入力画面の製造日を ${formatDate(targetDate)} に変更して取り込みます`}
+                ? `入力画面の煮込み日 ${formatDate(currentProductionDate)} と一致しています`
+                : `入力画面の煮込み日を ${formatDate(targetDate)} に変更して取り込みます`}
             </div>
           </div>
 
@@ -1069,7 +1117,7 @@ function DeliveryNoteReviewModal({
             ) : (
               <CheckCircle2 className="h-4 w-4" />
             )}
-            {dateMatches ? "この製造日に取り込む" : "製造日を変更して取り込む"}
+            {dateMatches ? "この煮込み日に取り込む" : "煮込み日を変更して取り込む"}
           </button>
         </div>
       </div>
@@ -1113,19 +1161,21 @@ function ReviewNumberField({
 
 function Field({
   label,
+  htmlFor,
   icon,
   children,
 }: {
   label: string;
+  htmlFor: string;
   icon: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div>
-      <div className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-800">
+      <label htmlFor={htmlFor} className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-800">
         {icon}
         {label}
-      </div>
+      </label>
       {children}
     </div>
   );
@@ -1178,9 +1228,12 @@ function emptyForm(
   materials: MaterialConfig[],
   outputs: OutputConfig[],
 ): FormState {
+  const productionDate = todayInJapan();
   return {
     id: "",
-    productionDate: todayInJapan(),
+    productionDate,
+    packagingDate: nextCharSiuDate(productionDate),
+    packagingDateEdited: false,
     workerCount: "1",
     workHours: "",
     notes: "",
@@ -1190,6 +1243,19 @@ function emptyForm(
     outputs: Object.fromEntries(outputs.map((output) => [output.key, ""])),
     deliveryNoteScanId: "",
   };
+}
+
+function withProductionDate(current: FormState, productionDate: string): FormState {
+  const followDefault = !current.id && !current.packagingDateEdited;
+  return {
+    ...current,
+    productionDate,
+    packagingDate: followDefault ? nextCharSiuDate(productionDate) : current.packagingDate,
+  };
+}
+
+function readyScanMatchesForm(scan: DeliveryNoteScan | null, form: FormState): scan is DeliveryNoteScan {
+  return scan?.status === "ready" && scan.id === form.deliveryNoteScanId && scan.targetProductionDate === form.productionDate;
 }
 
 function numberText(value: unknown) {

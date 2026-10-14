@@ -140,6 +140,35 @@ export function taxIncludedIngredientPrice(price: unknown, taxIncluded: unknown)
   return round(taxIncluded === false ? value * 1.08 : value, 4);
 }
 
+export function normalizeCharSiuDate(value: unknown) {
+  if (typeof value !== "string") return "";
+  const text = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || text.startsWith("0000-")) return "";
+  const date = new Date(`${text}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === text ? text : "";
+}
+
+export function nextCharSiuDate(value: unknown) {
+  const text = normalizeCharSiuDate(value);
+  if (!text) return "";
+  const date = new Date(`${text}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return normalizeCharSiuDate(date.toISOString().slice(0, 10));
+}
+
+export function resolveCharSiuProductionDates(
+  productionDateValue: unknown,
+  packagingDateValue: unknown,
+  existingPackagingDate: string | null = null,
+) {
+  const productionDate = normalizeCharSiuDate(productionDateValue);
+  if (!productionDate) return null;
+  const value = packagingDateValue === undefined ? existingPackagingDate : packagingDateValue;
+  if (value === null) return { productionDate, packagingDate: null };
+  const packagingDate = normalizeCharSiuDate(value);
+  return packagingDate && packagingDate >= productionDate ? { productionDate, packagingDate } : null;
+}
+
 export function nonNegative(value: unknown, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : fallback;
