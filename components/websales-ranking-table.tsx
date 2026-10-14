@@ -176,10 +176,10 @@ export default function WebSalesRankingTable({ month }: Props) {
       .sort((a, b) => (getMetric(b, channel, sortType) ?? 0) - (getMetric(a, channel, sortType) ?? 0))
 
     const asc = [...data]
-      .filter(row => (getMetric(row, channel, 'count') ?? 0) > 0 && (sortType !== 'amount' || getMetric(row, channel, sortType) !== null))
+      .filter(row => sortType !== 'amount' || getMetric(row, channel, sortType) !== null)
       .sort((a, b) => (getMetric(a, channel, sortType) ?? 0) - (getMetric(b, channel, sortType) ?? 0))
 
-    setBestRows(desc.slice(0, 10))
+    setBestRows(desc.slice(0, channel === 'total' ? 50 : 10))
     setWorstRows(asc.slice(0, 10))
   }
 
@@ -263,7 +263,7 @@ export default function WebSalesRankingTable({ month }: Props) {
     const isBest = type === 'best'
     const channel = activeChannel
     const channelLabel = CHANNEL_OPTIONS.find(option => option.key === channel)?.label || '総合'
-    const title = isBest ? `${channelLabel} TOP10` : `${channelLabel} ワースト10`
+    const title = isBest ? `${channelLabel} TOP${channel === 'total' ? 50 : 10}` : `${channelLabel} ワースト10`
     const titleColor = isBest ? 'text-green-700' : 'text-red-700'
     const headerBg = isBest ? 'bg-green-50' : 'bg-red-50'
     const hoverBg = isBest ? 'hover:bg-green-50' : 'hover:bg-red-50'
@@ -321,8 +321,8 @@ export default function WebSalesRankingTable({ month }: Props) {
     <div className="space-y-4 relative" ref={containerRef}>
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h2 className="text-lg font-bold text-slate-900">売上TOP10サマリー</h2>
-          <p className="mt-1 text-xs text-slate-500">総合またはEC別の商品ランキング</p>
+          <h2 className="text-lg font-bold text-slate-900">売上ランキングサマリー</h2>
+          <p className="mt-1 text-xs text-slate-500">総合TOP50・EC別TOP10／ワースト10（販売数0個を含む）</p>
           {originalData.some(row => getMetric(row, activeChannel, 'amount') === null) && <p className="mt-1 text-xs text-amber-700">実売額未取得の商品があります。金額順では未取得の商品を除外しています。</p>}
         </div>
         <div className="flex items-center gap-2 text-sm">
