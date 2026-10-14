@@ -172,9 +172,11 @@ async function main() {
     'next-auth/jwt': { getToken: async () => authorized ? { email: 'aizubrandhall@gmail.com' } : null },
     '@google/generative-ai': { GoogleGenerativeAI: class { constructor() { throw new Error('AI must not run in this test'); } } },
   };
+  aliases['@/lib/char-siu-production-service'] = loadTs('lib/char-siu-production-service.ts', { ...aliases, 'server-only': {} });
   const api = loadTs('app/api/recipe/char-siu-production/route.ts', aliases);
   const intake = loadTs('app/api/recipe/char-siu-production/delivery-notes/route.ts', aliases);
   const finance = loadTs('app/api/finance/char-siu-production/route.ts', aliases);
+  aliases['@/lib/char-siu-delivery-note-ai'] = loadTs('lib/char-siu-delivery-note-ai.ts', { ...aliases, 'server-only': {} });
   const upload = loadTs('app/api/recipe/char-siu-production/invoice-scan/route.ts', aliases);
   const request = (route, body, method = 'POST') => new Request(`https://fixture.invalid${route}`, { method, ...(body === undefined ? {} : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }) });
   const scan = () => { const row = { id: state.id(), status: 'needs_review', used_run_id: null, target_production_date: '2026-10-14', extracted_items: [] }; state.rows.char_siu_delivery_note_scans.push(row); return row; };

@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { charSiuStageLaborFromSnapshot, nextCharSiuDate, normalizeCharSiuDate } from "@/lib/char-siu-production";
+import StaffProductionDraftsPanel, { STAFF_DRAFTS_ENDPOINT, staffPhotoUrl, type StaffProductionDraft } from "./_components/StaffProductionDraftsPanel";
 
 type MaterialConfig = {
   key: string;
@@ -138,6 +139,13 @@ export default function CharSiuProductionInputPage() {
   const [qrDataUrl, setQrDataUrl] = useState("");
   const dismissedScanIds = useRef(new Set<string>());
   const [form, setForm] = useState<FormState>(() => emptyForm([], []));
+  const [staffDraft, setStaffDraft] = useState<StaffProductionDraft | null>(null);
+  const [staffConflict, setStaffConflict] = useState(false);
+  const [staffRefreshKey, setStaffRefreshKey] = useState(0);
+  const staffSelection = useRef("");
+  const parkedInput = useRef<{ form: FormState; scan: DeliveryNoteScan | null; reviewScan: DeliveryNoteScan | null } | null>(null);
+  const finalization = useRef<{ key: string; operationId: string } | null>(null);
+  const finalizing = useRef(false);
 
   const loadData = useCallback(async (keepForm = false) => {
     setLoading(true);
@@ -174,8 +182,8 @@ export default function CharSiuProductionInputPage() {
   }, [loadData]);
 
   const refreshDeliveryNotes = useCallback(
-    async (productionDate: string, autoOpen = false) => {
-      if (!productionDate) return;
+    async (productionDate: string, autoOpen = false, preferredScanId?: string | null, selection = staffSelection.current) => {
+      if (!productionDate) return [];
       try {
         const response = await fetch(
           `/api/recipe/char-siu-production/delivery-notes?productionDate=${encodeURIComponent(productionDate)}`,
@@ -187,6 +195,7 @@ export default function CharSiuProductionInputPage() {
             data.error || "納品書の受信一覧を取得できませんでした",
           );
         const nextScans: DeliveryNoteScan[] = data.scans || [];
+        if (selection !== staffSelection.current) return [];
         setInboxScans(nextScans);
         setDocScannerDocuments(data.docScannerDocuments || []);
         if (autoOpen) {
@@ -196,16 +205,19 @@ export default function CharSiuProductionInputPage() {
               nextScans.find(
                 (candidate) =>
                   candidate.status === "needs_review" &&
+                  (preferredScanId === undefined || candidate.id === preferredScanId) &&
                   !dismissedScanIds.current.has(candidate.id),
               ) ||
               null,
           );
         }
+        return nextScans;
       } catch (error: any) {
         if (!autoOpen)
           toast.error(
             error.message || "納品書の受信一覧を取得できませんでした",
           );
+        return [];
       }
     },
     [],
@@ -213,13 +225,13 @@ export default function CharSiuProductionInputPage() {
 
   useEffect(() => {
     if (form.id || !form.productionDate) return;
-    refreshDeliveryNotes(form.productionDate, true);
+    refreshDeliveryNotes(form.productionDate, true, staffDraft ? staffDraft.scanId : undefined);
     const timer = window.setInterval(
-      () => refreshDeliveryNotes(form.productionDate, true),
+      () => refreshDeliveryNotes(form.productionDate, true, staffDraft ? staffDraft.scanId : undefined),
       5000,
     );
     return () => window.clearInterval(timer);
-  }, [form.id, form.productionDate, refreshDeliveryNotes]);
+  }, [form.id, form.productionDate, refreshDeliveryNotes, staffDraft]);
 
   useEffect(() => {
     if (!form.productionDate) return;
@@ -248,8 +260,47 @@ export default function CharSiuProductionInputPage() {
     [form.outputs, outputs],
   );
 
+  const leaveStaffReview = (consumedScanId?: string) => {
+    const parked = parkedInput.current;
+    staffSelection.current = "";
+    parkedInput.current = null;
+    finalization.current = null;
+    setStaffDraft(null);
+    setStaffConflict(false);
+    setDocPickerOpen(false);
+    const scanWasConsumed = !!consumedScanId && parked?.scan?.id === consumedScanId;
+    setForm(parked ? { ...parked.form, deliveryNoteScanId: scanWasConsumed ? "" : parked.form.deliveryNoteScanId } : emptyForm(materials, outputs));
+    setScan(scanWasConsumed ? null : parked?.scan || null);
+    setReviewScan(parked?.reviewScan?.id === consumedScanId ? null : parked?.reviewScan || null);
+  };
+
+  const openStaffDraft = async (draft: StaffProductionDraft): Promise<void> => {
+    if (saving || reviewSaving || intakeLoading || loading || finalizing.current) return;
+    if (draft.status === "completed") {
+      toast.error("このスタッフ記録は正式登録済みです");
+      return;
+    }
+    if (!parkedInput.current) parkedInput.current = { form, scan, reviewScan };
+    const selection = `${draft.id}:${draft.revision}`;
+    staffSelection.current = selection;
+    // Rechecking the same draft version and scan must reuse an uncertain attempt.
+    // save replaces it only when the draft, revision, or chosen scan changes.
+    setStaffDraft(draft);
+    setStaffConflict(false);
+    setForm(staffDraftForm(draft, materials, outputs));
+    setScan(null);
+    setReviewScan(null);
+    setDocPickerOpen(false);
+    const scans = await refreshDeliveryNotes(draft.input.productionDate, false, draft.scanId, selection);
+    if (staffSelection.current !== selection) return;
+    const linkedScan = scans.find((candidate) => candidate.id === draft.scanId);
+    if (linkedScan) setReviewScan(linkedScan);
+  };
+
   const save = async () => {
-    if (saving) return;
+    if (saving || reviewSaving || intakeLoading || finalizing.current) return;
+    if (staffDraft && (staffDraft.status !== "needs_review" || staffConflict))
+      return toast.error(staffConflict ? "スタッフ記録の最新状態を一覧から再読込してください" : "スタッフ側で提出してから単価を確認してください");
     const productionDate = normalizeCharSiuDate(form.productionDate);
     const packagingDate = normalizeCharSiuDate(form.packagingDate);
     if (!productionDate) return toast.error("煮込み日を入力してください");
@@ -260,6 +311,39 @@ export default function CharSiuProductionInputPage() {
       return toast.error("各工程の人数は正の整数、1人あたり時間は0より大きい数で入力してください");
     if (!form.id && !readyScanMatchesForm(scan, form))
       return toast.error("煮込み日に対応する納品書の単価を確認してください");
+    if (staffDraft) {
+      const key = `${staffDraft.id}:${staffDraft.revision}:${form.deliveryNoteScanId}`;
+      let attempt = finalization.current;
+      if (!attempt || attempt.key !== key) {
+        attempt = { key, operationId: window.crypto.randomUUID() };
+        finalization.current = attempt;
+      }
+      finalizing.current = true;
+      setSaving(true);
+      try {
+        const response = await fetch(STAFF_DRAFTS_ENDPOINT, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "finalize", draftId: staffDraft.id, expectedRevision: staffDraft.revision,
+            deliveryNoteScanId: form.deliveryNoteScanId, clientOperationId: attempt.operationId }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success || data.draft?.status !== "completed" || data.draft.id !== staffDraft.id || !data.draft.runId) {
+          if (response.status === 409) setStaffConflict(true);
+          throw new Error(data.error || "スタッフ記録の正式登録結果を確認できませんでした");
+        }
+        toast.success("スタッフ記録を正式登録しました");
+        leaveStaffReview(form.deliveryNoteScanId);
+        await loadData(true);
+      } catch (cause) {
+        setStaffConflict(true);
+        toast.error(cause instanceof Error ? cause.message : "スタッフ記録を正式登録できませんでした。結果を一覧で確認してください");
+      } finally {
+        setStaffRefreshKey((value) => value + 1);
+        finalizing.current = false;
+        setSaving(false);
+      }
+      return;
+    }
     setSaving(true);
     try {
       const response = await fetch("/api/recipe/char-siu-production", {
@@ -337,6 +421,8 @@ export default function CharSiuProductionInputPage() {
     );
     if (!targetProductionDate)
       return toast.error("煮込み日を入力してください");
+    if (staffDraft && targetProductionDate !== staffDraft.input.productionDate)
+      return toast.error("スタッフ記録と同じ煮込み日の単価を確認してください");
     setReviewSaving(true);
     try {
       const response = await fetch(
@@ -375,6 +461,7 @@ export default function CharSiuProductionInputPage() {
   };
 
   const changeProductionDate = (productionDate: string) => {
+    if (staffDraft) return;
     setScan(null);
     setForm((current) => ({
       ...withProductionDate(current, productionDate),
@@ -383,6 +470,12 @@ export default function CharSiuProductionInputPage() {
   };
 
   const editRun = (run: ProductionRun) => {
+    if (saving || reviewSaving || intakeLoading) return;
+    staffSelection.current = "";
+    parkedInput.current = null;
+    finalization.current = null;
+    setStaffDraft(null);
+    setStaffConflict(false);
     setForm({
       id: run.id,
       productionDate: run.production_date,
@@ -418,6 +511,8 @@ export default function CharSiuProductionInputPage() {
   };
 
   const reset = () => {
+    if (saving || reviewSaving || intakeLoading) return;
+    if (staffDraft) return leaveStaffReview();
     setForm(emptyForm(materials, outputs));
     setScan(null);
     setReviewScan(null);
@@ -448,16 +543,17 @@ export default function CharSiuProductionInputPage() {
             <button
               type="button"
               onClick={reset}
+              disabled={saving || reviewSaving || intakeLoading}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-100 lg:h-10"
             >
               <RotateCcw className="h-4 w-4" />
-              新規入力
+              {staffDraft ? "通常入力へ戻る" : "新規入力"}
             </button>
             <button
               type="button"
               onClick={save}
               disabled={
-                saving || loading || (!form.id && !readyScanMatchesForm(scan, form))
+                saving || loading || reviewSaving || intakeLoading || (!form.id && !readyScanMatchesForm(scan, form)) || !!staffDraft && (staffDraft.status !== "needs_review" || staffConflict)
               }
               className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 lg:h-10"
             >
@@ -466,10 +562,20 @@ export default function CharSiuProductionInputPage() {
               ) : (
                 <Save className="h-4 w-4" />
               )}
-              {form.id ? "更新" : "登録"}
+              {staffDraft ? staffDraft.status === "draft" ? "スタッフ提出待ち" : "スタッフ記録を正式登録" : form.id ? "更新" : "登録"}
             </button>
           </div>
         </header>
+
+        <StaffProductionDraftsPanel selectedId={staffDraft?.id || null} busy={saving || loading || reviewSaving || intakeLoading} refreshKey={staffRefreshKey} onSelect={openStaffDraft} />
+        {staffDraft && (
+          <div className="rounded-md border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-950">
+            <strong>スタッフ記録を確認中</strong>
+            <p className="mt-1 text-xs">入力者（申告）: {staffDraft.operatorName}。日付・工程・数量は読取専用です。修正はスタッフ側で行い、再提出してください。</p>
+            {staffDraft.status === "draft" && <p role="status" className="mt-2 text-xs font-semibold">下書きです。スタッフ側から提出されるまで正式登録できません。</p>}
+            {staffConflict && <p role="alert" className="mt-2 text-xs font-semibold text-red-700">登録結果・更新状態を一覧で確認し、未登録なら最新の記録を再選択してください。</p>}
+          </div>
+        )}
 
         <section className="rounded-md border border-slate-200 bg-white p-4 sm:p-5 lg:rounded-none">
           {([
@@ -483,22 +589,23 @@ export default function CharSiuProductionInputPage() {
                     id={stage.dateId}
                     type="date"
                     required
+                    readOnly={!!staffDraft}
                     min={stage.key === "packaging" ? form.productionDate || undefined : undefined}
                     value={stage.dateValue}
                     onChange={(event) => stage.key === "cooking"
                       ? changeProductionDate(event.target.value)
-                      : setForm((current) => ({ ...current, packagingDate: event.target.value, packagingDateEdited: true }))}
+                      : !staffDraft && setForm((current) => ({ ...current, packagingDate: event.target.value, packagingDateEdited: true }))}
                     className="h-11 w-full rounded-md border border-slate-300 px-3 text-base outline-none focus:border-slate-700"
                   />
                 </Field>
               </div>
               <Field label={`${stage.label}の人数`} htmlFor={`${stage.key}-worker-count`} icon={<Users className="h-4 w-4" />}>
-                <NumberInput id={`${stage.key}-worker-count`} value={form[stage.workerKey]} min="1" step="1" required suffix="人"
-                  onChange={(value) => setForm((current) => ({ ...current, [stage.workerKey]: value }))} />
+                <NumberInput id={`${stage.key}-worker-count`} value={form[stage.workerKey]} min="1" step="1" required readOnly={!!staffDraft} suffix="人"
+                  onChange={(value) => !staffDraft && setForm((current) => ({ ...current, [stage.workerKey]: value }))} />
               </Field>
               <Field label={`${stage.label}の1人あたり時間`} htmlFor={`${stage.key}-work-hours`} icon={<Clock3 className="h-4 w-4" />}>
-                <NumberInput id={`${stage.key}-work-hours`} value={form[stage.hoursKey]} min="0" step="0.01" required suffix="時間"
-                  onChange={(value) => setForm((current) => ({ ...current, [stage.hoursKey]: value }))} />
+                <NumberInput id={`${stage.key}-work-hours`} value={form[stage.hoursKey]} min="0" step="0.01" required readOnly={!!staffDraft} suffix="時間"
+                  onChange={(value) => !staffDraft && setForm((current) => ({ ...current, [stage.hoursKey]: value }))} />
               </Field>
               <div className="col-span-2 flex items-center justify-between gap-2 rounded-md bg-slate-50 px-3 py-3 text-sm lg:col-span-1 lg:block">
                 <span className="text-slate-500">{stage.label}人時</span>
@@ -688,9 +795,10 @@ export default function CharSiuProductionInputPage() {
                       value={form.materials[material.key] || ""}
                       min="0"
                       step="0.01"
+                      readOnly={!!staffDraft}
                       suffix={material.unit}
                       onChange={(value) =>
-                        setForm((current) => ({
+                        !staffDraft && setForm((current) => ({
                           ...current,
                           materials: {
                             ...current.materials,
@@ -734,9 +842,10 @@ export default function CharSiuProductionInputPage() {
                     value={form.outputs[output.key] || ""}
                     min="0"
                     step="1"
+                    readOnly={!!staffDraft}
                     suffix="個"
                     onChange={(value) =>
-                      setForm((current) => ({
+                      !staffDraft && setForm((current) => ({
                         ...current,
                         outputs: { ...current.outputs, [output.key]: value },
                       }))
@@ -758,8 +867,9 @@ export default function CharSiuProductionInputPage() {
           <textarea
             id="production-notes"
             value={form.notes}
+            readOnly={!!staffDraft}
             onChange={(event) =>
-              setForm((current) => ({ ...current, notes: event.target.value }))
+              !staffDraft && setForm((current) => ({ ...current, notes: event.target.value }))
             }
             rows={3}
             className="w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-base outline-none focus:border-slate-700 sm:text-sm"
@@ -810,6 +920,7 @@ export default function CharSiuProductionInputPage() {
                     <button
                       type="button"
                       onClick={() => editRun(run)}
+                      disabled={saving || reviewSaving || intakeLoading}
                       className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 sm:h-9 sm:w-auto"
                     >
                       <Pencil className="h-4 w-4" />
@@ -842,6 +953,7 @@ export default function CharSiuProductionInputPage() {
           onChange={setReviewScan}
           onClose={closeReview}
           onConfirm={confirmReviewScan}
+          staffDraft={staffDraft}
         />
       )}
     </main>
@@ -968,6 +1080,7 @@ function DeliveryNoteReviewModal({
   onChange,
   onClose,
   onConfirm,
+  staffDraft,
 }: {
   scan: DeliveryNoteScan;
   currentProductionDate: string;
@@ -975,6 +1088,7 @@ function DeliveryNoteReviewModal({
   onChange: (scan: DeliveryNoteScan) => void;
   onClose: () => void;
   onConfirm: () => void;
+  staffDraft: StaffProductionDraft | null;
 }) {
   const targetDate = scan.targetProductionDate || currentProductionDate;
   const dateMatches = targetDate === currentProductionDate;
@@ -1022,6 +1136,12 @@ function DeliveryNoteReviewModal({
         </div>
 
         <div className="space-y-5 p-4 sm:p-5">
+          {staffDraft && staffDraft.photos.length > 0 && <div className="flex flex-wrap gap-3 text-sm">
+            {staffDraft.photos.map((photo) => {
+              const url = staffPhotoUrl(staffDraft.id, photo);
+              return url ? <a key={photo.id} href={url} target="_blank" rel="noopener noreferrer" className="font-semibold text-cyan-800 underline">原本: {photo.fileName}</a> : null;
+            })}
+          </div>}
           <div className="grid gap-3 border-b border-slate-200 pb-5 sm:grid-cols-[220px_1fr] sm:items-end">
             <div>
               <label
@@ -1033,6 +1153,7 @@ function DeliveryNoteReviewModal({
               <input
                 id="review-production-date"
                 type="date"
+                readOnly={!!staffDraft}
                 value={targetDate}
                 onChange={(event) =>
                   onChange({
@@ -1191,6 +1312,7 @@ function NumberInput({
   min,
   step,
   required = false,
+  readOnly = false,
 }: {
   id?: string;
   value: string;
@@ -1199,6 +1321,7 @@ function NumberInput({
   min: string;
   step: string;
   required?: boolean;
+  readOnly?: boolean;
 }) {
   return (
     <div className="flex h-11 overflow-hidden rounded-md border border-slate-300 bg-white focus-within:border-slate-700">
@@ -1211,6 +1334,7 @@ function NumberInput({
         min={min}
         step={step}
         required={required}
+        readOnly={readOnly}
         className="min-w-0 flex-1 px-3 text-right text-base font-semibold text-slate-950 outline-none"
       />
       <span className="flex min-w-12 items-center justify-center border-l border-slate-200 bg-slate-50 px-2 text-xs font-semibold text-slate-500">
@@ -1259,6 +1383,24 @@ function withProductionDate(current: FormState, productionDate: string): FormSta
     ...current,
     productionDate,
     packagingDate: followDefault ? nextCharSiuDate(productionDate) : current.packagingDate,
+  };
+}
+
+function staffDraftForm(draft: StaffProductionDraft, materials: MaterialConfig[], outputs: OutputConfig[]): FormState {
+  return {
+    ...emptyForm(materials, outputs),
+    productionDate: draft.input.productionDate,
+    packagingDate: draft.input.packagingDate || "",
+    packagingDateEdited: true,
+    cookingWorkerCount: stageNumberText(draft.input.cookingWorkerCount),
+    cookingWorkHours: stageNumberText(draft.input.cookingWorkHours),
+    packagingWorkerCount: stageNumberText(draft.input.packagingWorkerCount),
+    packagingWorkHours: stageNumberText(draft.input.packagingWorkHours),
+    notes: draft.input.notes || "",
+    materials: Object.fromEntries(materials.map((material) => [material.key,
+      stageNumberText(draft.input.materials.find((row) => row.key === material.key)?.usageAmount)])),
+    outputs: Object.fromEntries(outputs.map((output) => [output.key,
+      stageNumberText(draft.input.outputs.find((row) => row.key === output.key)?.quantity)])),
   };
 }
 

@@ -79,6 +79,7 @@ async function main() {
       qrcode: { toDataURL: async () => '' }, 'lucide-react': new Proxy({}, { get: () => () => null }),
       sonner: { toast: { error(message) { errors.push(message); }, success() {} } },
       '@/lib/char-siu-production': model,
+      './_components/StaffProductionDraftsPanel': { default: () => null, STAFF_DRAFTS_ENDPOINT: '/api/recipe/char-siu-production/staff-drafts', staffPhotoUrl: () => null },
     });
     const render = () => { cursor = 0; effects.length = 0; return loaded.default(); };
     const input = id => { const found = find(render(), node => node.props.id === id && (node.type === 'input' || typeof node.type === 'function')); assert.ok(found, `Missing input ${id}`); return found; };

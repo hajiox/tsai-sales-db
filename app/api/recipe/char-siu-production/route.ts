@@ -14,36 +14,17 @@ import {
   positiveInteger,
   resolveCharSiuProductionDates,
   resolveCharSiuStageLabor,
-  taxIncludedIngredientPrice,
 } from "@/lib/char-siu-production";
 import {
   isCompleteDeliveryNoteScan,
   normalizeDeliveryNoteItems,
 } from "@/lib/char-siu-delivery-note";
-import {
-  fetchManufacturingAverageHourlyRate,
-  type ManufacturingLaborRate,
-} from "@/lib/tsg-manufacturing-labor";
+import { prepareCharSiuProductionSources, charSiuProductionRows, charSiuProductionRunRecord as runRecord, charSiuOutputDefinitions as outputDefinitions, type MaterialSource } from "@/lib/char-siu-production-service";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? (() => { throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set"); })();
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? (() => { throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set"); })();
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const deliveryNoteMaterialKeys = new Set(["pork_belly", "green_onion", "ginger"]);
-
-type MaterialSource = {
-  priceSource: "delivery_note_ai" | "recipe_master" | "legacy";
-  sourceReference?: string | null;
-  sourceConfidence?: number | null;
-  sourceNote?: string | null;
-};
-
-type LaborSnapshot = {
-  hourlyRate: number;
-  staffCount: number;
-  excludedCount: number;
-  syncedAt: string | null;
-  source: string;
-};
 
 export async function GET(request: Request) {
   try {
@@ -204,59 +185,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "納品書に指定した製造日と入力中の製造日が一致しません" }, { status: 400 });
     }
 
-    const labor = await resolveLaborSnapshot(productionDate, settings, String(token?.email || ""));
-    const recipeDefinitions = CHAR_SIU_MATERIALS.filter((material) => !deliveryNoteMaterialKeys.has(material.key));
-    const { data: ingredientRows, error: ingredientError } = await supabase
-      .from("ingredients")
-      .select("id,name,price,unit_quantity,tax_included")
-      .in("id", recipeDefinitions.map((material) => material.ingredientId));
-    if (ingredientError) throw ingredientError;
-
-    const materialSources: Record<string, MaterialSource> = {};
-    const materials = CHAR_SIU_MATERIALS.map((definition) => {
-      const deliveryItem = deliveryItems.find((item) => item.materialKey === definition.key);
-      if (deliveryItem) {
-        materialSources[definition.key] = {
-          priceSource: "delivery_note_ai",
-          sourceReference: deliveryNoteScanId,
-          sourceConfidence: deliveryItem.confidence,
-          sourceNote: deliveryItem.evidence || deliveryItem.sourceItemName,
-        };
-        return {
-          materialKey: definition.key,
-          usageAmount: usageByKey[definition.key],
-          purchaseUnitQuantity: deliveryItem.purchaseUnitQuantityG,
-          purchasePriceTaxIncluded: deliveryItem.purchasePriceTaxIncluded,
-        };
-      }
-
-      const master = (ingredientRows || []).find((row) => row.id === definition.ingredientId);
-      if (!master) throw new Error(`${definition.name}が材料DBに見つかりません`);
-      materialSources[definition.key] = {
-        priceSource: "recipe_master",
-        sourceReference: definition.ingredientId,
-        sourceNote: `材料DB: ${master.name}`,
-      };
-      return {
-        materialKey: definition.key,
-        usageAmount: usageByKey[definition.key],
-        purchaseUnitQuantity: positive(master.unit_quantity, 1),
-        purchasePriceTaxIncluded: taxIncludedIngredientPrice(master.price, master.tax_included),
-      };
-    });
-    const outputs = definitions.map((definition) => ({
-      outputKey: definition.key,
-      quantity: quantityByKey[definition.key],
-      unitWeightG: definition.defaultUnitWeightG,
-    }));
-    const calculation = calculateCharSiuProduction({
-      workerCount,
-      workHours,
-      ...(laborInput.stages || {}),
-      hourlyWage: labor.hourlyRate,
-      materials,
-      outputs,
-    });
+    const { calculation, materialSources, labor } = await prepareCharSiuProductionSources(supabase, {
+      productionDate, workerCount, workHours, stages: laborInput.stages,
+      usageByKey, quantityByKey, deliveryItems, deliveryNoteScanId,
+    }, settings, String(token?.email || ""), true);
 
     const { data: run, error: runError } = await supabase
       .from("char_siu_production_runs")
@@ -286,43 +218,6 @@ export async function POST(request: Request) {
   }
 }
 
-async function resolveLaborSnapshot(productionDate: string, settings: any, updatedBy: string): Promise<LaborSnapshot> {
-  try {
-    const current = await fetchManufacturingAverageHourlyRate(productionDate);
-    await updateLaborSettings(current, updatedBy);
-    return current;
-  } catch (error) {
-    const cachedRate = nonNegative(settings.hourly_wage);
-    if (cachedRate > 0 && String(settings.labor_rate_source || "").startsWith("tsg")) {
-      console.warn("TSG labor rate sync failed; cached rate is used:", error);
-      return {
-        hourlyRate: cachedRate,
-        staffCount: nonNegativeInteger(settings.labor_rate_staff_count),
-        excludedCount: nonNegativeInteger(settings.labor_rate_excluded_count),
-        syncedAt: settings.labor_rate_synced_at || null,
-        source: "tsg_cached",
-      };
-    }
-    throw error;
-  }
-}
-
-async function updateLaborSettings(rate: ManufacturingLaborRate, updatedBy: string) {
-  const { error } = await supabase
-    .from("char_siu_production_settings")
-    .update({
-      hourly_wage: rate.hourlyRate,
-      labor_rate_staff_count: rate.staffCount,
-      labor_rate_excluded_count: rate.excludedCount,
-      labor_rate_effective_date: rate.effectiveDate,
-      labor_rate_synced_at: rate.syncedAt,
-      labor_rate_source: rate.source,
-      updated_by: updatedBy,
-    })
-    .eq("id", 1);
-  if (error) throw error;
-}
-
 async function persistCalculation(
   runId: string,
   dates: { productionDate: string; packagingDate: string | null },
@@ -346,90 +241,13 @@ async function persistChildren(
   existingOutputs: any[],
   materialSources: Record<string, MaterialSource> = {},
 ) {
-  const materialRows = calculation.materials.map((material) => {
-    const definition = CHAR_SIU_MATERIALS.find((item) => item.key === material.materialKey)!;
-    const existing = existingMaterials.find((item) => item.material_key === material.materialKey);
-    const source = materialSources[material.materialKey];
-    return {
-      ...(existing?.id ? { id: existing.id } : {}),
-      run_id: runId,
-      material_key: material.materialKey,
-      ingredient_id: definition.ingredientId,
-      material_name: definition.name,
-      usage_amount: material.usageAmount,
-      usage_unit: definition.unit,
-      purchase_unit_quantity: material.purchaseUnitQuantity,
-      purchase_price_tax_included: material.purchasePriceTaxIncluded,
-      unit_cost: material.unitCost,
-      material_cost: material.materialCost,
-      sort_order: definition.sortOrder,
-      price_source: source?.priceSource || existing?.price_source || "legacy",
-      source_reference: source?.sourceReference ?? existing?.source_reference ?? null,
-      source_confidence: source?.sourceConfidence ?? existing?.source_confidence ?? null,
-      source_note: source?.sourceNote ?? existing?.source_note ?? null,
-    };
-  });
-  const outputRows = calculation.outputs.map((output) => {
-    const definition = CHAR_SIU_OUTPUTS.find((item) => item.key === output.outputKey)!;
-    const existing = existingOutputs.find((item) => item.output_key === output.outputKey);
-    return {
-      ...(existing?.id ? { id: existing.id } : {}),
-      run_id: runId,
-      output_key: output.outputKey,
-      recipe_id: definition.recipeId,
-      output_name: definition.name,
-      quantity: output.quantity,
-      unit_weight_g: output.unitWeightG,
-      output_weight_g: output.outputWeightG,
-      allocation_ratio: output.allocationRatio,
-      allocated_cost: output.allocatedCost,
-      unit_cost: output.unitCost,
-      sort_order: definition.sortOrder,
-    };
-  });
-
+  const { materialRows, outputRows } = charSiuProductionRows(runId, calculation, existingMaterials, existingOutputs, materialSources);
   const [materialResult, outputResult] = await Promise.all([
     supabase.from("char_siu_production_materials").upsert(materialRows, { onConflict: "run_id,material_key" }),
     supabase.from("char_siu_production_outputs").upsert(outputRows, { onConflict: "run_id,output_key" }),
   ]);
   if (materialResult.error) throw materialResult.error;
   if (outputResult.error) throw outputResult.error;
-}
-
-function runRecord(
-  dates: { productionDate: string; packagingDate: string | null },
-  notes: string,
-  calculation: ReturnType<typeof calculateCharSiuProduction>,
-  createdBy?: string,
-  labor?: LaborSnapshot,
-) {
-  return {
-    production_date: dates.productionDate,
-    packaging_date: dates.packagingDate,
-    worker_count: calculation.workerCount,
-    work_hours: calculation.workHours,
-    cooking_worker_count: calculation.cookingWorkerCount,
-    cooking_work_hours: calculation.cookingWorkHours,
-    packaging_worker_count: calculation.packagingWorkerCount,
-    packaging_work_hours: calculation.packagingWorkHours,
-    hourly_wage: calculation.hourlyWage,
-    total_person_hours: calculation.totalPersonHours,
-    material_cost: calculation.materialCost,
-    labor_cost: calculation.laborCost,
-    total_cost: calculation.totalCost,
-    total_output_quantity: calculation.totalOutputQuantity,
-    total_output_weight_g: calculation.totalOutputWeightG,
-    average_cost_per_item: calculation.averageCostPerItem,
-    average_cost_per_kg: calculation.averageCostPerKg,
-    notes,
-    ...(createdBy !== undefined ? { created_by: createdBy } : {}),
-    ...(labor ? {
-      labor_rate_staff_count: labor.staffCount,
-      labor_rate_excluded_count: labor.excludedCount,
-      labor_rate_source: labor.source,
-      labor_rate_synced_at: labor.syncedAt,
-    } : {}),
-  };
 }
 
 async function fetchSettings() {
@@ -452,19 +270,6 @@ async function fetchCostSnapshot(runId: string) {
   if (materialResult.error) throw materialResult.error;
   if (outputResult.error) throw outputResult.error;
   return { run: runResult.data, materials: materialResult.data || [], outputs: outputResult.data || [] };
-}
-
-function outputDefinitions(settings: any) {
-  return CHAR_SIU_OUTPUTS.map((output) => ({
-    ...output,
-    defaultUnitWeightG: output.key === "block"
-      ? positive(settings?.block_unit_weight_g, output.defaultUnitWeightG)
-      : output.key === "lard"
-        ? positive(settings?.lard_unit_weight_g, output.defaultUnitWeightG)
-        : output.key === "minced_chashu"
-          ? positive(settings?.minced_chashu_unit_weight_g, output.defaultUnitWeightG)
-        : output.defaultUnitWeightG,
-  }));
 }
 
 function normalizeValueMap(value: unknown, keyName: string, valueName: string): Record<string, number> {
