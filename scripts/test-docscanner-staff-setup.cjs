@@ -101,11 +101,11 @@ async function main() {
   assert.equal(htmlResponse.status, 200);
   assert.equal(opens.length, opensBeforePage, 'The simple entry page does not read certificates or other files.');
   const html = await htmlResponse.text();
-  for (const phrase of ['DocScanner チャーシュー製造入力', '社内Wi-Fiで開く', '証明書追加・VPN設定不要', '未登録/期限切れ端末は管理者が登録']) assert(html.includes(phrase));
+  for (const phrase of ['DocScanner チャーシュー製造入力', '社内Wi-Fiで開く', '端末登録・ログインは不要', '入口に有効期限はありません', '証明書追加・VPN設定も不要']) assert(html.includes(phrase));
   assert.deepEqual([...html.matchAll(/href="([^"]+)"/g)].map(match => match[1]), [
-    'http://192.168.110.200:8444/staff/char-siu-production', 'http://192.168.110.200:8444/staff/register',
+    'http://192.168.110.200:8444/staff/char-siu-production',
   ]);
-  for (const removed of [accepted.fingerprint256, 'CA証明書', 'VPNとデバイス管理', 'インストール', '証明書信頼設定', '/api/docscanner-staff-setup/certificate', 'https://192.168.110.200:8444']) assert(!html.includes(removed));
+  for (const removed of [accepted.fingerprint256, 'CA証明書', 'VPNとデバイス管理', 'インストール', '証明書信頼設定', '/api/docscanner-staff-setup/certificate', 'https://192.168.110.200:8444', '/staff/register', '端末登録を開く', '未登録/期限切れ端末は管理者が登録']) assert(!html.includes(removed));
   assert(!html.includes('must-not-be-echoed'));
   assert(!/<(?:script|iframe|form|img)\b/i.test(html));
   assert(!/TSAシステム|財務分析システム/.test(html));

@@ -4,7 +4,6 @@ import path from "node:path";
 
 export const DOCSCANNER_STAFF_CERTIFICATE_DOWNLOAD = "/api/docscanner-staff-setup/certificate";
 export const DOCSCANNER_STAFF_INPUT_URL = "http://192.168.110.200:8444/staff/char-siu-production";
-export const DOCSCANNER_STAFF_REGISTRATION_URL = "http://192.168.110.200:8444/staff/register";
 export const DOCSCANNER_STAFF_CERTIFICATE_FILENAME = "staff-root-ca.cer";
 export const DOCSCANNER_STAFF_SETUP_UNAVAILABLE = "証明書の配布準備ができていません。管理者に確認してください。";
 
@@ -78,9 +77,8 @@ export function renderDocscannerStaffSetupPage(): string {
 <style>
 :root{color-scheme:light;font-family:system-ui,-apple-system,sans-serif;color:#172b3a;background:#f3f6f8}*{box-sizing:border-box}body{margin:0;padding:24px 16px}main{max-width:560px;margin:auto;background:white;border:1px solid #d8e1e7;border-radius:12px;padding:24px}h1{font-size:1.5rem;line-height:1.5;margin:0 0 16px}p{line-height:1.8;margin:12px 0}a:focus-visible{outline:3px solid #0369a1;outline-offset:4px}.button{display:block;text-align:center;background:#075985;color:white;border-radius:8px;padding:14px;text-decoration:none;font-weight:700;margin:20px 0;min-height:48px}.secondary{background:#e7f0f5;color:#075985}@media(max-width:420px){main{padding:20px}h1{font-size:1.3rem}}
 </style></head><body><main><h1>DocScanner チャーシュー製造入力</h1>
-<p>社内Wi-Fiで開くページです。証明書追加・VPN設定不要です。</p>
+<p>社内Wi-Fiで開く製造入力ページです。端末登録・ログインは不要です。</p>
+<p>入口に有効期限はありません。証明書追加・VPN設定も不要です。</p>
 <a class="button" href="${DOCSCANNER_STAFF_INPUT_URL}">製造入力を開く</a>
-<p>未登録/期限切れ端末は管理者が登録します。</p>
-<a class="button secondary" href="${DOCSCANNER_STAFF_REGISTRATION_URL}">端末登録を開く</a>
 </main></body></html>`;
 }
