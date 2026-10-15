@@ -4,6 +4,12 @@ const nextConfig = {
   reactStrictMode: true,
   serverExternalPackages: ['puppeteer', 'pdf-parse', 'pdfjs-dist', '@napi-rs/canvas'],
   outputFileTracingIncludes: {
+    '/api/docscanner-staff-setup': [
+      './assets/docscanner-staff/staff-root-ca.cer',
+    ],
+    '/api/docscanner-staff-setup/certificate': [
+      './assets/docscanner-staff/staff-root-ca.cer',
+    ],
     '/api/data-access/v1/operations': [
       './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
       './node_modules/@napi-rs/canvas/**/*',
