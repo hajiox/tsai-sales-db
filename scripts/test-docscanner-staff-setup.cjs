@@ -96,21 +96,22 @@ async function main() {
     for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) assert.equal(route[method], undefined);
   }
   const query = '?path=private/root.pfx&file=../../private/server.key&token=must-not-be-echoed';
+  const opensBeforePage = opens.length;
   const htmlResponse = await page.GET(new Request(`https://v0-tsa-19.vercel.app/api/docscanner-staff-setup${query}`));
   assert.equal(htmlResponse.status, 200);
+  assert.equal(opens.length, opensBeforePage, 'The simple entry page does not read certificates or other files.');
   const html = await htmlResponse.text();
-  assert(html.includes(accepted.fingerprint256));
-  assert(html.includes('Safari'));
-  assert(html.includes('CA証明書'));
-  assert(html.includes('https://192.168.110.200:8444/staff/register'));
+  for (const phrase of ['DocScanner チャーシュー製造入力', '社内Wi-Fiで開く', '証明書追加・VPN設定不要', '未登録/期限切れ端末は管理者が登録']) assert(html.includes(phrase));
+  assert.deepEqual([...html.matchAll(/href="([^"]+)"/g)].map(match => match[1]), [
+    'http://192.168.110.200:8444/staff/char-siu-production', 'http://192.168.110.200:8444/staff/register',
+  ]);
+  for (const removed of [accepted.fingerprint256, 'CA証明書', 'VPNとデバイス管理', 'インストール', '証明書信頼設定', '/api/docscanner-staff-setup/certificate', 'https://192.168.110.200:8444']) assert(!html.includes(removed));
   assert(!html.includes('must-not-be-echoed'));
-  assert(!/<script\b/i.test(html));
+  assert(!/<(?:script|iframe|form|img)\b/i.test(html));
   assert(!/TSAシステム|財務分析システム/.test(html));
-  const escaped = helper.renderDocscannerStaffSetupPage({ ...accepted,
+  const fixed = helper.renderDocscannerStaffSetupPage({ ...accepted,
     subject: '<script>alert("unexpected")</script>', fingerprint256: "<>&\"'", validFrom: '<unsafe>', validTo: '<unsafe>' });
-  assert(!escaped.includes('<script>'));
-  assert(escaped.includes('&lt;script&gt;'));
-  assert(escaped.includes('&lt;&gt;&amp;&quot;&#39;'));
+  assert.equal(fixed, html, 'The entry page ignores request and certificate metadata.');
 
   const certificateResponse = await download.GET(new Request(`https://v0-tsa-19.vercel.app/api/docscanner-staff-setup/certificate${query}`));
   assert.equal(certificateResponse.status, 200);
@@ -126,13 +127,15 @@ async function main() {
     assert(response.headers.get('Content-Security-Policy').includes("script-src 'none'"));
   }
   mode = 'missing';
-  for (const route of [page, download]) {
-    const unavailable = await route.GET();
-    assert.equal(unavailable.status, 503);
-    const body = await unavailable.text();
-    assert(body.includes(helper.DOCSCANNER_STAFF_SETUP_UNAVAILABLE));
-    assert(!body.includes('private/path'));
-  }
+  const opensBeforeMissingPage = opens.length;
+  const missingPage = await page.GET();
+  assert.equal(missingPage.status, 200); assert.equal(await missingPage.text(), html);
+  assert.equal(opens.length, opensBeforeMissingPage, 'A missing certificate cannot block the entry page.');
+  const unavailable = await download.GET();
+  assert.equal(unavailable.status, 503);
+  const body = await unavailable.text();
+  assert(body.includes(helper.DOCSCANNER_STAFF_SETUP_UNAVAILABLE));
+  assert(!body.includes('private/path'));
   mode = 'regular'; content = certificates.leaf;
   assert.equal((await download.GET()).status, 503);
   assert(opens.every(row => row.filePath === publicAsset && row.flags === 'r'));
@@ -142,9 +145,9 @@ async function main() {
   }
   fs.writeFileSync(path.join(fixtures, 'result.json'), JSON.stringify({
     publicFixtureOnly: true, certificateValidation: 'pass', fixedReadOnlyRoutes: 'pass',
-    privatePayloadRejected: true, responseHeaders: 'pass', htmlEscaping: 'pass', businessWrites: 0,
+    privatePayloadRejected: true, responseHeaders: 'pass', fixedLanEntry: 'pass', pageCertificateReads: 0, businessWrites: 0,
   }, null, 2));
-  console.log('DocScanner staff setup: certificate validation, fixed GET routes, safe HTML/headers PASS; business writes 0.');
+  console.log('DocScanner staff entry: fixed LAN links, certificate-independent page, retained safe certificate GET and headers PASS; business writes 0.');
 }
 
 main().catch(error => { console.error(error.message); process.exitCode = 1; });
